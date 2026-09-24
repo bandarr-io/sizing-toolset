@@ -15,15 +15,18 @@ interface NumProps {
   optional?: boolean;
   compressed?: boolean;
   disabled?: boolean;
+  /** Error text; the field is marked invalid when set. */
+  error?: string;
   'aria-label'?: string;
 }
 
-export function NumField({ label, value, onChange, min = 0, step = 'any', append, prepend, helpText, placeholder, optional, compressed, disabled, ...rest }: NumProps) {
+export function NumField({ label, value, onChange, min = 0, step = 'any', append, prepend, helpText, placeholder, optional, compressed, disabled, error, ...rest }: NumProps) {
   const input = (
     <EuiFieldNumber
       compressed={compressed}
       fullWidth
       disabled={disabled}
+      isInvalid={!!error}
       aria-label={rest['aria-label'] ?? (typeof label === 'string' ? label : undefined)}
       value={value === undefined || Number.isNaN(value) ? '' : value}
       min={min}
@@ -40,7 +43,7 @@ export function NumField({ label, value, onChange, min = 0, step = 'any', append
   );
   if (label === null) return input;
   return (
-    <EuiFormRow label={label} helpText={helpText} display={compressed ? 'rowCompressed' : 'row'} fullWidth>
+    <EuiFormRow label={label} helpText={helpText} isInvalid={!!error} error={error} display={compressed ? 'rowCompressed' : 'row'} fullWidth>
       {input}
     </EuiFormRow>
   );

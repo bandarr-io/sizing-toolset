@@ -6,7 +6,7 @@ import { num, val, type FleetRow } from '@sizing/constants';
 import {
   defaultIndexMode, vectorCost, type IndexMode, type Quant, type Solve, type Tier, type WorkloadKind, type WorkloadProfile,
 } from '@sizing/engine';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { NumField, SelectField, SwitchField } from '../components/Fields.tsx';
 import { useConstants } from '../constantsStore.tsx';
 import { fmtCompact, fmtNum } from '../format.ts';
@@ -30,8 +30,10 @@ function Hint({ children }: { children: ReactNode }) {
   return <EuiText size="xs" color="subdued" style={{ marginTop: 4 }}><p>{children}</p></EuiText>;
 }
 
-function MoreOptions({ children, count }: { children: ReactNode; count: number }) {
-  const [open, setOpen] = useState(false);
+function MoreOptions({ children, count, hasError = false }: { children: ReactNode; count: number; hasError?: boolean }) {
+  // Open on its own when a hidden field is invalid, so the error is never out of sight.
+  const [open, setOpen] = useState(hasError);
+  useEffect(() => { if (hasError) setOpen(true); }, [hasError]);
   return (
     <>
       <EuiButtonEmpty size="xs" flush="left" iconType={open ? 'chevronSingleDown' : 'chevronSingleRight'} onClick={() => setOpen(!open)}>
@@ -101,6 +103,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
   let body: ReactNode = null;
   let advanced: ReactNode = null;
   let advancedCount = 0;
+  let advancedError = false;
 
   if (meta.stream) {
     const solvingGb = solve === 'max_gb_day';
@@ -143,6 +146,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
       </>
     );
     const downsampleTiers = (['warm', 'cold', 'frozen'] as Tier[]).filter((t) => (p.retentionDays[t] ?? 0) > 0);
+    advancedError = downsampleTiers.some((t) => p.downsampleFactor?.[t] !== undefined && !(p.downsampleFactor[t]! > 0 && p.downsampleFactor[t]! <= 1));
     advancedCount = [p.indexRatioOverride, p.growthPctPerYear, p.avgEventKb, p.rolloverDays, p.primaryShards, p.ingestPipelines || undefined,
       ...downsampleTiers.map((t) => p.downsampleFactor?.[t])].filter((x) => x !== undefined).length;
     advanced = (
@@ -156,7 +160,9 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
           <EuiFlexItem><NumField label="Warm replicas" value={p.replicas.warm} optional step={1} placeholder={String(replicas)} onChange={(v) => set({ replicas: { ...p.replicas, warm: v } })} /></EuiFlexItem>
           {downsampleTiers.map((t) => (
             <EuiFlexItem key={t}>
-              <NumField label={`${TIER_LABEL[t]} downsample factor`} value={p.downsampleFactor?.[t]} optional placeholder="1" helpText="Share of data kept after downsampling"
+              <NumField label={`${TIER_LABEL[t]} downsample factor`} value={p.downsampleFactor?.[t]} optional placeholder="1" step={0.01}
+                helpText="Share of data kept, above 0 up to 1. Leave empty or 1 for no downsampling."
+                error={p.downsampleFactor?.[t] !== undefined && !(p.downsampleFactor[t]! > 0 && p.downsampleFactor[t]! <= 1) ? 'Must be greater than 0 and at most 1' : undefined}
                 onChange={(v) => { const d = { ...(p.downsampleFactor ?? {}) }; if (v === undefined) delete d[t]; else d[t] = v; set({ downsampleFactor: d }); }} />
             </EuiFlexItem>
           ))}
@@ -260,7 +266,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
       {advanced && (
         <>
           <EuiSpacer size="m" />
-          <MoreOptions count={advancedCount}>{advanced}</MoreOptions>
+          <MoreOptions count={advancedCount} hasError={advancedError}>{advanced}</MoreOptions>
         </>
       )}
     </EuiPanel>

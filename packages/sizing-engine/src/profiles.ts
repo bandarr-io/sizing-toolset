@@ -21,8 +21,16 @@ export function replicasFor(p: WorkloadProfile, tier: Tier): number {
   return p.replicas[tier] ?? 1;
 }
 
+/**
+ * Share of data kept on `tier` after downsampling: 1 = no downsampling. 0 would size the tier at
+ * zero (forward drops it, reverse divides by it), so anything outside (0, 1] is an input error.
+ */
 export function downsampleFor(p: WorkloadProfile, tier: Tier): number {
-  return p.downsampleFactor?.[tier] ?? 1;
+  const f = p.downsampleFactor?.[tier] ?? 1;
+  if (!(f > 0 && f <= 1)) {
+    throw new Error(`[${p.id}] ${tier} downsample factor must be greater than 0 and at most 1 (1 = no downsampling); got ${f}.`);
+  }
+  return f;
 }
 
 /** D15: GB/day × (1 + growth)^years. */
