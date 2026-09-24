@@ -4,3 +4,5 @@ coverage/
 .DS_Store
 *.log
 .env*
+.playwright-mcp/
+apps/web/dist/

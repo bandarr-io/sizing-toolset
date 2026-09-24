@@ -35,7 +35,7 @@ export function commonWarnings(model: DeploymentModel): Warning[] {
   }];
 }
 
-export function buildAssumptions(c: ConstantSet, s: { sites: number; ccrMode: CcrMode; growthYears: number; airGapped: boolean }): string[] {
+export function buildAssumptions(c: ConstantSet, s: { sites: number; ccrMode: CcrMode; growthYears: number; airGapped: boolean; growthUsed?: boolean }): string[] {
   const a = [
     'Estimate, not benchmark. Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer\'s hardware.',
     `Storage = data × ${num(c, 'storage_overhead')} (15% watermark headroom + 10% margin), plus 1 failover node per tier.`,
@@ -48,7 +48,7 @@ export function buildAssumptions(c: ConstantSet, s: { sites: number; ccrMode: Cc
     'Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.',
   ];
   if (s.sites > 1) a.push(`${s.sites} sites; figures are per site unless labeled "all sites". CCR mode: ${s.ccrMode}.`);
-  if (s.growthYears > 0) a.push(`Growth applied over ${fmt(s.growthYears)} year(s) where a growth % is set.`);
+  if (s.growthUsed && s.growthYears > 0) a.push(`Growth applied over ${fmt(s.growthYears)} year(s) to workloads with a growth %.`);
   if (s.airGapped) a.push('Air-gapped: AutoOps and Cloud Connect are unavailable; use Stack Monitoring.');
   return a;
 }

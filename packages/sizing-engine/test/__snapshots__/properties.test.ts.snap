@@ -16,7 +16,6 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     "Total RAM and ERU count Elasticsearch, Kibana and APM; Fleet Server is excluded (confirm per contract).",
     "CPU ceiling uses 1500 events/s per vCPU (Low confidence; Rally required).",
     "Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.",
-    "Growth applied over 1 year(s) where a growth % is set.",
   ],
   "constantsHash": "b69a04d54a404332663b2ced9c88d2e841cb156d191a12f92a8ab64a294a5eab",
   "constraints": [

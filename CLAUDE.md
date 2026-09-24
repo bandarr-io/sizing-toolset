@@ -5,6 +5,8 @@ Current phase: MVP (§12). Build order a → e; stop for review after each step.
 
 ## Commands
 - `pnpm install`
+- `pnpm dev`: web app at http://localhost:5173 (engine runs in the browser; no backend yet)
+- `pnpm build`: production build of the web app
 - `pnpm test`: all workspaces (Vitest)
 - `pnpm typecheck`
 - `pnpm constants:check`: schema, https `source_url`, `as_of_date` ≤ 12 months old. Override the date with `CONSTANTS_CHECK_DATE=YYYY-MM-DD`.
@@ -28,6 +30,11 @@ Current phase: MVP (§12). Build order a → e; stop for review after each step.
 - Re-verified against the source: `as_of_date` = verification date, `carried_forward: false`.
 - Not re-verified, or a decision with no source value: `carried_forward: true` and a `notes` line saying why.
 - Changing a value changes `constantsHash`. That is expected; results must record it.
+
+## Web app (`apps/web`)
+- React 18 + Vite + EUI. Calls the engine directly. Scenarios persist in browser localStorage until apps/api exists.
+- Use `Collapsible`, not `EuiAccordion` (EUI 122 renders accordion content at 0px height here).
+- Only use EUI icon names that exist in `icon_map.js` (e.g. `plusCircle`, `upload`, `export`, `inspect`).
 
 ## Out of scope until told otherwise
 BigQuery (§8), PDF export, ECK/ECE/ECH/Serverless adapters, comparison view, sensitivity panel.

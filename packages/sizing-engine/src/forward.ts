@@ -253,7 +253,7 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
     },
     constraints,
     warnings,
-    assumptions: buildAssumptions(c, { sites, ccrMode, growthYears, airGapped }),
+    assumptions: buildAssumptions(c, { sites, ccrMode, growthYears, airGapped, growthUsed: profiles.some((p) => (p.growthPctPerYear ?? 0) !== 0) }),
   };
 }
 
