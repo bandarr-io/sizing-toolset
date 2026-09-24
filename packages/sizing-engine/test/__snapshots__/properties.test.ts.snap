@@ -1,0 +1,372 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`§11.3 properties > P4 determinism: same inputs + constants hash → same outputs 1`] = `
+{
+  "allSites": {
+    "licenseUnits": 17,
+    "totalRamGb": 1088,
+  },
+  "assumptions": [
+    "Estimate, not benchmark. Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer's hardware.",
+    "Storage = data × 1.25 (15% watermark headroom + 10% margin), plus 1 failover node per tier.",
+    "Default data node: 64 GB RAM; mem:disk hot 1:30, warm 1:160, cold 1:160, frozen 1:1500 (object store).",
+    "Heap = min(50% RAM, 30 GB); vector off-heap = RAM − heap − 1 GB.",
+    "Index ratios: standard 1.2, LogsDB 0.5, TSDS 0.3 (±30%).",
+    "Cold and frozen tiers carry no replicas.",
+    "Total RAM and ERU count Elasticsearch, Kibana and APM; Fleet Server is excluded (confirm per contract).",
+    "CPU ceiling uses 1500 events/s per vCPU (Low confidence; Rally required).",
+    "Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.",
+    "Growth applied over 1 year(s) where a growth % is set.",
+  ],
+  "constantsHash": "b69a04d54a404332663b2ced9c88d2e841cb156d191a12f92a8ab64a294a5eab",
+  "constraints": [
+    {
+      "binding": true,
+      "capacity": 23040,
+      "confidence": "high",
+      "demand": 22500,
+      "math": [
+        {
+          "constantKeys": [],
+          "expr": "22,500 / 23,040 (12 usable nodes)",
+          "label": "storage utilization (hot)",
+          "value": 0.9765625,
+        },
+      ],
+      "name": "storage",
+      "tier": "hot",
+      "unit": "GB",
+      "utilization": 0.9765625,
+    },
+    {
+      "binding": false,
+      "capacity": 192000,
+      "confidence": "medium",
+      "demand": 100500,
+      "math": [
+        {
+          "constantKeys": [],
+          "expr": "100,500 / 192,000 (2 usable nodes)",
+          "label": "frozen utilization (frozen)",
+          "value": 0.5234375,
+        },
+      ],
+      "name": "frozen",
+      "tier": "frozen",
+      "unit": "GB",
+      "utilization": 0.5234375,
+    },
+    {
+      "binding": false,
+      "capacity": 12000,
+      "confidence": "medium",
+      "demand": 60,
+      "math": [
+        {
+          "constantKeys": [
+            "max_shards_per_nonfrozen_node",
+          ],
+          "expr": "(13 − 1) × 1000",
+          "label": "non-frozen shard capacity",
+          "value": 12000,
+        },
+      ],
+      "name": "heap_shards",
+      "unit": "shards",
+      "utilization": 0.005,
+    },
+    {
+      "binding": false,
+      "capacity": 24000,
+      "confidence": "medium",
+      "demand": 365,
+      "math": [
+        {
+          "constantKeys": [
+            "master_indices_per_gb_heap",
+            "heap_fraction",
+            "heap_cap_gb",
+          ],
+          "expr": "8 GB heap × 3000",
+          "label": "indices masters can manage",
+          "value": 24000,
+        },
+      ],
+      "name": "masters",
+      "unit": "indices",
+      "utilization": 0.015208333333333334,
+    },
+    {
+      "binding": false,
+      "capacity": 144000,
+      "confidence": "low",
+      "demand": 16339.869281045752,
+      "math": [
+        {
+          "constantKeys": [
+            "vcpu_per_ram_gb",
+          ],
+          "expr": "(13 − 1) × 8",
+          "label": "usable vCPU",
+          "value": 96,
+        },
+        {
+          "constantKeys": [
+            "ev_per_s_per_vcpu",
+          ],
+          "expr": "96 × 1500",
+          "label": "indexing capacity (events/s)",
+          "value": 144000,
+        },
+        {
+          "constantKeys": [
+            "ingest.default_avg_event_kb",
+            "ingest.derate.pipelines",
+            "ingest.derate.logsdb",
+            "ingest.derate.concurrent_search",
+          ],
+          "expr": "Σ GB/day × 1e6 / (KB × 86,400) × (replicas + 1) / derate",
+          "label": "indexing demand (events/s, incl. replicas and derates)",
+          "value": 16339.869281045752,
+        },
+      ],
+      "name": "cpu_ingest",
+      "rallyRequired": true,
+      "tier": "hot",
+      "unit": "events/s",
+      "utilization": 0.11347131445170662,
+    },
+    {
+      "binding": false,
+      "capacity": 0,
+      "confidence": "low",
+      "math": [
+        {
+          "constantKeys": [],
+          "expr": "not modeled: requires Rally with customer queries",
+          "label": "query capacity",
+          "value": 0,
+        },
+      ],
+      "name": "query",
+      "rallyRequired": true,
+      "unit": "queries/s",
+    },
+  ],
+  "engineVersion": "0.1.0",
+  "licenseFloor": "enterprise",
+  "licenseFloorReasons": [
+    "Frozen tier / searchable snapshots → enterprise",
+  ],
+  "licenseUnits": {
+    "math": [
+      {
+        "constantKeys": [
+          "eru_gb",
+          "eru.counted_components",
+        ],
+        "expr": "ROUNDUP(1,088 GB / 64)",
+        "label": "ERU (self-managed)",
+        "value": 17,
+      },
+    ],
+    "unit": "ERU",
+    "value": 17,
+  },
+  "mode": "forward",
+  "overhead": [
+    {
+      "count": 3,
+      "countsTowardLicense": true,
+      "diskGb": 0,
+      "diskType": "ssd",
+      "math": [
+        {
+          "constantKeys": [],
+          "expr": "16",
+          "label": "data nodes (all data tiers, D4)",
+          "value": 16,
+        },
+        {
+          "constantKeys": [
+            "masters.sizing",
+          ],
+          "expr": "row with min data nodes ≤ 16",
+          "label": "dedicated master row",
+          "value": 16,
+        },
+        {
+          "constantKeys": [
+            "master_indices_per_gb_heap",
+          ],
+          "expr": "365 indices / 3000",
+          "label": "master heap required",
+          "value": 0.12166666666666667,
+        },
+      ],
+      "ramGb": 16,
+      "role": "master",
+      "vcpu": 2,
+    },
+    {
+      "count": 2,
+      "countsTowardLicense": true,
+      "diskGb": 0,
+      "diskType": "ssd",
+      "math": [
+        {
+          "constantKeys": [
+            "kibana.ha_min_data_nodes",
+            "kibana.ha_count",
+          ],
+          "expr": "16 data nodes ≥ 6 → 2",
+          "label": "Kibana instances",
+          "value": 2,
+        },
+        {
+          "constantKeys": [
+            "kibana.node_ram_gb",
+          ],
+          "expr": "8",
+          "label": "Kibana RAM per instance",
+          "value": 8,
+        },
+      ],
+      "ramGb": 8,
+      "role": "kibana",
+      "vcpu": 1,
+    },
+  ],
+  "shards": {
+    "indices": 365,
+    "math": [
+      {
+        "constantKeys": [
+          "datastream.default_rollover_days",
+          "datastream.default_primary_shards",
+        ],
+        "expr": "Σ ROUNDUP(days / rollover) × primaries × (replicas + 1)",
+        "label": "non-frozen shards",
+        "value": 60,
+      },
+    ],
+    "perNonFrozenNode": 4.615384615384615,
+    "total": 395,
+  },
+  "sites": 1,
+  "tiers": [
+    {
+      "diskGb": 1920,
+      "math": [
+        {
+          "constantKeys": [],
+          "expr": "600 × 0.5 (index ratio (override))",
+          "label": "[w] indexed GB/day",
+          "value": 300,
+        },
+        {
+          "constantKeys": [],
+          "expr": "300 × 30 days × (1 replicas + 1)",
+          "label": "[w] total data GB",
+          "value": 18000,
+        },
+        {
+          "constantKeys": [
+            "storage_overhead",
+          ],
+          "expr": "18,000 × 1.25 (15% watermark + 10% margin)",
+          "label": "total storage GB",
+          "value": 22500,
+        },
+        {
+          "constantKeys": [
+            "mem_disk.hot",
+          ],
+          "expr": "min(64 GB × 30, 1,920 GB disk)",
+          "label": "node capacity GB",
+          "value": 1920,
+        },
+        {
+          "constantKeys": [],
+          "expr": "ROUNDUP(22,500 / 1,920)",
+          "label": "nodes for storage",
+          "value": 12,
+        },
+        {
+          "constantKeys": [
+            "failover_nodes_per_tier",
+          ],
+          "expr": "12 + 1 failover",
+          "label": "hot nodes",
+          "value": 13,
+        },
+      ],
+      "nodes": 13,
+      "ramGb": 64,
+      "tier": "hot",
+      "vcpu": 8,
+    },
+    {
+      "diskGb": 1920,
+      "math": [
+        {
+          "constantKeys": [],
+          "expr": "600 × 0.5 (index ratio (override))",
+          "label": "[w] indexed GB/day",
+          "value": 300,
+        },
+        {
+          "constantKeys": [],
+          "expr": "300 × 335 days",
+          "label": "[w] frozen data GB (object store, no replicas)",
+          "value": 100500,
+        },
+        {
+          "constantKeys": [
+            "mem_disk.frozen",
+          ],
+          "expr": "64 GB RAM × 1500",
+          "label": "frozen data per node",
+          "value": 96000,
+        },
+        {
+          "constantKeys": [],
+          "expr": "ROUNDUP(100,500 / 96,000)",
+          "label": "frozen nodes before failover",
+          "value": 2,
+        },
+        {
+          "constantKeys": [
+            "failover_nodes_per_tier",
+          ],
+          "expr": "2 + 1 failover",
+          "label": "frozen nodes",
+          "value": 3,
+        },
+      ],
+      "nodes": 3,
+      "ramGb": 64,
+      "tier": "frozen",
+      "vcpu": 8,
+    },
+  ],
+  "totalRamGb": 1088,
+  "totalRamMath": [
+    {
+      "constantKeys": [
+        "eru.counted_components",
+      ],
+      "expr": "13×64 hot + 3×64 frozen + 3×16 master + 2×8 kibana",
+      "label": "total RAM GB (counted components, D3)",
+      "value": 1088,
+    },
+  ],
+  "warnings": [
+    {
+      "id": "HV8",
+      "message": "[w] hot shards ≈ 300 GB (> 50 GB). Use ≥ 6 primaries or roll over sooner.",
+      "severity": "warn",
+    },
+  ],
+}
+`;

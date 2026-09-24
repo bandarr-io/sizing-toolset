@@ -111,7 +111,8 @@ export function estimateShards(c: ConstantSet, profiles: readonly WorkloadProfil
   for (const p of profiles) {
     const ratio = indexRatio(c, p).value;
     const growth = growthFactor(p, growthYears);
-    if (p.rawGbPerDay !== undefined && p.rawGbPerDay > 0) {
+    // Index and shard counts depend on retention and rollover, not volume.
+    if (retentionTiers(p).length > 0 && (p.rawGbPerDay === undefined || p.rawGbPerDay > 0)) {
       const rollover = p.rolloverDays ?? rolloverDefault;
       const primaries = p.primaryShards ?? primariesDefault;
       for (const tier of retentionTiers(p)) {
@@ -120,8 +121,10 @@ export function estimateShards(c: ConstantSet, profiles: readonly WorkloadProfil
         const shards = indices * primaries * (replicasFor(p, tier) + 1);
         est.indices += indices;
         if (tier === 'frozen') est.frozenShards += shards; else est.nonFrozenShards += shards;
-        const shardGb = (p.rawGbPerDay * growth * ratio * downsampleFor(p, tier) * rollover) / primaries;
-        est.shardSizes.push({ profileId: p.id, tier, shardGb, primaries });
+        if (p.rawGbPerDay) {
+          const shardGb = (p.rawGbPerDay * growth * ratio * downsampleFor(p, tier) * rollover) / primaries;
+          est.shardSizes.push({ profileId: p.id, tier, shardGb, primaries });
+        }
       }
     }
     const corpusGb = (p.totalGb ?? 0) * growth * ratio;
