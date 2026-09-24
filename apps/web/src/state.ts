@@ -1,136 +1,202 @@
-import { defaultConstants, num, type ConstantSet } from '@sizing/constants';
 import type {
-  DeploymentModel, ForwardRequest, NodeGroup, ReverseRequest, Solve, Tier, WorkloadProfile,
+  CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
 
 export type Mode = 'forward' | 'reverse';
-export type InputMode = 'fast' | 'expert';
-export type UseCase = 'logs' | 'siem' | 'metrics' | 'apm' | 'search';
 
-/** SPEC §10 fast mode: 6 inputs with smart defaults. */
-export interface FastForward {
-  useCase: UseCase;
-  /** GB/day, or corpus GB for search. */
-  gbPerDay: number;
-  hotDays: number;
-  totalRetentionDays: number;
-  replicas: number;
-  model: DeploymentModel;
-}
-
-export interface FastReverse {
-  useCase: Exclude<UseCase, 'search'>;
-  nodes: number;
-  ramGb: number;
-  diskGb: number;
-  vcpu: number;
-  hotDays: number;
-  replicas: number;
-  solve: Extract<Solve, 'max_gb_day' | 'max_retention'>;
-  /** Used when solving for retention. */
-  gbPerDay: number;
-  model: DeploymentModel;
-}
-
+/**
+ * One input model per mode: the engine request itself. Simple and advanced inputs edit the same data;
+ * advanced fields are only hidden, never a second copy.
+ * Reverse convention: `reverse.fixed[0]` is the workload being solved; later entries already run on the cluster.
+ */
 export interface AppState {
-  version: 1;
+  version: 2;
   name: string;
   mode: Mode;
-  inputMode: InputMode;
-  fastForward: FastForward;
-  fastReverse: FastReverse;
-  expertForward: ForwardRequest;
-  expertReverse: ReverseRequest;
-  /** True once the expert inputs were edited by hand; switching from fast then keeps them. */
-  expertDirty: boolean;
+  forward: ForwardRequest;
+  reverse: ReverseRequest;
 }
-
-export const USE_CASES: { value: UseCase; text: string }[] = [
-  { value: 'logs', text: 'Logs' },
-  { value: 'siem', text: 'Security / SIEM' },
-  { value: 'metrics', text: 'Metrics' },
-  { value: 'apm', text: 'APM / traces' },
-  { value: 'search', text: 'Search / content' },
-];
 
 export const MODELS: { value: DeploymentModel; text: string; disabled?: boolean }[] = [
   { value: 'self_managed', text: 'Self-managed' },
-  { value: 'eck', text: 'ECK (v2)', disabled: true },
-  { value: 'ece', text: 'ECE (v2)', disabled: true },
-  { value: 'ech', text: 'Elastic Cloud Hosted (v2)', disabled: true },
-  { value: 'serverless', text: 'Serverless (v2)', disabled: true },
+  { value: 'eck', text: 'ECK (coming in v2)', disabled: true },
+  { value: 'ece', text: 'ECE (coming in v2)', disabled: true },
+  { value: 'ech', text: 'Elastic Cloud Hosted (coming in v2)', disabled: true },
+  { value: 'serverless', text: 'Serverless (coming in v2)', disabled: true },
 ];
 
-/** D13: retention past hot goes to frozen for logs and SIEM, to warm for metrics and APM. */
-export function remainderTier(useCase: UseCase): Tier | undefined {
-  if (useCase === 'logs' || useCase === 'siem') return 'frozen';
-  if (useCase === 'metrics' || useCase === 'apm') return 'warm';
-  return undefined;
+export interface KindMeta { label: string; icon: string; blurb: string; stream: boolean }
+
+export const KINDS: Record<WorkloadKind, KindMeta> = {
+  logs: { label: 'Logs', icon: 'logoLogging', blurb: 'Application and infrastructure logs', stream: true },
+  siem: { label: 'Security', icon: 'logoSecurity', blurb: 'SIEM and security analytics', stream: true },
+  metrics: { label: 'Metrics', icon: 'logoMetrics', blurb: 'Time series metrics (TSDS)', stream: true },
+  apm: { label: 'APM', icon: 'apmApp', blurb: 'Traces and APM events', stream: true },
+  search: { label: 'Search', icon: 'logoEnterpriseSearch', blurb: 'Fixed content corpus', stream: false },
+  vector: { label: 'Vectors', icon: 'logoVectorDB', blurb: 'Dense vectors for kNN search', stream: false },
+  ml: { label: 'Machine learning', icon: 'machineLearningApp', blurb: 'Anomaly detection jobs, models', stream: false },
+  fleet: { label: 'Fleet agents', icon: 'fleetApp', blurb: 'Elastic Agents managed by Fleet', stream: false },
+};
+
+export const KIND_ORDER: WorkloadKind[] = ['logs', 'siem', 'metrics', 'apm', 'search', 'vector', 'ml', 'fleet'];
+
+export const SOLVES: { value: Solve; title: string; blurb: string; icon: string }[] = [
+  { value: 'max_gb_day', title: 'Max daily ingest', blurb: 'GB/day this hardware can retain', icon: 'storage' },
+  { value: 'max_retention', title: 'Max retention', blurb: 'Days of data at a given ingest', icon: 'clock' },
+  { value: 'max_agents', title: 'Max Elastic Agents', blurb: 'Fleet Server and hot-tier limits', icon: 'fleetApp' },
+  { value: 'max_vectors', title: 'Max vectors', blurb: 'Off-heap memory and disk limits', icon: 'logoVectorDB' },
+  { value: 'max_shards', title: 'Max shards', blurb: 'Shards and data streams', icon: 'indexManagementApp' },
+  { value: 'max_ml_jobs', title: 'Max ML jobs', blurb: 'Anomaly detection capacity', icon: 'machineLearningApp' },
+];
+
+/** Workload kinds that can be the subject of each reverse question. Empty = hardware-only question. */
+export const SOLVE_KINDS: Record<Solve, WorkloadKind[]> = {
+  max_gb_day: ['logs', 'siem', 'metrics', 'apm'],
+  max_retention: ['logs', 'siem', 'metrics', 'apm'],
+  max_shards: ['logs', 'siem', 'metrics', 'apm'],
+  max_vectors: ['vector'],
+  max_agents: [],
+  max_ml_jobs: [],
+};
+
+export function uniqueName(base: string, taken: readonly string[]): string {
+  if (!taken.includes(base)) return base;
+  let i = 2;
+  while (taken.includes(`${base} ${i}`)) i++;
+  return `${base} ${i}`;
 }
 
-export function fastToForward(f: FastForward, c: ConstantSet = defaultConstants): ForwardRequest {
-  const options = { model: f.model };
-  if (f.useCase === 'search') {
-    return {
-      workloads: [{ id: 'search', kind: 'search', totalGb: f.gbPerDay, retentionDays: {}, replicas: { content: f.replicas } }],
-      options,
-    };
+/** A new workload with defaults that produce a sensible first result. */
+export function newWorkload(kind: WorkloadKind, taken: readonly string[] = []): WorkloadProfile {
+  const id = uniqueName(KINDS[kind].label, taken);
+  switch (kind) {
+    case 'logs': return { id, kind, rawGbPerDay: 100, indexMode: 'logsdb', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 } };
+    case 'siem': return { id, kind, rawGbPerDay: 100, indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 }, replicas: { hot: 1, warm: 1 } };
+    case 'metrics': return { id, kind, rawGbPerDay: 50, indexMode: 'tsds', retentionDays: { hot: 7, warm: 30 }, replicas: { hot: 1, warm: 1 }, downsampleFactor: { warm: 0.1 } };
+    case 'apm': return { id, kind, rawGbPerDay: 50, indexMode: 'standard', retentionDays: { hot: 7, warm: 23 }, replicas: { hot: 1, warm: 1 } };
+    case 'search': return { id, kind, totalGb: 500, retentionDays: {}, replicas: { content: 1 } };
+    case 'vector': return { id, kind, vector: { count: 10_000_000, dims: 1024, quant: 'bbq' }, retentionDays: {}, replicas: { content: 1 } };
+    case 'ml': return { id, kind, ml: { anomalyJobs: 10 }, retentionDays: {}, replicas: {} };
+    case 'fleet': return { id, kind, fleet: { agents: 5000, defend: false }, retentionDays: {}, replicas: {} };
   }
-  const rest = Math.max(0, f.totalRetentionDays - f.hotDays);
-  const tier = remainderTier(f.useCase)!;
-  const retentionDays: Partial<Record<Tier, number>> = { hot: f.hotDays };
-  if (rest > 0) retentionDays[tier] = rest;
-  const profile: WorkloadProfile = {
-    id: f.useCase, kind: f.useCase, rawGbPerDay: f.gbPerDay, retentionDays,
-    replicas: { hot: f.replicas, warm: f.replicas },
+}
+
+// ---- Deployment settings shared by both modes -----------------------------------------------------
+
+export interface Deployment {
+  model: DeploymentModel;
+  sites: number;
+  ccrMode: CcrMode;
+  airGapped: boolean;
+  autoOps: boolean;
+  fips: boolean;
+  fullLogsdb: boolean;
+  concurrentSearch: boolean;
+}
+
+export function deploymentOfForward(o: ForwardOptions): Deployment {
+  return {
+    model: o.model, sites: o.sites ?? 1, ccrMode: o.ccrMode ?? 'none', airGapped: o.airGapped ?? false, autoOps: o.autoOps ?? false,
+    fips: o.fips ?? false, fullLogsdb: o.fullLogsdb ?? false, concurrentSearch: o.concurrentSearch ?? false,
   };
-  if (f.useCase === 'metrics' && rest > 0) {
-    profile.downsampleFactor = { [tier]: num(c, 'downsample.default_factor') };
-  }
-  return { workloads: [profile], options };
 }
 
-export function fastToReverse(f: FastReverse): ReverseRequest {
-  const group: NodeGroup = { role: 'hot', count: f.nodes, ramGb: f.ramGb, diskGb: f.diskGb, diskType: 'nvme', vcpu: f.vcpu };
-  const profile: WorkloadProfile = {
-    id: f.useCase, kind: f.useCase, retentionDays: { hot: f.hotDays }, replicas: { hot: f.replicas },
-    ...(f.solve === 'max_retention' ? { rawGbPerDay: f.gbPerDay } : {}),
+export function withForwardDeployment(o: ForwardOptions, d: Deployment): ForwardOptions {
+  return { ...o, ...d };
+}
+
+export function deploymentOfReverse(r: ReverseRequest): Deployment {
+  const h = r.hardware;
+  return {
+    model: h.model, sites: h.sites ?? 1, ccrMode: h.ccr ? 'unidirectional' : 'none', airGapped: h.airGapped ?? false, autoOps: h.autoOps ?? false,
+    fips: r.fips ?? false, fullLogsdb: r.fullLogsdb ?? false, concurrentSearch: r.concurrentSearch ?? false,
   };
-  return { hardware: { model: f.model, groups: [group] }, fixed: [profile], solve: f.solve };
 }
 
-export function forwardRequest(s: AppState, c: ConstantSet = defaultConstants): ForwardRequest {
-  return s.inputMode === 'fast' ? fastToForward(s.fastForward, c) : s.expertForward;
+export function withReverseDeployment(r: ReverseRequest, d: Deployment): ReverseRequest {
+  return {
+    ...r,
+    fips: d.fips, fullLogsdb: d.fullLogsdb, concurrentSearch: d.concurrentSearch,
+    hardware: { ...r.hardware, model: d.model, sites: d.sites, ccr: d.ccrMode !== 'none', airGapped: d.airGapped, autoOps: d.autoOps },
+  };
 }
 
-export function reverseRequest(s: AppState): ReverseRequest {
-  return s.inputMode === 'fast' ? fastToReverse(s.fastReverse) : s.expertReverse;
+// ---- Reverse helpers ------------------------------------------------------------------------------
+
+export const GROUP_DEFAULTS: Record<NodeGroup['role'], Omit<NodeGroup, 'role'>> = {
+  hot: { count: 3, ramGb: 64, diskGb: 1920, diskType: 'nvme', vcpu: 8 },
+  warm: { count: 2, ramGb: 64, diskGb: 10240, diskType: 'ssd', vcpu: 8 },
+  cold: { count: 2, ramGb: 64, diskGb: 10240, diskType: 'ssd', vcpu: 8 },
+  frozen: { count: 2, ramGb: 64, diskGb: 1920, diskType: 'ssd', vcpu: 8 },
+  content: { count: 3, ramGb: 64, diskGb: 1920, diskType: 'nvme', vcpu: 8 },
+  master: { count: 3, ramGb: 16, diskGb: 100, diskType: 'ssd', vcpu: 2 },
+  ml: { count: 2, ramGb: 64, diskGb: 200, diskType: 'ssd', vcpu: 8 },
+  coordinating: { count: 2, ramGb: 32, diskGb: 100, diskType: 'ssd', vcpu: 4 },
+  kibana: { count: 1, ramGb: 8, diskGb: 50, diskType: 'ssd', vcpu: 1 },
+  fleet: { count: 2, ramGb: 8, diskGb: 50, diskType: 'ssd', vcpu: 8 },
+  apm: { count: 2, ramGb: 8, diskGb: 50, diskType: 'ssd', vcpu: 1 },
+};
+
+export function newGroup(role: NodeGroup['role']): NodeGroup {
+  return { role, ...GROUP_DEFAULTS[role] };
 }
 
-/** Switching fast → expert seeds the expert inputs unless they were edited by hand. */
-export function switchInputMode(s: AppState, next: InputMode, c: ConstantSet = defaultConstants): AppState {
-  if (next === s.inputMode) return s;
-  if (next === 'expert' && !s.expertDirty) {
-    return { ...s, inputMode: next, expertForward: fastToForward(s.fastForward, c), expertReverse: fastToReverse(s.fastReverse) };
+/** Keep the solved workload first, of a kind the question can use, and name it as the target. */
+export function normalizeReverse(r: ReverseRequest): ReverseRequest {
+  const kinds = SOLVE_KINDS[r.solve];
+  if (kinds.length === 0) {
+    const { targetProfileId: _drop, ...rest } = r;
+    return rest;
   }
-  return { ...s, inputMode: next };
+  let fixed = [...r.fixed];
+  const byId = r.targetProfileId ? fixed.findIndex((p) => p.id === r.targetProfileId) : -1;
+  if (byId > 0) fixed = [fixed[byId]!, ...fixed.filter((_, i) => i !== byId)];
+  if (!fixed[0] || !kinds.includes(fixed[0].kind)) {
+    const reuse = fixed.findIndex((p) => kinds.includes(p.kind));
+    fixed = reuse >= 0
+      ? [fixed[reuse]!, ...fixed.filter((_, i) => i !== reuse)]
+      : [newWorkload(kinds[0]!, fixed.map((p) => p.id)), ...fixed];
+  }
+  const target = { ...fixed[0]! };
+  // The solved quantity is an output; keep what the question needs as input.
+  if (r.solve === 'max_retention' && !target.rawGbPerDay) target.rawGbPerDay = 100;
+  fixed[0] = target;
+  return { ...r, fixed, targetProfileId: target.id };
+}
+
+export function withSolve(r: ReverseRequest, solve: Solve): ReverseRequest {
+  let next: ReverseRequest = { ...r, solve };
+  const roles = new Set(r.hardware.groups.map((g) => g.role));
+  // Add the node group a hardware-only question depends on, so the first answer is not a bare zero.
+  if (solve === 'max_agents' && !roles.has('fleet')) next = { ...next, hardware: { ...next.hardware, groups: [...next.hardware.groups, newGroup('fleet')] } };
+  if (solve === 'max_ml_jobs' && !roles.has('ml')) next = { ...next, hardware: { ...next.hardware, groups: [...next.hardware.groups, newGroup('ml')] } };
+  return normalizeReverse(next);
+}
+
+// ---- Defaults ---------------------------------------------------------------------------------------
+
+export function defaultForward(): ForwardRequest {
+  return { workloads: [{ ...newWorkload('logs'), rawGbPerDay: 500 }], options: { model: 'self_managed' } };
+}
+
+export function defaultReverse(): ReverseRequest {
+  const target = { ...newWorkload('logs'), retentionDays: { hot: 30 } };
+  delete (target as Partial<WorkloadProfile>).rawGbPerDay;
+  return normalizeReverse({
+    hardware: { model: 'self_managed', groups: [newGroup('hot')] }, fixed: [target], solve: 'max_gb_day',
+  });
 }
 
 export function defaultState(): AppState {
-  const fastForward: FastForward = { useCase: 'logs', gbPerDay: 500, hotDays: 7, totalRetentionDays: 90, replicas: 1, model: 'self_managed' };
-  const fastReverse: FastReverse = {
-    useCase: 'logs', nodes: 3, ramGb: 64, diskGb: 1920, vcpu: 8, hotDays: 30, replicas: 1, solve: 'max_gb_day', gbPerDay: 100, model: 'self_managed',
-  };
-  return {
-    version: 1, name: 'Untitled scenario', mode: 'forward', inputMode: 'fast',
-    fastForward, fastReverse,
-    expertForward: fastToForward(fastForward), expertReverse: fastToReverse(fastReverse), expertDirty: false,
-  };
+  return { version: 2, name: 'Untitled scenario', mode: 'forward', forward: defaultForward(), reverse: defaultReverse() };
 }
 
-let counter = 0;
-/** Unique-enough workload IDs for the editor (UI only; the engine never generates IDs). */
-export function newId(prefix: string): string {
-  counter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${counter}`;
+/** Tiers a forward request places data on, in display order. */
+export function tiersInUse(req: ForwardRequest): Tier[] {
+  const used = new Set<Tier>();
+  for (const p of req.workloads) {
+    for (const [t, d] of Object.entries(p.retentionDays) as [Tier, number][]) if (d > 0) used.add(t);
+    if (p.totalGb || p.vector) used.add(p.tier ?? 'content');
+  }
+  return (['hot', 'warm', 'cold', 'frozen', 'content'] as Tier[]).filter((t) => used.has(t));
 }

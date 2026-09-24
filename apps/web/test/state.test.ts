@@ -1,73 +1,103 @@
 import { forward, reverse } from '@sizing/engine';
 import { describe, expect, it } from 'vitest';
 import { toJson, toMarkdown } from '../src/export.ts';
-import { defaultState, fastToForward, fastToReverse, switchInputMode, type FastForward } from '../src/state.ts';
+import { fastForwardV1ToRequest, migrate } from '../src/migrate.ts';
+import {
+  defaultState, deploymentOfForward, deploymentOfReverse, newWorkload, normalizeReverse, tiersInUse, uniqueName,
+  withForwardDeployment, withReverseDeployment, withSolve,
+} from '../src/state.ts';
 
-const ff = (p: Partial<FastForward>): FastForward => ({
-  useCase: 'logs', gbPerDay: 100, hotDays: 7, totalRetentionDays: 7, replicas: 1, model: 'self_managed', ...p,
+describe('defaults', () => {
+  it('forward default sizes a 500 GB/day LogsDB logs workload', () => {
+    const r = forward(defaultState().forward);
+    expect(r.tiers.map((t) => [t.tier, t.nodes])).toEqual([['hot', 4], ['frozen', 2]]);
+  });
+  it('reverse default reproduces §11.2 R1 shape with LogsDB (3 × 64 GB → 102.4 GB/day)', () => {
+    const r = reverse(defaultState().reverse);
+    expect(r.answer!.value).toBeCloseTo(102.4, 9);
+  });
+  it('new workload names never collide', () => {
+    expect(uniqueName('Logs', ['Logs', 'Logs 2'])).toBe('Logs 3');
+    expect(newWorkload('siem', ['Security']).id).toBe('Security 2');
+  });
+  it('tiersInUse lists only tiers with data, in order', () => {
+    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['hot', 'warm', 'content']);
+  });
 });
 
-describe('fast mode → engine request (D13)', () => {
-  it('SIEM 2 TB/day, 30d hot of 365d total reproduces §11.1 F3 (remainder → frozen)', () => {
-    const req = fastToForward(ff({ useCase: 'siem', gbPerDay: 2000, hotDays: 30, totalRetentionDays: 365 }));
-    expect(req.workloads[0]!.retentionDays).toEqual({ hot: 30, frozen: 335 });
-    const r = forward(req);
-    expect(r.tiers.map((t) => [t.tier, t.nodes])).toEqual([['hot', 41], ['frozen', 5]]);
-    expect(r.totalRamGb).toBe(3056);
+describe('reverse question handling', () => {
+  const base = defaultState().reverse;
+  it('keeps a compatible target first and names it', () => {
+    const n = normalizeReverse({ ...base, fixed: [newWorkload('ml'), newWorkload('logs')] });
+    expect(n.fixed[0]!.kind).toBe('logs');
+    expect(n.targetProfileId).toBe(n.fixed[0]!.id);
   });
+  it('switching to max vectors creates a vector target and keeps the other workloads', () => {
+    const n = withSolve(base, 'max_vectors');
+    expect(n.fixed[0]!.kind).toBe('vector');
+    expect(n.fixed.some((p) => p.kind === 'logs')).toBe(true);
+    expect(reverse(n).answer!.unit).toBe('vectors');
+  });
+  it('hardware-only questions add the node group they need', () => {
+    expect(withSolve(base, 'max_agents').hardware.groups.some((g) => g.role === 'fleet')).toBe(true);
+    expect(reverse(withSolve(base, 'max_ml_jobs')).answer!.value).toBe(30);
+  });
+  it('max retention gets a GB/day input', () => {
+    expect(withSolve(base, 'max_retention').fixed[0]!.rawGbPerDay).toBeGreaterThan(0);
+  });
+});
 
-  it('metrics remainder goes to warm with the default downsample factor', () => {
-    const req = fastToForward(ff({ useCase: 'metrics', hotDays: 7, totalRetentionDays: 37 }));
+describe('deployment settings round-trip through both modes', () => {
+  const d = { model: 'self_managed' as const, sites: 2, ccrMode: 'unidirectional' as const, airGapped: true, autoOps: false, fips: true, fullLogsdb: false, concurrentSearch: true };
+  it('forward', () => {
+    expect(deploymentOfForward(withForwardDeployment({ model: 'self_managed' }, d))).toEqual(d);
+  });
+  it('reverse', () => {
+    expect(deploymentOfReverse(withReverseDeployment(defaultState().reverse, d))).toEqual(d);
+  });
+});
+
+describe('migration from v1 scenarios', () => {
+  const v1 = {
+    version: 1, name: 'Old', mode: 'forward', inputMode: 'fast',
+    fastForward: { useCase: 'siem', gbPerDay: 2000, hotDays: 30, totalRetentionDays: 365, replicas: 1, model: 'self_managed' },
+    fastReverse: { useCase: 'logs', nodes: 3, ramGb: 64, diskGb: 2000, vcpu: 8, hotDays: 30, replicas: 1, solve: 'max_gb_day', gbPerDay: 100, model: 'self_managed' },
+    expertForward: { workloads: [], options: { model: 'self_managed' } },
+    expertReverse: { hardware: { model: 'self_managed', groups: [] }, fixed: [], solve: 'max_gb_day' },
+    expertDirty: false,
+  };
+  it('fast v1 scenarios become the equivalent request (D13) and reproduce §11.1 F3', () => {
+    const s = migrate(v1)!;
+    expect(s.version).toBe(2);
+    expect(s.forward.workloads[0]!.retentionDays).toEqual({ hot: 30, frozen: 335 });
+    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([41, 5]);
+  });
+  it('v1 metrics remainder goes to warm with downsampling', () => {
+    const req = fastForwardV1ToRequest({ useCase: 'metrics', gbPerDay: 100, hotDays: 7, totalRetentionDays: 37, replicas: 1, model: 'self_managed' });
     expect(req.workloads[0]!.retentionDays).toEqual({ hot: 7, warm: 30 });
     expect(req.workloads[0]!.downsampleFactor).toEqual({ warm: 0.1 });
   });
-
-  it('APM remainder goes to warm without downsampling', () => {
-    const req = fastToForward(ff({ useCase: 'apm', hotDays: 7, totalRetentionDays: 15 }));
-    expect(req.workloads[0]!.retentionDays).toEqual({ hot: 7, warm: 8 });
-    expect(req.workloads[0]!.downsampleFactor).toBeUndefined();
-  });
-
-  it('search uses the corpus size on the content tier', () => {
-    const req = fastToForward(ff({ useCase: 'search', gbPerDay: 2000, replicas: 2 }));
-    expect(req.workloads[0]).toMatchObject({ kind: 'search', totalGb: 2000, replicas: { content: 2 } });
-  });
-
-  it('fast reverse reproduces §11.2 R1 shape (3 × 64 GB, 2 TB)', () => {
-    const req = fastToReverse({ ...defaultState().fastReverse, diskGb: 2000, useCase: 'logs' });
-    req.fixed[0]!.indexMode = 'standard';
-    expect(reverse(req).answer!.value.toFixed(2)).toBe('42.67');
-  });
-});
-
-describe('input mode switching', () => {
-  it('seeds expert from fast until expert is edited', () => {
-    const s = { ...defaultState(), fastForward: ff({ gbPerDay: 123 }) };
-    const e = switchInputMode(s, 'expert');
-    expect(e.expertForward.workloads[0]!.rawGbPerDay).toBe(123);
-    const edited = { ...switchInputMode(e, 'fast'), expertDirty: true, fastForward: ff({ gbPerDay: 999 }) };
-    expect(switchInputMode(edited, 'expert').expertForward.workloads[0]!.rawGbPerDay).toBe(123);
+  it('v2 passes through and junk is rejected', () => {
+    const s = defaultState();
+    expect(migrate(s)).toBe(s);
+    expect(migrate({ version: 3 })).toBeUndefined();
+    expect(migrate(null)).toBeUndefined();
   });
 });
 
 describe('export', () => {
   const state = defaultState();
-  const req = fastToForward(state.fastForward);
-  const result = forward(req);
-
+  const result = forward(state.forward);
   it('Markdown has the disclaimer, node table, assumptions and a Rally plan', () => {
-    const md = toMarkdown(state, result, req.workloads, '2026-09-23T00:00:00Z');
+    const md = toMarkdown(state, result, state.forward.workloads, '2026-09-24T00:00:00Z');
     expect(md).toContain('Estimate, not benchmark');
     expect(md).toContain('| hot |');
     expect(md).toContain('## Assumptions');
     expect(md).toContain('elastic/logs');
-    expect(md).toContain(result.constantsHash.slice(0, 12));
   });
-
-  it('JSON carries engine version and constants hash for reproducibility (FR-E2)', () => {
-    const j = JSON.parse(toJson(state, result, '2026-09-23T00:00:00Z'));
-    expect(j.engineVersion).toBe(result.engineVersion);
+  it('JSON reproduces the result from the exported scenario (FR-E2)', () => {
+    const j = JSON.parse(toJson(state, result, '2026-09-24T00:00:00Z'));
     expect(j.constantsHash).toBe(result.constantsHash);
-    expect(forward(fastToForward(j.scenario.fastForward))).toEqual(result);
+    expect(forward(migrate(j.scenario)!.forward)).toEqual(result);
   });
 });

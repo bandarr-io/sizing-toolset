@@ -1,33 +1,34 @@
-import {
-  EuiBadge, EuiButtonGroup, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiPageTemplate, EuiPanel, EuiSpacer, EuiTitle, EuiToolTip,
-} from '@elastic/eui';
+import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTemplate, EuiSpacer, EuiText, EuiTitle, EuiToolTip } from '@elastic/eui';
 import type { ConstantSet } from '@sizing/constants';
-import { ENGINE_VERSION, forward, reverse, type SizingResult, type WorkloadProfile } from '@sizing/engine';
+import { defaultIndexMode, forward, reverse, ENGINE_VERSION, type SizingResult, type Tier, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
-import { useConstants } from './constantsStore.tsx';
-import { ConfigPage } from './pages/ConfigPage.tsx';
-import { FastForwardForm, FastReverseForm } from './components/FastForms.tsx';
-import { ForwardOptionsEditor } from './components/ForwardOptionsEditor.tsx';
-import { HardwareEditor, SolveSettings } from './components/HardwareEditor.tsx';
+import { DeploymentSettings } from './calculator/DeploymentSettings.tsx';
+import { HardwareGroups } from './calculator/HardwareGroups.tsx';
+import { NodeSizes } from './calculator/NodeSizes.tsx';
+import { SolvePicker } from './calculator/SolvePicker.tsx';
+import { Toolbar } from './calculator/Toolbar.tsx';
+import { WorkloadCard } from './calculator/WorkloadCard.tsx';
+import { WorkloadList } from './calculator/WorkloadList.tsx';
+import { NumField } from './components/Fields.tsx';
 import { MathProvider } from './components/MathFlyout.tsx';
-import {
-  AssumptionsPanel, ConstraintPanel, NodeTable, ResultSummary, ReverseAnswer, WarningsPanel,
-} from './components/Results.tsx';
-import { ScenarioBar } from './components/ScenarioBar.tsx';
-import { WorkloadEditor } from './components/WorkloadEditor.tsx';
+import { useConstants } from './constantsStore.tsx';
 import { download, slug, toJson, toMarkdown } from './export.ts';
+import { ConfigPage } from './pages/ConfigPage.tsx';
+import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultState, forwardRequest, reverseRequest, switchInputMode, type AppState, type InputMode, type Mode,
+  defaultState, deploymentOfForward, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
+import { Gap, Section } from './ui/Section.tsx';
 
 type Outcome = { result: SizingResult; workloads: WorkloadProfile[] } | { error: string };
 
 function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome {
   try {
     const out = s.mode === 'forward'
-      ? (() => { const req = forwardRequest(s, c); return { result: forward(req, c), workloads: req.workloads }; })()
-      : (() => { const req = reverseRequest(s); return { result: reverse(req, c), workloads: req.fixed }; })();
+      ? { result: forward(s.forward, c), workloads: s.forward.workloads }
+      : { result: reverse(s.reverse, c), workloads: s.reverse.fixed };
     if (overriddenKeys.length) {
       out.result = {
         ...out.result,
@@ -39,6 +40,8 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
     return { error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+const hasLogsdb = (w: readonly WorkloadProfile[]) => w.some((p) => (p.rawGbPerDay !== undefined || p.retentionDays.hot) && defaultIndexMode(p) === 'logsdb');
 
 type Page = 'calculator' | 'config';
 const pageFromHash = (): Page => (window.location.hash.startsWith('#/config') ? 'config' : 'calculator');
@@ -54,52 +57,13 @@ export function App() {
 
   const { set: constants, overrides } = useConstants();
   const overriddenKeys = useMemo(() => Object.keys(overrides).sort(), [overrides]);
-  const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
-  useEffect(() => saveCurrent(state), [state]);
-  const outcome = useMemo(() => compute(state, constants, overriddenKeys), [state, constants, overriddenKeys]);
-  const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
-
-  const exportAs = (kind: 'md' | 'json') => {
-    if ('error' in outcome) return;
-    const at = new Date().toISOString();
-    if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at), 'text/markdown');
-    else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, Object.values(overrides)), 'application/json');
-  };
-
-  const inputs = (() => {
-    if (state.inputMode === 'fast') {
-      return state.mode === 'forward'
-        ? <FastForwardForm value={state.fastForward} onChange={(fastForward) => patch({ fastForward })} />
-        : <FastReverseForm value={state.fastReverse} onChange={(fastReverse) => patch({ fastReverse })} />;
-    }
-    if (state.mode === 'forward') {
-      const f = state.expertForward;
-      return (
-        <>
-          <WorkloadEditor workloads={f.workloads} onChange={(workloads) => patch({ expertForward: { ...f, workloads }, expertDirty: true })} />
-          <EuiSpacer size="m" />
-          <ForwardOptionsEditor value={f.options} onChange={(options) => patch({ expertForward: { ...f, options }, expertDirty: true })} />
-        </>
-      );
-    }
-    const r = state.expertReverse;
-    return (
-      <>
-        <SolveSettings value={r} onChange={(expertReverse) => patch({ expertReverse, expertDirty: true })} />
-        <EuiSpacer size="m" />
-        <HardwareEditor value={r.hardware} onChange={(hardware) => patch({ expertReverse: { ...r, hardware }, expertDirty: true })} />
-        <EuiSpacer size="m" />
-        <WorkloadEditor title="Fixed workload parameters" workloads={r.fixed} onChange={(fixed) => patch({ expertReverse: { ...r, fixed }, expertDirty: true })} />
-      </>
-    );
-  })();
 
   return (
     <MathProvider>
-      <EuiPageTemplate panelled={false} restrictWidth={1680} grow>
+      <EuiPageTemplate panelled={false} restrictWidth={1600} grow>
         <EuiPageTemplate.Header
           pageTitle="Cluster Sizing Calculator"
-          description="Forward: workload → hardware. Reverse: hardware → maximum workload, with the binding constraint and a confidence level."
+          description="Size Elasticsearch clusters from workloads, or find the limits of existing hardware."
           tabs={[
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
@@ -115,82 +79,149 @@ export function App() {
               : []),
           ]}
         />
-        {page === 'config' ? (
-          <EuiPageTemplate.Section><ConfigPage /></EuiPageTemplate.Section>
-        ) : (
         <EuiPageTemplate.Section>
-          <EuiFlexGroup gutterSize="m" alignItems="center" wrap>
-            <EuiFlexItem grow={false}>
-              <EuiButtonGroup
-                legend="Mode" buttonSize="compressed" color="primary" idSelected={state.mode}
-                options={[{ id: 'forward', label: 'Forward: I have a workload' }, { id: 'reverse', label: 'Reverse: I have hardware' }]}
-                onChange={(id) => patch({ mode: id as Mode })}
-              />
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiButtonGroup
-                legend="Input detail" buttonSize="compressed" idSelected={state.inputMode}
-                options={[{ id: 'fast', label: 'Fast' }, { id: 'expert', label: 'Expert' }]}
-                onChange={(id) => setState((s) => switchInputMode(s, id as InputMode, constants))}
-              />
-            </EuiFlexItem>
-            <EuiFlexItem>
-              <ScenarioBar
-                state={state}
-                canExport={!('error' in outcome)}
-                onLoad={(s) => setState(s)}
-                onRename={(name) => patch({ name })}
-                onExportMd={() => exportAs('md')}
-                onExportJson={() => exportAs('json')}
-                onReset={() => setState({ ...defaultState(), name: state.name })}
-              />
-            </EuiFlexItem>
-          </EuiFlexGroup>
-          <EuiSpacer size="m" />
-          <EuiFlexGroup gutterSize="l" alignItems="flexStart" wrap>
-            <EuiFlexItem style={{ minWidth: 340, flexBasis: 480 }}>
-              <EuiPanel hasBorder paddingSize="m">
-                <EuiTitle size="s"><h2>{state.mode === 'forward' ? 'Workload' : 'Hardware and fixed workload'}</h2></EuiTitle>
-                <EuiSpacer size="m" />
-                {inputs}
-              </EuiPanel>
-            </EuiFlexItem>
-            <EuiFlexItem style={{ minWidth: 340, flexBasis: 640 }}>
-              {'error' in outcome ? (
-                <EuiCallOut color="danger" iconType="error" title="Cannot calculate">
-                  <p>{outcome.error}</p>
-                </EuiCallOut>
-              ) : (
-                <Results r={outcome.result} />
-              )}
-            </EuiFlexItem>
-          </EuiFlexGroup>
+          {page === 'config' ? <ConfigPage /> : <Calculator constants={constants} overriddenKeys={overriddenKeys} overrides={Object.values(overrides)} />}
         </EuiPageTemplate.Section>
-        )}
       </EuiPageTemplate>
     </MathProvider>
   );
 }
 
-function Results({ r }: { r: SizingResult }) {
+function Calculator({ constants, overriddenKeys, overrides }: { constants: ConstantSet; overriddenKeys: string[]; overrides: Parameters<typeof toJson>[3] }) {
+  const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
+  useEffect(() => saveCurrent(state), [state]);
+  const outcome = useMemo(() => compute(state, constants, overriddenKeys), [state, constants, overriddenKeys]);
+  const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
+
+  const exportAs = (kind: 'md' | 'json') => {
+    if ('error' in outcome) return;
+    const at = new Date().toISOString();
+    if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at), 'text/markdown');
+    else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
+  };
+
   return (
     <>
-      {r.answer && <><ReverseAnswer r={r} /><EuiSpacer size="m" /></>}
-      <ResultSummary r={r} />
-      <EuiSpacer size="m" />
-      <AssumptionsPanel assumptions={r.assumptions} />
-      <EuiSpacer size="m" />
-      <EuiPanel hasBorder paddingSize="m">
-        <EuiTitle size="xs"><h3>{r.sites > 1 ? 'Nodes per site' : 'Nodes'}</h3></EuiTitle>
-        <EuiSpacer size="s" />
-        <NodeTable r={r} />
-      </EuiPanel>
-      <EuiSpacer size="m" />
-      <EuiPanel hasBorder paddingSize="m"><ConstraintPanel r={r} /></EuiPanel>
-      <EuiSpacer size="m" />
-      <EuiTitle size="xs"><h3>Hardware validation</h3></EuiTitle>
-      <EuiSpacer size="s" />
-      <WarningsPanel warnings={r.warnings} />
+      <Toolbar
+        state={state}
+        canExport={!('error' in outcome)}
+        onMode={(mode) => patch({ mode })}
+        onRename={(name) => patch({ name })}
+        onLoad={(s) => setState(s)}
+        onReset={() => setState({ ...defaultState(), name: state.name, mode: state.mode })}
+        onExportMd={() => exportAs('md')}
+        onExportJson={() => exportAs('json')}
+      />
+      <EuiSpacer size="l" />
+      <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
+        <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
+          {state.mode === 'forward' ? <ForwardInputs state={state} setState={setState} /> : <ReverseInputs state={state} setState={setState} />}
+        </EuiFlexItem>
+        <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, position: 'sticky', top: 16, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
+          {'error' in outcome
+            ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
+            : <ResultsPanel r={outcome.result} />}
+        </EuiFlexItem>
+      </EuiFlexGroup>
     </>
   );
+}
+
+type Setter = (f: (s: AppState) => AppState) => void;
+
+function ForwardInputs({ state, setState }: { state: AppState; setState: Setter }) {
+  const f = state.forward;
+  const setForward = (next: AppState['forward']) => setState((s) => ({ ...s, forward: next }));
+  const growthUsed = f.workloads.some((p) => (p.growthPctPerYear ?? 0) !== 0);
+  const moreCount = (f.options.coordinatingNodes ? 1 : 0) + (f.options.growthHorizonYears !== undefined ? 1 : 0);
+  const tiers = tiersInUse(f);
+
+  return (
+    <>
+      <Section step={1} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type.">
+        <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
+      </Section>
+      <Gap />
+      <Section step={2} title="Where will it run?">
+        <DeploymentSettings
+          value={deploymentOfForward(f.options)} hasLogsdb={hasLogsdb(f.workloads)} moreCount={moreCount}
+          onChange={(d) => setForward({ ...f, options: withForwardDeployment(f.options, d) })}
+          more={
+            <>
+              <EuiFlexItem>
+                <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
+                  helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
+              </EuiFlexItem>
+              {growthUsed && (
+                <EuiFlexItem>
+                  <NumField label="Size for growth over" append="years" value={f.options.growthHorizonYears} optional placeholder="1"
+                    onChange={(growthHorizonYears) => setForward({ ...f, options: { ...f.options, growthHorizonYears } })} />
+                </EuiFlexItem>
+              )}
+            </>
+          }
+        />
+      </Section>
+      <Gap />
+      <Section step={3} title="Node sizes" description="Defaults suit most sizings. Match them to the customer's standard hardware if they have one.">
+        <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} />
+      </Section>
+    </>
+  );
+}
+
+function ReverseInputs({ state, setState }: { state: AppState; setState: Setter }) {
+  const r = state.reverse;
+  const setReverse = (next: AppState['reverse']) => setState((s) => ({ ...s, reverse: normalizeReverse(next) }));
+  const kinds = SOLVE_KINDS[r.solve];
+  const target = kinds.length ? r.fixed[0] : undefined;
+  const others = kinds.length ? r.fixed.slice(1) : r.fixed;
+  const withOthers = (o: WorkloadProfile[]) => setReverse({ ...r, fixed: target ? [target, ...o] : o });
+  const targetTier = r.targetTier ?? (target ? (Object.keys(target.retentionDays).find((t) => (target.retentionDays[t as Tier] ?? 0) > 0) as Tier | undefined) : undefined) ?? 'hot';
+
+  let step = 1;
+  return (
+    <>
+      <Section step={step++} title="What do you want to find out?">
+        <SolvePicker value={r.solve} onChange={(solve) => setState((s) => ({ ...s, reverse: withSolve(s.reverse, solve) }))} />
+      </Section>
+      <Gap />
+      <Section step={step++} title="What hardware do they have?" description="One row per group of identical nodes.">
+        <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })} />
+      </Section>
+      <Gap />
+      {target && (
+        <>
+          <Section step={step++} title="What will it run?" description="Fixed parameters for the workload being solved.">
+            <WorkloadCard
+              p={target} kindChoices={kinds}
+              role={{ kind: 'reverse-target', solve: r.solve, targetTier, onTargetTier: (t) => setReverse({ ...r, targetTier: t }) }}
+              onChange={(p) => setReverse({ ...r, fixed: [p, ...others], targetProfileId: p.id })}
+            />
+            <EuiSpacer size="l" />
+            <EuiTitle size="xxs"><h3>Already running on this cluster</h3></EuiTitle>
+            <EuiText size="xs" color="subdued"><p>Other workloads use capacity before the answer is calculated.</p></EuiText>
+            <EuiSpacer size="s" />
+            {others.length === 0
+              ? <OthersEmpty add={(w) => withOthers([w])} taken={r.fixed.map((p) => p.id)} />
+              : <WorkloadList workloads={others} onChange={withOthers} role={{ kind: 'reverse-other' }} addLabel="Add another workload" />}
+          </Section>
+          <Gap />
+        </>
+      )}
+      <Section step={step++} title="Deployment">
+        <DeploymentSettings value={deploymentOfReverse(r)} hasLogsdb={hasLogsdb(r.fixed)} reverse
+          onChange={(d) => setReverse(withReverseDeployment(r, d))} />
+      </Section>
+    </>
+  );
+}
+
+/** Collapsed entry point for "other workloads" so the common case (nothing else on the cluster) stays quiet. */
+function OthersEmpty({ add, taken }: { add: (w: WorkloadProfile) => void; taken: string[] }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return <EuiText size="s"><EuiLink onClick={() => setOpen(true)}>Add a workload that already runs here</EuiLink></EuiText>;
+  }
+  return <WorkloadList workloads={[]} onChange={(w) => { if (w[0]) add({ ...w[0], id: taken.includes(w[0].id) ? `${w[0].id} (existing)` : w[0].id }); }} role={{ kind: 'reverse-other' }} />;
 }

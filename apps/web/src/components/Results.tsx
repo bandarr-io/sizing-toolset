@@ -13,48 +13,6 @@ function ConfidenceBadge({ c }: { c: 'high' | 'medium' | 'low' }) {
   return <EuiBadge color={CONF_COLOR[c]}>{c} confidence</EuiBadge>;
 }
 
-function StatWithMath({ title, description, steps, note }: { title: string; description: string; steps: MathStep[]; note?: string }) {
-  return (
-    <EuiPanel paddingSize="m" hasBorder>
-      <EuiFlexGroup gutterSize="xs" alignItems="flexStart" responsive={false}>
-        <EuiFlexItem><EuiStat title={title} description={description} titleSize="s" /></EuiFlexItem>
-        <EuiFlexItem grow={false}><MathButton title={description} steps={steps} {...(note ? { note } : {})} /></EuiFlexItem>
-      </EuiFlexGroup>
-    </EuiPanel>
-  );
-}
-
-export function ResultSummary({ r }: { r: SizingResult }) {
-  const dataNodes = r.tiers.reduce((s, t) => s + t.nodes, 0);
-  const perSite = r.sites > 1 ? ' per site' : '';
-  return (
-    <EuiFlexGroup gutterSize="s" wrap>
-      <EuiFlexItem style={{ minWidth: 140 }}>
-        <StatWithMath title={fmtNum(dataNodes, 0)} description={`Data nodes${perSite}`} steps={r.tiers.flatMap((t) => t.math.filter((s) => s.label === `${t.tier} nodes`))} />
-      </EuiFlexItem>
-      <EuiFlexItem style={{ minWidth: 140 }}>
-        <StatWithMath title={`${fmtNum(r.totalRamGb)} GB`} description={`Total RAM${perSite}`} steps={r.totalRamMath} />
-      </EuiFlexItem>
-      <EuiFlexItem style={{ minWidth: 140 }}>
-        <StatWithMath title={`${fmtNum(r.licenseUnits.value, 0)} ${r.licenseUnits.unit}`} description={`License units${perSite}`} steps={[...r.totalRamMath, ...r.licenseUnits.math]} />
-      </EuiFlexItem>
-      <EuiFlexItem style={{ minWidth: 140 }}>
-        <EuiPanel paddingSize="m" hasBorder>
-          <EuiToolTip content={r.licenseFloorReasons.length ? r.licenseFloorReasons.join('; ') : 'No licensed features'}>
-            <EuiStat title={r.licenseFloor[0]!.toUpperCase() + r.licenseFloor.slice(1)} description="License floor" titleSize="s" />
-          </EuiToolTip>
-        </EuiPanel>
-      </EuiFlexItem>
-      {r.sites > 1 && (
-        <EuiFlexItem style={{ minWidth: 140 }}>
-          <EuiPanel paddingSize="m" hasBorder>
-            <EuiStat title={`${fmtNum(r.allSites.totalRamGb)} GB · ${r.allSites.licenseUnits} ERU`} description={`All ${r.sites} sites`} titleSize="s" />
-          </EuiPanel>
-        </EuiFlexItem>
-      )}
-    </EuiFlexGroup>
-  );
-}
 
 interface Row { role: string; nodes: number; ramGb: number; diskGb: number; vcpu: number; counted: boolean; math: MathStep[]; data: boolean }
 
@@ -120,7 +78,6 @@ export function ConstraintPanel({ r }: { r: SizingResult }) {
   const reverse = r.mode === 'reverse';
   return (
     <>
-      <EuiTitle size="xs"><h3>{reverse ? 'Constraints and headroom' : 'Utilization by constraint'}</h3></EuiTitle>
       <EuiText size="xs" color="subdued">
         <p>{reverse ? 'Bar = answer as a share of each constraint\'s maximum. The binding constraint sets the answer.' : 'Demand as a share of usable capacity (after the failover node). Highest = binding.'}</p>
       </EuiText>
@@ -161,39 +118,3 @@ export function WarningsPanel({ warnings }: { warnings: Warning[] }) {
   );
 }
 
-export function AssumptionsPanel({ assumptions }: { assumptions: string[] }) {
-  return (
-    <EuiCallOut color="warning" iconType="warning" title="Estimate, not benchmark" size="s">
-      <p><strong>Assumptions</strong> (exported verbatim)</p>
-      <ul>{assumptions.filter((a) => !a.startsWith('Estimate, not benchmark')).map((a, i) => <li key={i}>{a}</li>)}</ul>
-    </EuiCallOut>
-  );
-}
-
-export function ReverseAnswer({ r }: { r: SizingResult }) {
-  const a = r.answer!;
-  const binding = r.constraints.find((k) => k.binding);
-  return (
-    <EuiPanel paddingSize="l" hasBorder color="subdued">
-      <EuiFlexGroup alignItems="center" gutterSize="m" wrap>
-        <EuiFlexItem grow={false}>
-          <EuiStat title={`${fmtCompact(a.value)} ${a.unit}`} description={solveLabel(a.solve)} titleSize="l" titleColor="primary" />
-        </EuiFlexItem>
-        {a.dataStreams !== undefined && (
-          <EuiFlexItem grow={false}><EuiStat title={fmtNum(a.dataStreams, 0)} description="Data streams like the target" titleSize="m" /></EuiFlexItem>
-        )}
-        <EuiFlexItem>
-          <EuiText size="s">
-            Binding: <strong>{constraintLabel(a.binding)}{a.bindingTier ? ` (${a.bindingTier})` : ''}</strong>
-          </EuiText>
-          <EuiSpacer size="xs" />
-          <EuiFlexGroup gutterSize="xs" responsive={false}>
-            <EuiFlexItem grow={false}><ConfidenceBadge c={a.confidence} /></EuiFlexItem>
-            {binding?.rallyRequired && <EuiFlexItem grow={false}><EuiBadge color="accent">Rally required</EuiBadge></EuiFlexItem>}
-          </EuiFlexGroup>
-        </EuiFlexItem>
-        {binding && <EuiFlexItem grow={false}><MathButton title={solveLabel(a.solve)} steps={binding.math} /></EuiFlexItem>}
-      </EuiFlexGroup>
-    </EuiPanel>
-  );
-}

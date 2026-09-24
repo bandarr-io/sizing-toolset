@@ -33,7 +33,9 @@ Current phase: MVP (§12). Build order a → e; stop for review after each step.
 
 ## Web app (`apps/web`)
 - React 18 + Vite + EUI. Calls the engine directly. Scenarios persist in browser localStorage until apps/api exists.
-- Use `Collapsible`, not `EuiAccordion` (EUI 122 renders accordion content at 0px height here).
+- Layout: `src/calculator/*` (inputs as numbered `Section`s), `src/results/*` (sticky results column), `src/ui/*` (tier colors, section chrome). One input model per mode: `AppState.forward` / `.reverse` are the engine requests (D21). Reverse keeps the solved workload at `fixed[0]` (`normalizeReverse`).
+- Don't use `EuiAccordion` (EUI 122 renders its content at 0px height here); use a button plus conditional render. `EuiFlexItem` is a flex column, so wrap inline content in a `div`.
+- Tier colors come from `ui/tiers.ts` so the timeline, cluster map and tables match.
 - Only use EUI icon names that exist in `icon_map.js` (e.g. `plusCircle`, `upload`, `export`, `inspect`).
 - Configurations page (`#/config`): edits apply as browser overrides (`constantsStore.tsx`); every UI place that reads a constant must use `useConstants().set`, never `defaultConstants`.
 - "Write to repo" goes through `constants-dev-plugin.ts` (dev server only, same-origin JSON POST) into `writeOverrides` in `packages/constants/scripts/write.ts`, which runs the CI check on the merged set before touching files. A written value that breaks a §11 test fails CI; that is intended.

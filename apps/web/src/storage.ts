@@ -1,3 +1,4 @@
+import { migrate } from './migrate.ts';
 import type { AppState } from './state.ts';
 
 // Per-browser convenience only. Postgres-backed scenarios arrive with apps/api.
@@ -27,14 +28,8 @@ function write(key: string, value: unknown): void {
   }
 }
 
-export function isAppState(x: unknown): x is AppState {
-  const s = x as Partial<AppState> | undefined;
-  return !!s && s.version === 1 && !!s.fastForward && !!s.fastReverse && !!s.expertForward && !!s.expertReverse;
-}
-
 export function loadCurrent(): AppState | undefined {
-  const s = read<unknown>(CURRENT);
-  return isAppState(s) ? s : undefined;
+  return migrate(read<unknown>(CURRENT));
 }
 
 export function saveCurrent(s: AppState): void {
@@ -42,8 +37,11 @@ export function saveCurrent(s: AppState): void {
 }
 
 export function listSaved(): SavedScenario[] {
-  const list = read<SavedScenario[]>(SAVED) ?? [];
-  return list.filter((x) => isAppState(x.state)).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  const list = read<{ name: string; savedAt: string; state: unknown }[]>(SAVED) ?? [];
+  return list
+    .map((x) => ({ ...x, state: migrate(x.state) }))
+    .filter((x): x is SavedScenario => !!x.state)
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
 export function saveNamed(s: AppState): SavedScenario[] {

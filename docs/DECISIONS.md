@@ -24,6 +24,7 @@ Gaps and contradictions in `docs/SPEC.md`, resolved with Dan on 2026-09-23. Test
 | D18 | R6 fields | `WorkloadProfile.rolloverDays` (default 1) and `primaryShards` (default 1). `max_shards` also reports max data streams. |
 | D19 | Heap cap | `heap_cap_gb` = 30 (spec said 31), per JVM docs: compressed-oops threshold '26GB safe ... as large as 30GB'. Off-heap per 64 GB node = 64 − 30 − 1 = 33 GB. HV2 errors above 30 GB. §11 impact: case 7 unchanged (BBQ 41.2/33 → 2+1 = 3 nodes; float32 832/33 = 25.2 → 26+1 = 27 nodes). R5 re-baselined: 2 × 33 = 66 GB; BBQ 66e9/412 = **160.19M** (was 155.3M); float32 66e9/8,320 = **7.93M** (was 7.69M). |
 | D20 | Frozen local disk | Frozen node disk defaults to RAM × 30 (shared cache). HV4 does not check frozen, because 1:1500 describes object-store data, not local disk. |
+| D21 | Fast / expert (§10) | Replaced by one input model with progressive disclosure: each workload shows the §10 essentials (ingest, retention, replicas, index mode) and hides the rest under "More options". Deployment settings live in one shared section. v1 saved scenarios migrate automatically (fast inputs convert per D13). |
 
 ## Open items found while building
 
