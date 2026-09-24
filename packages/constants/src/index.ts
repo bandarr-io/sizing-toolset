@@ -19,9 +19,20 @@ export interface ConstantSet {
   readonly hash: string;
 }
 
-export const allConstants: readonly Constant[] = [
-  ...storage, ...memory, ...shards, ...overhead, ...fleet, ...knn, ...license, ...ingest, ...federal,
-] as Constant[];
+/** Constants grouped by their source file in data/, in display order. */
+export const constantFiles: readonly { file: string; items: readonly Constant[] }[] = [
+  { file: 'storage.json', items: storage as Constant[] },
+  { file: 'memory.json', items: memory as Constant[] },
+  { file: 'shards.json', items: shards as Constant[] },
+  { file: 'overhead.json', items: overhead as Constant[] },
+  { file: 'fleet.json', items: fleet as Constant[] },
+  { file: 'knn.json', items: knn as Constant[] },
+  { file: 'license.json', items: license as Constant[] },
+  { file: 'ingest.json', items: ingest as Constant[] },
+  { file: 'federal.json', items: federal as Constant[] },
+];
+
+export const allConstants: readonly Constant[] = constantFiles.flatMap((f) => f.items);
 
 export function buildConstantSet(items: readonly Constant[]): ConstantSet {
   const byKey = new Map<string, Constant>();

@@ -1,6 +1,7 @@
 import { EuiFlexGrid, EuiFlexItem, EuiPanel, EuiSpacer, EuiText, EuiTitle } from '@elastic/eui';
-import { defaultConstants, num } from '@sizing/constants';
+import { num } from '@sizing/constants';
 import type { CcrMode, DiskType, ForwardOptions, NodeTemplate, Tier } from '@sizing/engine';
+import { useConstants } from '../constantsStore.tsx';
 import { MODELS } from '../state.ts';
 import { Collapsible } from './Collapsible.tsx';
 import { NumField, SelectField, SwitchField } from './Fields.tsx';
@@ -20,7 +21,8 @@ export function ForwardOptionsEditor({ value, onChange }: { value: ForwardOption
     for (const k of Object.keys(cur)) if (cur[k] === undefined) delete cur[k];
     set({ nodes: { ...(value.nodes ?? {}), [t]: cur as NodeTemplate } });
   };
-  const defRam = num(defaultConstants, 'node_ram_default_gb');
+  const { set: constants } = useConstants();
+  const defRam = num(constants, 'node_ram_default_gb');
   return (
     <>
       <EuiTitle size="xs"><h3>Scenario options</h3></EuiTitle>
@@ -44,15 +46,15 @@ export function ForwardOptionsEditor({ value, onChange }: { value: ForwardOption
         <EuiFlexGrid columns={3} gutterSize="s">
           {TEMPLATE_TIERS.map((t) => {
             const n = value.nodes?.[t] ?? {};
-            const ratio = num(defaultConstants, `mem_disk.${t}`);
+            const ratio = num(constants, `mem_disk.${t}`);
             const ram = n.ramGb ?? defRam;
             return (
               <EuiFlexItem key={t}>
                 <EuiPanel paddingSize="s" color="subdued">
                   <EuiText size="xs"><strong>{t}</strong> · 1:{ratio}</EuiText>
                   <NumField label="RAM" append="GB" value={n.ramGb} optional placeholder={`${defRam}`} onChange={(ramGb) => setNode(t, { ramGb })} />
-                  <NumField label="Disk" append="GB" value={n.diskGb} optional placeholder={`${ram * (t === 'frozen' ? 30 : ratio)}`} onChange={(diskGb) => setNode(t, { diskGb })} />
-                  <NumField label="vCPU" value={n.vcpu} optional placeholder={`${ram / 8}`} onChange={(vcpu) => setNode(t, { vcpu })} />
+                  <NumField label="Disk" append="GB" value={n.diskGb} optional placeholder={`${ram * (t === 'frozen' ? num(constants, 'mem_disk.hot') : ratio)}`} onChange={(diskGb) => setNode(t, { diskGb })} />
+                  <NumField label="vCPU" value={n.vcpu} optional placeholder={`${ram * num(constants, 'vcpu_per_ram_gb')}`} onChange={(vcpu) => setNode(t, { vcpu })} />
                   <SelectField label="Disk type" value={n.diskType ?? (t === 'hot' || t === 'content' ? 'nvme' : 'ssd')} options={DISK_TYPES} onChange={(diskType) => setNode(t, { diskType })} />
                 </EuiPanel>
               </EuiFlexItem>

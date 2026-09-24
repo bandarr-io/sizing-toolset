@@ -1,4 +1,4 @@
-import { defaultConstants, num } from '@sizing/constants';
+import { defaultConstants, num, type ConstantSet } from '@sizing/constants';
 import type {
   DeploymentModel, ForwardRequest, NodeGroup, ReverseRequest, Solve, Tier, WorkloadProfile,
 } from '@sizing/engine';
@@ -68,7 +68,7 @@ export function remainderTier(useCase: UseCase): Tier | undefined {
   return undefined;
 }
 
-export function fastToForward(f: FastForward): ForwardRequest {
+export function fastToForward(f: FastForward, c: ConstantSet = defaultConstants): ForwardRequest {
   const options = { model: f.model };
   if (f.useCase === 'search') {
     return {
@@ -85,7 +85,7 @@ export function fastToForward(f: FastForward): ForwardRequest {
     replicas: { hot: f.replicas, warm: f.replicas },
   };
   if (f.useCase === 'metrics' && rest > 0) {
-    profile.downsampleFactor = { [tier]: num(defaultConstants, 'downsample.default_factor') };
+    profile.downsampleFactor = { [tier]: num(c, 'downsample.default_factor') };
   }
   return { workloads: [profile], options };
 }
@@ -99,8 +99,8 @@ export function fastToReverse(f: FastReverse): ReverseRequest {
   return { hardware: { model: f.model, groups: [group] }, fixed: [profile], solve: f.solve };
 }
 
-export function forwardRequest(s: AppState): ForwardRequest {
-  return s.inputMode === 'fast' ? fastToForward(s.fastForward) : s.expertForward;
+export function forwardRequest(s: AppState, c: ConstantSet = defaultConstants): ForwardRequest {
+  return s.inputMode === 'fast' ? fastToForward(s.fastForward, c) : s.expertForward;
 }
 
 export function reverseRequest(s: AppState): ReverseRequest {
@@ -108,10 +108,10 @@ export function reverseRequest(s: AppState): ReverseRequest {
 }
 
 /** Switching fast → expert seeds the expert inputs unless they were edited by hand. */
-export function switchInputMode(s: AppState, next: InputMode): AppState {
+export function switchInputMode(s: AppState, next: InputMode, c: ConstantSet = defaultConstants): AppState {
   if (next === s.inputMode) return s;
   if (next === 'expert' && !s.expertDirty) {
-    return { ...s, inputMode: next, expertForward: fastToForward(s.fastForward), expertReverse: fastToReverse(s.fastReverse) };
+    return { ...s, inputMode: next, expertForward: fastToForward(s.fastForward, c), expertReverse: fastToReverse(s.fastReverse) };
   }
   return { ...s, inputMode: next };
 }

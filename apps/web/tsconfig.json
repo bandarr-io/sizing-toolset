@@ -6,5 +6,5 @@
     "types": ["vite/client", "node"],
     "exactOptionalPropertyTypes": false
   },
-  "include": ["src", "test", "vite.config.ts"]
+  "include": ["src", "test", "vite.config.ts", "constants-dev-plugin.ts"]
 }

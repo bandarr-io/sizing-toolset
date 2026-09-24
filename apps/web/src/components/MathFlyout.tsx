@@ -2,9 +2,9 @@ import {
   EuiBadge, EuiButtonIcon, EuiCode, EuiFlexGroup, EuiFlexItem, EuiFlyout, EuiFlyoutBody, EuiFlyoutHeader, EuiHorizontalRule,
   EuiLink, EuiPanel, EuiSpacer, EuiText, EuiTitle, EuiToolTip,
 } from '@elastic/eui';
-import { defaultConstants } from '@sizing/constants';
 import type { MathStep } from '@sizing/engine';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { useConstants } from '../constantsStore.tsx';
 import { fmtNum } from '../format.ts';
 
 interface MathView { title: string; steps: MathStep[]; note?: string }
@@ -37,7 +37,8 @@ export function MathButton({ title, steps, note }: MathView) {
 }
 
 function ConstantChip({ k }: { k: string }) {
-  const c = defaultConstants.byKey.get(k);
+  const { set, isOverridden } = useConstants();
+  const c = set.byKey.get(k);
   if (!c) return <EuiBadge color="danger">{k}</EuiBadge>;
   const value = typeof c.value === 'object' ? 'table' : String(c.value);
   return (
@@ -49,6 +50,7 @@ function ConstantChip({ k }: { k: string }) {
           <EuiBadge color={c.confidence === 'high' ? 'success' : c.confidence === 'medium' ? 'warning' : 'danger'}>{c.confidence}</EuiBadge>
         </EuiFlexItem>
         {c.carried_forward && <EuiFlexItem grow={false}><EuiBadge color="hollow">carried forward</EuiBadge></EuiFlexItem>}
+        {isOverridden(k) && <EuiFlexItem grow={false}><EuiBadge color="primary">overridden in this browser</EuiBadge></EuiFlexItem>}
       </EuiFlexGroup>
       <EuiText size="xs" color="subdued">
         <EuiLink href={c.source_url} target="_blank" external>source</EuiLink> · as of {c.as_of_date} · stack {c.stack_version}

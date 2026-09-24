@@ -1,3 +1,4 @@
+import type { Constant } from '@sizing/constants';
 import type { SizingResult, WorkloadProfile } from '@sizing/engine';
 import type { AppState } from './state.ts';
 
@@ -34,11 +35,13 @@ export function rallyPlan(workloads: readonly WorkloadProfile[]): string[] {
   ];
 }
 
-export function toJson(state: AppState, result: SizingResult, exportedAt: string): string {
+export function toJson(state: AppState, result: SizingResult, exportedAt: string, constantOverrides: readonly Constant[] = []): string {
   return JSON.stringify({
     exportedAt,
     engineVersion: result.engineVersion,
     constantsHash: result.constantsHash,
+    /** Constants changed in the browser at export time; empty means the shipped set. */
+    constantOverrides,
     scenario: state,
     result,
   }, null, 2);

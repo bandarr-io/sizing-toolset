@@ -2,8 +2,9 @@ import {
   EuiButtonEmpty, EuiButtonIcon, EuiFieldText, EuiFlexGrid, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiPanel,
   EuiSpacer, EuiText, EuiTitle,
 } from '@elastic/eui';
-import { defaultConstants, num } from '@sizing/constants';
+import { num } from '@sizing/constants';
 import { defaultIndexMode, type IndexMode, type Quant, type Tier, type WorkloadKind, type WorkloadProfile } from '@sizing/engine';
+import { useConstants } from '../constantsStore.tsx';
 import { newId } from '../state.ts';
 import { Collapsible } from './Collapsible.tsx';
 import { NumField, SelectField, SwitchField } from './Fields.tsx';
@@ -39,6 +40,7 @@ function hasVolume(k: WorkloadKind) {
 }
 
 function ProfileFields({ p, onChange }: { p: WorkloadProfile; onChange: (p: WorkloadProfile) => void }) {
+  const { set: constants } = useConstants();
   const set = (patch: Partial<WorkloadProfile>) => onChange({ ...p, ...patch });
   const tier = p.tier ?? 'content';
   const setTierMap = (key: 'retentionDays' | 'replicas' | 'downsampleFactor', t: Tier, v: number | undefined) => {
@@ -71,7 +73,7 @@ function ProfileFields({ p, onChange }: { p: WorkloadProfile; onChange: (p: Work
         )}
         {(hasVolume(p.kind) || p.kind === 'search') && (
           <EuiFlexItem>
-            <NumField label="Index ratio override" value={p.indexRatioOverride} optional placeholder={`${num(defaultConstants, `index_ratio.${p.indexMode ?? defaultIndexMode(p)}`)}`} onChange={(v) => set({ indexRatioOverride: v })} />
+            <NumField label="Index ratio override" value={p.indexRatioOverride} optional placeholder={`${num(constants, `index_ratio.${p.indexMode ?? defaultIndexMode(p)}`)}`} onChange={(v) => set({ indexRatioOverride: v })} />
           </EuiFlexItem>
         )}
       </EuiFlexGrid>

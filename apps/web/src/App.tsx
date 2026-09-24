@@ -1,9 +1,11 @@
 import {
   EuiBadge, EuiButtonGroup, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiPageTemplate, EuiPanel, EuiSpacer, EuiTitle, EuiToolTip,
 } from '@elastic/eui';
-import { constantsHash } from '@sizing/constants';
+import type { ConstantSet } from '@sizing/constants';
 import { ENGINE_VERSION, forward, reverse, type SizingResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
+import { useConstants } from './constantsStore.tsx';
+import { ConfigPage } from './pages/ConfigPage.tsx';
 import { FastForwardForm, FastReverseForm } from './components/FastForms.tsx';
 import { ForwardOptionsEditor } from './components/ForwardOptionsEditor.tsx';
 import { HardwareEditor, SolveSettings } from './components/HardwareEditor.tsx';
@@ -21,30 +23,47 @@ import { loadCurrent, saveCurrent } from './storage.ts';
 
 type Outcome = { result: SizingResult; workloads: WorkloadProfile[] } | { error: string };
 
-function compute(s: AppState): Outcome {
+function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome {
   try {
-    if (s.mode === 'forward') {
-      const req = forwardRequest(s);
-      return { result: forward(req), workloads: req.workloads };
+    const out = s.mode === 'forward'
+      ? (() => { const req = forwardRequest(s, c); return { result: forward(req, c), workloads: req.workloads }; })()
+      : (() => { const req = reverseRequest(s); return { result: reverse(req, c), workloads: req.fixed }; })();
+    if (overriddenKeys.length) {
+      out.result = {
+        ...out.result,
+        assumptions: [`Custom constants in use (${overriddenKeys.length}, changed in this browser): ${overriddenKeys.join(', ')}.`, ...out.result.assumptions],
+      };
     }
-    const req = reverseRequest(s);
-    return { result: reverse(req), workloads: req.fixed };
+    return out;
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
 }
 
+type Page = 'calculator' | 'config';
+const pageFromHash = (): Page => (window.location.hash.startsWith('#/config') ? 'config' : 'calculator');
+
 export function App() {
+  const [page, setPage] = useState<Page>(pageFromHash);
+  useEffect(() => {
+    const on = () => setPage(pageFromHash());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  const go = (p: Page) => { window.location.hash = p === 'config' ? '#/config' : '#/'; };
+
+  const { set: constants, overrides } = useConstants();
+  const overriddenKeys = useMemo(() => Object.keys(overrides).sort(), [overrides]);
   const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
   useEffect(() => saveCurrent(state), [state]);
-  const outcome = useMemo(() => compute(state), [state]);
+  const outcome = useMemo(() => compute(state, constants, overriddenKeys), [state, constants, overriddenKeys]);
   const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
 
   const exportAs = (kind: 'md' | 'json') => {
     if ('error' in outcome) return;
     const at = new Date().toISOString();
     if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at), 'text/markdown');
-    else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at), 'application/json');
+    else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, Object.values(overrides)), 'application/json');
   };
 
   const inputs = (() => {
@@ -81,12 +100,24 @@ export function App() {
         <EuiPageTemplate.Header
           pageTitle="Cluster Sizing Calculator"
           description="Forward: workload → hardware. Reverse: hardware → maximum workload, with the binding constraint and a confidence level."
+          tabs={[
+            { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
+            { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
+          ]}
           rightSideItems={[
-            <EuiToolTip key="v" content={`Constants hash ${constantsHash}`}>
-              <EuiBadge color="hollow">engine {ENGINE_VERSION} · constants {constantsHash.slice(0, 8)}</EuiBadge>
+            <EuiToolTip key="v" content={`Constants hash ${constants.hash}`}>
+              <EuiBadge color="hollow">engine {ENGINE_VERSION} · constants {constants.hash.slice(0, 8)}</EuiBadge>
             </EuiToolTip>,
+            ...(overriddenKeys.length
+              ? [<EuiToolTip key="c" content={overriddenKeys.join(', ')}>
+                  <EuiBadge color="warning" onClick={() => go('config')} onClickAriaLabel="Open configurations">custom constants ({overriddenKeys.length})</EuiBadge>
+                </EuiToolTip>]
+              : []),
           ]}
         />
+        {page === 'config' ? (
+          <EuiPageTemplate.Section><ConfigPage /></EuiPageTemplate.Section>
+        ) : (
         <EuiPageTemplate.Section>
           <EuiFlexGroup gutterSize="m" alignItems="center" wrap>
             <EuiFlexItem grow={false}>
@@ -100,7 +131,7 @@ export function App() {
               <EuiButtonGroup
                 legend="Input detail" buttonSize="compressed" idSelected={state.inputMode}
                 options={[{ id: 'fast', label: 'Fast' }, { id: 'expert', label: 'Expert' }]}
-                onChange={(id) => setState((s) => switchInputMode(s, id as InputMode))}
+                onChange={(id) => setState((s) => switchInputMode(s, id as InputMode, constants))}
               />
             </EuiFlexItem>
             <EuiFlexItem>
@@ -135,6 +166,7 @@ export function App() {
             </EuiFlexItem>
           </EuiFlexGroup>
         </EuiPageTemplate.Section>
+        )}
       </EuiPageTemplate>
     </MathProvider>
   );
