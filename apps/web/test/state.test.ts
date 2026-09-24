@@ -20,8 +20,12 @@ describe('defaults', () => {
     expect(uniqueName('Logs', ['Logs', 'Logs 2'])).toBe('Logs 3');
     expect(newWorkload('siem', ['Security']).id).toBe('Security 2');
   });
+  it('no new workload starts with a warm tier', () => {
+    for (const k of ['logs', 'siem', 'metrics', 'apm'] as const) expect(newWorkload(k).retentionDays.warm).toBeUndefined();
+    expect(newWorkload('metrics')).toMatchObject({ retentionDays: { hot: 7, frozen: 83 }, downsampleFactor: { frozen: 0.1 } });
+  });
   it('tiersInUse lists only tiers with data, in order', () => {
-    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['hot', 'warm', 'content']);
+    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['hot', 'frozen', 'content']);
   });
 });
 

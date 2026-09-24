@@ -72,8 +72,8 @@ export function newWorkload(kind: WorkloadKind, taken: readonly string[] = []): 
   switch (kind) {
     case 'logs': return { id, kind, rawGbPerDay: 100, indexMode: 'logsdb', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 } };
     case 'siem': return { id, kind, rawGbPerDay: 100, indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 }, replicas: { hot: 1, warm: 1 } };
-    case 'metrics': return { id, kind, rawGbPerDay: 50, indexMode: 'tsds', retentionDays: { hot: 7, warm: 30 }, replicas: { hot: 1, warm: 1 }, downsampleFactor: { warm: 0.1 } };
-    case 'apm': return { id, kind, rawGbPerDay: 50, indexMode: 'standard', retentionDays: { hot: 7, warm: 23 }, replicas: { hot: 1, warm: 1 } };
+    case 'metrics': return { id, kind, rawGbPerDay: 50, indexMode: 'tsds', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 }, downsampleFactor: { frozen: 0.1 } };
+    case 'apm': return { id, kind, rawGbPerDay: 50, indexMode: 'standard', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 } };
     case 'search': return { id, kind, totalGb: 500, retentionDays: {}, replicas: { content: 1 } };
     case 'vector': return { id, kind, vector: { count: 10_000_000, dims: 1024, quant: 'bbq' }, retentionDays: {}, replicas: { content: 1 } };
     case 'ml': return { id, kind, ml: { anomalyJobs: 10 }, retentionDays: {}, replicas: {} };
