@@ -1,0 +1,32 @@
+[
+  {
+    "key": "fedramp.ech",
+    "value": {
+      "moderate": true,
+      "high": true,
+      "region": "AWS GovCloud",
+      "highAuthorizedOn": "2026-03-31"
+    },
+    "unit": "object",
+    "source_url": "https://www.elastic.co/industries/public-sector/fedramp",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "omb_m2614",
+    "value": {
+      "searchableMonths": 6,
+      "retrievableMonths": 12,
+      "l3SearchableMonths": 3
+    },
+    "unit": "months",
+    "source_url": "https://www.whitehouse.gov/omb/information-resources/guidance/memoranda/",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "URL is the OMB memoranda index, not the memo itself. Not for NSS/DoD/IC systems.",
+    "carried_forward": true
+  }
+]

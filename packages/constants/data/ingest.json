@@ -1,0 +1,76 @@
+[
+  {
+    "key": "ev_per_s_per_vcpu",
+    "value": 1500,
+    "unit": "events/s per vCPU",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "Conservative engine default (§5.9). Always Low confidence; Rally required.",
+    "carried_forward": true
+  },
+  {
+    "key": "ev_per_s_per_vcpu.band_min",
+    "value": 1000,
+    "unit": "events/s per vCPU",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "carried_forward": true
+  },
+  {
+    "key": "ev_per_s_per_vcpu.band_max",
+    "value": 3000,
+    "unit": "events/s per vCPU",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "carried_forward": true
+  },
+  {
+    "key": "ingest.derate.pipelines",
+    "value": 0.5,
+    "unit": "fraction slower",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "'Up to ~50% slower' (§5.9).",
+    "carried_forward": true
+  },
+  {
+    "key": "ingest.derate.logsdb",
+    "value": 0.15,
+    "unit": "fraction slower",
+    "source_url": "https://www.elastic.co/docs/manage-data/data-store/data-streams/logs-data-stream",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "Docs: 10–20% indexing impact; midpoint.",
+    "carried_forward": false
+  },
+  {
+    "key": "ingest.derate.concurrent_search",
+    "value": 0.2,
+    "unit": "fraction slower",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "carried_forward": true
+  },
+  {
+    "key": "ingest.default_avg_event_kb",
+    "value": 1,
+    "unit": "KB",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "Decision (docs/DECISIONS.md); value is not stated by the source. Matches R8.",
+    "carried_forward": true
+  }
+]

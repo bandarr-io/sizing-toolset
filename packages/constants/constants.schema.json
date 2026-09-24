@@ -1,0 +1,7 @@
+{ "$id": "constant", "type": "object",
+  "required": ["key","value","unit","source_url","as_of_date","stack_version","confidence"],
+  "properties": {
+    "key": {"type":"string"}, "value": {}, "unit": {"type":"string"},
+    "source_url": {"type":"string","format":"uri"}, "as_of_date": {"type":"string","format":"date"},
+    "stack_version": {"type":"string"}, "confidence": {"enum":["high","medium","low"]},
+    "notes": {"type":"string"}, "carried_forward": {"type":"boolean"} } }

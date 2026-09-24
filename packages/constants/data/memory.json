@@ -1,0 +1,78 @@
+[
+  {
+    "key": "heap_fraction",
+    "value": 0.5,
+    "unit": "fraction of RAM",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/jvm-settings",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "heap_cap_gb",
+    "value": 30,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/jvm-settings",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "notes": "Docs (checked 2026-09-23): compressed-oops threshold is '26GB safe on most systems and can be as large as 30GB'. Spec said 31; changed to 30 per D19. Also the HV2 error threshold.",
+    "carried_forward": false
+  },
+  {
+    "key": "offheap_reserve_gb",
+    "value": 1,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Vector off-heap budget = RAM − heap − reserve (§5.1).",
+    "carried_forward": true
+  },
+  {
+    "key": "node_ram_practical_max_gb",
+    "value": 64,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/elasticsearch-in-production-environments",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "HV1 threshold.",
+    "carried_forward": true
+  },
+  {
+    "key": "node_ram_default_gb",
+    "value": 64,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/blog/benchmarking-and-sizing-your-elasticsearch-cluster-for-logs-and-metrics",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Forward-mode default node size; the blog example uses 64 GB nodes.",
+    "carried_forward": false
+  },
+  {
+    "key": "vcpu_per_ram_gb",
+    "value": 0.125,
+    "unit": "vCPU per GB RAM",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/elasticsearch-in-production-environments",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "Decision (docs/DECISIONS.md); value is not stated by the source. Forward-mode default vCPU = RAM / 8.",
+    "carried_forward": true
+  },
+  {
+    "key": "hv.hot_min_vcpu_per_ram_gb",
+    "value": 0.125,
+    "unit": "vCPU per GB RAM",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/elasticsearch-in-production-environments",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "HV11 threshold (vCPU:RAM < 1:8 warns).",
+    "carried_forward": true
+  }
+]

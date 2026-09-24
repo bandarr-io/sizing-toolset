@@ -1,0 +1,112 @@
+[
+  {
+    "key": "fleet.table",
+    "value": [
+      {
+        "agents": 2000,
+        "fleetMemGb": 2,
+        "fleetVcpu": 8,
+        "hotRamGb": 32,
+        "hotVcpu": 8
+      },
+      {
+        "agents": 5000,
+        "fleetMemGb": 4,
+        "fleetVcpu": 8,
+        "hotRamGb": 32,
+        "hotVcpu": 8
+      },
+      {
+        "agents": 10000,
+        "fleetMemGb": 8,
+        "fleetVcpu": 8,
+        "hotRamGb": 128,
+        "hotVcpu": 32
+      },
+      {
+        "agents": 15000,
+        "fleetMemGb": 8,
+        "fleetVcpu": 8,
+        "hotRamGb": 256,
+        "hotVcpu": 64
+      },
+      {
+        "agents": 25000,
+        "fleetMemGb": 8,
+        "fleetVcpu": 8,
+        "hotRamGb": 256,
+        "hotVcpu": 64
+      },
+      {
+        "agents": 50000,
+        "fleetMemGb": 8,
+        "fleetVcpu": 8,
+        "hotRamGb": 384,
+        "hotVcpu": 96
+      },
+      {
+        "agents": 75000,
+        "fleetMemGb": 8,
+        "fleetVcpu": 8,
+        "hotRamGb": 384,
+        "hotVcpu": 96
+      },
+      {
+        "agents": 100000,
+        "fleetMemGb": 16,
+        "fleetVcpu": 16,
+        "hotRamGb": 512,
+        "hotVcpu": 128
+      }
+    ],
+    "unit": "rows",
+    "source_url": "https://www.elastic.co/docs/reference/fleet/fleet-server-scalability",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "fleetVcpu is 'up to 8' for rows below 100k.",
+    "carried_forward": false
+  },
+  {
+    "key": "fleet.max_policies_per_instance",
+    "value": 1000,
+    "unit": "policies",
+    "source_url": "https://www.elastic.co/docs/reference/fleet/fleet-server-scalability",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "fleet.api_key_cache_threshold_agents",
+    "value": 10000,
+    "unit": "agents",
+    "source_url": "https://www.elastic.co/docs/reference/fleet/fleet-server-scalability",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "fleet.api_key_cache_multiplier",
+    "value": 2,
+    "unit": "× agents",
+    "source_url": "https://www.elastic.co/docs/reference/fleet/fleet-server-scalability",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "xpack.security.authc.api_key.cache.max_keys.",
+    "carried_forward": true
+  },
+  {
+    "key": "fleet.serverless_max_agents",
+    "value": 10000,
+    "unit": "agents per project",
+    "source_url": "https://www.elastic.co/docs/reference/fleet/fleet-server-scalability",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "§13.6: carried forward.",
+    "carried_forward": true
+  }
+]

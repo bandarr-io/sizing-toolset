@@ -1,0 +1,148 @@
+[
+  {
+    "key": "knn.bytes.float32",
+    "value": {
+      "perDim": 4,
+      "fixed": 0
+    },
+    "unit": "bytes per vector = perDim × d + fixed",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.bytes.bfloat16",
+    "value": {
+      "perDim": 2,
+      "fixed": 0
+    },
+    "unit": "bytes per vector = perDim × d + fixed",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "bfloat16 element type, no quantization.",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.bytes.int8",
+    "value": {
+      "perDim": 1,
+      "fixed": 4
+    },
+    "unit": "bytes per vector = perDim × d + fixed",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.bytes.int4",
+    "value": {
+      "perDim": 0.5,
+      "fixed": 4
+    },
+    "unit": "bytes per vector = perDim × d + fixed",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.bytes.bbq",
+    "value": {
+      "perDim": 0.125,
+      "fixed": 14
+    },
+    "unit": "bytes per vector = perDim × d + fixed",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "GitHub #117877 reports overhead above formula; keep 20–25% buffer (§14).",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.bbq_disk",
+    "value": {
+      "vectorsPerCluster": 384,
+      "centroidBytesPerDim": 5,
+      "centroidFixed": 14,
+      "quantPerDim": 0.125,
+      "quantFixed": 16,
+      "quantCopies": 2
+    },
+    "unit": "formula parameters",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "Docs formula: clusters = n/384; centroid bytes = clusters × (4d + d + 14); quantized bytes = n × (d/8 + 14 + 2) × 2. Docs say only a fraction must be in memory, so treating the total as off-heap demand is conservative. No HNSW graph.",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.hnsw_m",
+    "value": 16,
+    "unit": "links",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.hnsw_bytes_per_link",
+    "value": 4,
+    "unit": "bytes",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/approximate-knn-search",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "knn.raw_disk_overhead.int8",
+    "value": 0.25,
+    "unit": "fraction of float32 size",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "knn.raw_disk_overhead.int4",
+    "value": 0.125,
+    "unit": "fraction of float32 size",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "knn.raw_disk_overhead.bbq",
+    "value": 0.03125,
+    "unit": "fraction of float32 size",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "knn.bbq_default_min_dims",
+    "value": 384,
+    "unit": "dims",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Docs (2026-09-23) also say bbq_disk is the default for float/bfloat16 when the license allows.",
+    "carried_forward": false
+  }
+]

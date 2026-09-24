@@ -1,0 +1,128 @@
+[
+  {
+    "key": "masters.sizing",
+    "value": [
+      {
+        "minDataNodes": 0,
+        "count": 0,
+        "ramGb": 0
+      },
+      {
+        "minDataNodes": 6,
+        "count": 3,
+        "ramGb": 16
+      },
+      {
+        "minDataNodes": 21,
+        "count": 3,
+        "ramGb": 32
+      },
+      {
+        "minDataNodes": 51,
+        "count": 3,
+        "ramGb": 64
+      }
+    ],
+    "unit": "rows",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/distributed-architecture/clusters-nodes-shards/node-roles",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "§5.2. Data nodes include frozen and vector nodes. count 0 = co-located masters.",
+    "carried_forward": true
+  },
+  {
+    "key": "kibana.node_ram_gb",
+    "value": 8,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/configure-kibana",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "kibana.ha_min_data_nodes",
+    "value": 6,
+    "unit": "nodes",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/configure-kibana",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "At or above this, 2 Kibana instances.",
+    "carried_forward": true
+  },
+  {
+    "key": "kibana.ha_count",
+    "value": 2,
+    "unit": "nodes",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/configure-kibana",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "coordinating.node_ram_gb",
+    "value": 32,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/distributed-architecture/clusters-nodes-shards/node-roles",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Added only when requested (decision).",
+    "carried_forward": true
+  },
+  {
+    "key": "apm.count",
+    "value": 2,
+    "unit": "nodes",
+    "source_url": "https://www.elastic.co/docs/solutions/observability/apm/apm-server",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "apm.node_ram_gb",
+    "value": 8,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/solutions/observability/apm/apm-server",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": true
+  },
+  {
+    "key": "ml.node_ram_gb",
+    "value": 64,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/explore-analyze/machine-learning/anomaly-detection/anomaly-detection-scale",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "carried_forward": true
+  },
+  {
+    "key": "ml.jobs_per_node",
+    "value": 30,
+    "unit": "jobs",
+    "source_url": "https://www.elastic.co/docs/explore-analyze/machine-learning/anomaly-detection/anomaly-detection-scale",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "Heuristic (§5.2). Confirm with field SAs (§13.5).",
+    "carried_forward": true
+  },
+  {
+    "key": "fleet.redundancy_nodes",
+    "value": 1,
+    "unit": "nodes",
+    "source_url": "https://www.elastic.co/docs/reference/fleet/fleet-server-scalability",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Decision (docs/DECISIONS.md); value is not stated by the source. Fleet Servers = needed + 1.",
+    "carried_forward": true
+  }
+]

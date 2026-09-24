@@ -1,0 +1,105 @@
+[
+  {
+    "key": "shard_size_gb_min",
+    "value": 10,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "shard_size_gb_max",
+    "value": 50,
+    "unit": "GB",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "shard_docs_max",
+    "value": 200000000,
+    "unit": "docs",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "max_shards_per_nonfrozen_node",
+    "value": 1000,
+    "unit": "shards",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "carried_forward": false
+  },
+  {
+    "key": "master_indices_per_gb_heap",
+    "value": 3000,
+    "unit": "indices per GB heap",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Re-verified 2026-09-23; was carried forward in spec.",
+    "carried_forward": false
+  },
+  {
+    "key": "watermark.low",
+    "value": 0.85,
+    "unit": "fraction",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/configuration-reference/cluster-level-shard-allocation-routing-settings",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "watermark.high",
+    "value": 0.9,
+    "unit": "fraction",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/configuration-reference/cluster-level-shard-allocation-routing-settings",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "watermark.flood_stage",
+    "value": 0.95,
+    "unit": "fraction",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/configuration-reference/cluster-level-shard-allocation-routing-settings",
+    "as_of_date": "2026-09-23",
+    "stack_version": "9.4",
+    "confidence": "high",
+    "carried_forward": false
+  },
+  {
+    "key": "datastream.default_rollover_days",
+    "value": 1,
+    "unit": "days",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Decision (docs/DECISIONS.md); value is not stated by the source. Used by max_shards → data streams (R6).",
+    "carried_forward": true
+  },
+  {
+    "key": "datastream.default_primary_shards",
+    "value": 1,
+    "unit": "shards",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
+    "as_of_date": "2026-09-01",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "Decision (docs/DECISIONS.md); value is not stated by the source. ",
+    "carried_forward": true
+  }
+]
