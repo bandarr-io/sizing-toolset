@@ -1,6 +1,6 @@
 import {
   EuiBadge, EuiButtonEmpty, EuiFlexGroup, EuiFlexItem, EuiHorizontalRule, EuiNotificationBadge, EuiPanel, EuiSpacer, EuiTab, EuiTabs,
-  EuiText, EuiTitle, EuiToolTip,
+  EuiText, EuiTitle, EuiToolTip, useEuiTheme,
 } from '@elastic/eui';
 import type { MathStep, SizingResult } from '@sizing/engine';
 import { useState, type ReactNode } from 'react';
@@ -74,6 +74,7 @@ function Answer({ r }: { r: SizingResult }) {
 
 /** Everything about the result, in reading order: the answer, the cluster, the detail, the caveats. */
 export function ResultsPanel({ r }: { r: SizingResult }) {
+  const { euiTheme } = useEuiTheme();
   const [tab, setTab] = useState<Tab>('constraints');
   const errors = r.warnings.filter((w) => w.severity === 'error').length;
   const warns = r.warnings.filter((w) => w.severity === 'warn').length;
@@ -81,7 +82,9 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
 
   return (
     <>
-      <EuiPanel hasBorder paddingSize="l">
+      {/* Only the summary is pinned; details scroll with the page, so nothing hides inside a second scrollbar. */}
+      <div style={{ position: 'sticky', top: 0, paddingTop: 16, marginTop: -16, zIndex: 2, background: euiTheme.colors.body }}>
+      <EuiPanel hasBorder paddingSize="l" hasShadow>
         {r.answer ? <Answer r={r} /> : (
           <>
             <EuiText size="s" color="subdued">Recommended cluster{r.sites > 1 ? ` (per site, ${r.sites} sites)` : ''}</EuiText>
@@ -110,6 +113,7 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
           </>
         )}
       </EuiPanel>
+      </div>
 
       <EuiSpacer size="m" />
       <EuiPanel hasBorder paddingSize="l">

@@ -11,12 +11,12 @@ const ORDER: Tier[] = ['hot', 'warm', 'cold', 'frozen'];
 const ADD_DAYS: Record<Tier, number> = { hot: 7, warm: 30, cold: 60, frozen: 335, content: 0 };
 
 const PRESETS: { label: string; value: Retention }[] = [
-  { label: '7 days hot', value: { hot: 7 } },
-  { label: '30 days hot', value: { hot: 30 } },
-  { label: '7 d hot, 90 d total (frozen)', value: { hot: 7, frozen: 83 } },
-  { label: '30 d hot, 1 year total (frozen)', value: { hot: 30, frozen: 335 } },
-  { label: '7 d hot, 30 d warm, 1 year total (frozen)', value: { hot: 7, warm: 30, frozen: 328 } },
-  { label: '30 d hot, 90 d warm, 1 year total (frozen)', value: { hot: 30, warm: 90, frozen: 245 } },
+  { label: '7 d hot', value: { hot: 7 } },
+  { label: '30 d hot', value: { hot: 30 } },
+  { label: '7 d hot, 83 d frozen (90 d)', value: { hot: 7, frozen: 83 } },
+  { label: '3 d hot, 27 d cold, 335 d frozen (1 year)', value: { hot: 3, cold: 27, frozen: 335 } },
+  { label: '7 d hot, 23 d cold, 335 d frozen (1 year)', value: { hot: 7, cold: 23, frozen: 335 } },
+  { label: '30 d hot, 335 d frozen (1 year)', value: { hot: 30, frozen: 335 } },
 ];
 
 export function humanDays(days: number): string {

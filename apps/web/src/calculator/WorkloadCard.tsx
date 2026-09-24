@@ -161,6 +161,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
             </EuiFlexItem>
           ))}
         </EuiFlexGrid>
+        <EuiSpacer size="l" />
         <SwitchField label="Ingest pipelines" helpText="Processing in ingest pipelines can make indexing up to 50% slower." checked={p.ingestPipelines ?? false} onChange={(v) => set({ ingestPipelines: v })} />
       </>
     );
