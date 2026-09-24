@@ -1,0 +1,95 @@
+import { num, val, type ConstantSet, type VectorBytes, type BbqDiskParams } from '@sizing/constants';
+import type { IndexMode, Quant, Tier, WorkloadProfile } from './types.ts';
+
+export function defaultIndexMode(p: WorkloadProfile): IndexMode {
+  if (p.indexMode) return p.indexMode;
+  if (p.kind === 'logs' || p.kind === 'siem') return 'logsdb';
+  if (p.kind === 'metrics') return 'tsds';
+  return 'standard';
+}
+
+export function indexRatio(c: ConstantSet, p: WorkloadProfile): { value: number; keys: string[]; label: string } {
+  if (p.indexRatioOverride !== undefined) return { value: p.indexRatioOverride, keys: [], label: 'index ratio (override)' };
+  const mode = defaultIndexMode(p);
+  const key = `index_ratio.${mode}`;
+  return { value: num(c, key), keys: [key], label: `index ratio (${mode})` };
+}
+
+/** SPEC §5.1: cold and frozen carry no replicas. */
+export function replicasFor(p: WorkloadProfile, tier: Tier): number {
+  if (tier === 'cold' || tier === 'frozen') return 0;
+  return p.replicas[tier] ?? 1;
+}
+
+export function downsampleFor(p: WorkloadProfile, tier: Tier): number {
+  return p.downsampleFactor?.[tier] ?? 1;
+}
+
+/** D15: GB/day × (1 + growth)^years. */
+export function growthFactor(p: WorkloadProfile, years: number): number {
+  const g = p.growthPctPerYear ?? 0;
+  return g === 0 || years === 0 ? 1 : (1 + g / 100) ** years;
+}
+
+export function retentionTiers(p: WorkloadProfile): Tier[] {
+  return (Object.entries(p.retentionDays) as [Tier, number][]).filter(([, d]) => d > 0).map(([t]) => t);
+}
+
+/** Tier that holds a fixed corpus or vectors. */
+export function placementTier(p: WorkloadProfile): Tier {
+  return p.tier ?? 'content';
+}
+
+export function memDiskKey(tier: Tier): string {
+  return `mem_disk.${tier}`;
+}
+
+export function heapGb(c: ConstantSet, ramGb: number, override?: number): number {
+  return override ?? Math.min(num(c, 'heap_fraction') * ramGb, num(c, 'heap_cap_gb'));
+}
+
+/** SPEC §5.1: RAM − heap − reserve. */
+export function offheapBudgetGb(c: ConstantSet, ramGb: number, heapOverride?: number): number {
+  return Math.max(0, ramGb - heapGb(c, ramGb, heapOverride) - num(c, 'offheap_reserve_gb'));
+}
+
+export interface VectorCost {
+  /** Off-heap (filesystem cache) bytes per vector copy, including the HNSW graph. */
+  offheapBytes: number;
+  /** Disk bytes per vector copy (raw floats kept for rescoring, plus quantized structures). */
+  diskBytes: number;
+  expr: string;
+  keys: string[];
+}
+
+/** SPEC §5.4 and D16/D17. */
+export function vectorCost(c: ConstantSet, dims: number, quant: Quant, hnswM?: number): VectorCost {
+  const m = hnswM ?? num(c, 'knn.hnsw_m');
+  const link = num(c, 'knn.hnsw_bytes_per_link');
+  const raw = 4 * dims;
+  if (quant === 'bbq_disk') {
+    const b = val<BbqDiskParams>(c, 'knn.bbq_disk');
+    const centroid = (b.centroidBytesPerDim * dims + b.centroidFixed) / b.vectorsPerCluster;
+    const quantized = (b.quantPerDim * dims + b.quantFixed) * b.quantCopies;
+    return {
+      offheapBytes: centroid + quantized,
+      diskBytes: raw + centroid + quantized,
+      expr: `(${b.centroidBytesPerDim}d + ${b.centroidFixed}) / ${b.vectorsPerCluster} + (d/8 + ${b.quantFixed}) × ${b.quantCopies}`,
+      keys: ['knn.bbq_disk'],
+    };
+  }
+  const key = `knn.bytes.${quant}`;
+  const bytes = val<VectorBytes>(c, key);
+  const quantBytes = bytes.perDim * dims + bytes.fixed;
+  const graph = link * m;
+  const overheadKey = `knn.raw_disk_overhead.${quant}`;
+  const rawOnDisk = quant === 'float32' ? 0 : quant === 'bfloat16' ? 0 : raw * num(c, overheadKey);
+  const keys = [key, 'knn.hnsw_bytes_per_link', ...(hnswM === undefined ? ['knn.hnsw_m'] : [])];
+  if (rawOnDisk > 0) keys.push(overheadKey);
+  return {
+    offheapBytes: quantBytes + graph,
+    diskBytes: (quant === 'bfloat16' ? quantBytes : Math.max(raw, quantBytes)) + rawOnDisk + graph,
+    expr: `${bytes.perDim}·d + ${bytes.fixed} + ${link}·m`,
+    keys,
+  };
+}
