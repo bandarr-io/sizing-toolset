@@ -1,12 +1,14 @@
 import {
-  EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiCallOut, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldNumber, EuiPopover, EuiSelect,
-  EuiSpacer, EuiText,
+  EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiCallOut, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldNumber, EuiFlexGroup, EuiFlexItem,
+  EuiPopover, EuiSelect, EuiSpacer, EuiText,
 } from '@elastic/eui';
-import type { DiskType, NodeGroup, Solve } from '@sizing/engine';
+import { num } from '@sizing/constants';
+import type { DiskType, NodeGroup, Solve, Tier } from '@sizing/engine';
+import { useConstants } from '../constantsStore.tsx';
 import { useState } from 'react';
 import { fmtNum } from '../format.ts';
 import { newGroup } from '../state.ts';
-import { ROLE_LABEL, roleColor } from '../ui/tiers.ts';
+import { ROLE_LABEL, TIER_LABEL, roleColor } from '../ui/tiers.ts';
 import { DISK_TYPES } from './NodeSizes.tsx';
 
 const ROLES: NodeGroup['role'][] = ['hot', 'warm', 'cold', 'frozen', 'content', 'master', 'ml', 'coordinating', 'kibana', 'fleet', 'apm'];
@@ -15,7 +17,15 @@ const cell = { padding: '6px 6px' } as const;
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75, whiteSpace: 'nowrap' as const };
 
 /** Node groups as an editable table, with prompts for the group the chosen question depends on. */
-export function HardwareGroups({ groups, onChange, solve }: { groups: NodeGroup[]; onChange: (g: NodeGroup[]) => void; solve: Solve }) {
+export function HardwareGroups({ groups, onChange, solve, ratios, onRatios }: {
+  groups: NodeGroup[];
+  onChange: (g: NodeGroup[]) => void;
+  solve: Solve;
+  /** D25: per-tier mem:disk ratio for this scenario; blank = constants. */
+  ratios: Partial<Record<Tier, number>>;
+  onRatios: (r: Partial<Record<Tier, number>>) => void;
+}) {
+  const { set: c } = useConstants();
   const [adding, setAdding] = useState(false);
   const [showHeap, setShowHeap] = useState(() => groups.some((g) => g.heapGbOverride !== undefined));
   const set = (i: number, patch: Partial<NodeGroup>) => onChange(groups.map((g, j) => {
@@ -30,6 +40,7 @@ export function HardwareGroups({ groups, onChange, solve }: { groups: NodeGroup[
   const dataNodes = groups.filter((g) => DATA.has(g.role)).reduce((s, g) => s + g.count, 0);
   const ram = groups.reduce((s, g) => s + g.count * g.ramGb, 0);
   const has = (r: NodeGroup['role']) => groups.some((g) => g.role === r && g.count > 0);
+  const dataTiers = (['hot', 'warm', 'cold', 'frozen', 'content'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
 
   return (
     <>
@@ -76,6 +87,32 @@ export function HardwareGroups({ groups, onChange, solve }: { groups: NodeGroup[
           </tbody>
         </table>
       </div>
+      {dataTiers.length > 0 && (
+        <>
+          <EuiSpacer size="m" />
+          <EuiFlexGroup gutterSize="m" alignItems="center" wrap responsive={false}>
+            <EuiFlexItem grow={false}>
+              <EuiText size="xs"><strong>Mem:disk ratio</strong><br /><span style={{ opacity: 0.7 }}>Blank uses the default</span></EuiText>
+            </EuiFlexItem>
+            {dataTiers.map((t) => {
+              const v = ratios[t];
+              return (
+                <EuiFlexItem grow={false} key={t} style={{ width: 150 }}>
+                  <EuiFieldNumber compressed aria-label={`${t} mem:disk ratio`} min={0}
+                    prepend={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', fontSize: 12 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 4, background: roleColor(t) }} />{TIER_LABEL[t]} 1:</span>}
+                    placeholder={String(num(c, `mem_disk.${t}`))} value={v ?? ''} isInvalid={v !== undefined && !(v > 0)}
+                    onChange={(e) => {
+                      const next = { ...ratios };
+                      if (e.target.value === '') delete next[t]; else next[t] = Number(e.target.value);
+                      onRatios(next);
+                    }} />
+                </EuiFlexItem>
+              );
+            })}
+          </EuiFlexGroup>
+        </>
+      )}
       <EuiSpacer size="s" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <EuiPopover isOpen={adding} closePopover={() => setAdding(false)} panelPaddingSize="none" anchorPosition="downLeft"

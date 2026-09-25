@@ -1,7 +1,7 @@
 import { num, type ConstantSet } from '@sizing/constants';
 import { fmt } from './math.ts';
 import { fleetRowFor, fleetRowForMemory } from './overhead.ts';
-import { heapGb, memDiskKey } from './profiles.ts';
+import { heapGb, tierRatio, type RatioOverrides } from './profiles.ts';
 import type { NodeGroup, Tier, Warning } from './types.ts';
 import type { ShardEstimate } from './demand.ts';
 
@@ -16,6 +16,8 @@ export interface ValidationInput {
   replicasByTier: Partial<Record<Tier, number>>;
   agents: number;
   shards?: ShardEstimate;
+  /** D25: scenario mem:disk ratios; HV5 compares disk against these. */
+  ratioOverrides?: RatioOverrides;
   /** Data GB (before overhead) per tier, for HV7. */
   dataGbByTier?: Partial<Record<Tier, number>>;
 }
@@ -59,7 +61,7 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
       add('HV4', 'warn', `${tier} mem:disk is 1:${fmt(ratio, 1)}, outside the 1:${band[0]}–1:${band[1]} band.`);
     }
     if (tier !== 'frozen') {
-      const target = num(c, memDiskKey(tier));
+      const target = tierRatio(c, tier, v.ratioOverrides).value;
       if (g.diskGb < g.ramGb * target) {
         add('HV5', 'info', `${tier} is disk-bound: ${fmt(g.diskGb)} GB disk < ${fmt(g.ramGb)} GB × ${target} = ${fmt(g.ramGb * target)} GB. Capacity uses disk.`);
       }

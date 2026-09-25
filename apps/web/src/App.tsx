@@ -159,7 +159,7 @@ function ForwardInputs({ state, setState }: { state: AppState; setState: Setter 
         />
       </Section>
       <Gap />
-      <Section step={4} title="Node sizes" description="Defaults suit most sizings. Match them to the customer's standard hardware if they have one.">
+      <Section step={4} title="Node sizes and ratios" description="Defaults suit most sizings. Change a tier's node size or mem:disk ratio for this scenario only; Configurations holds the defaults.">
         <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} />
       </Section>
     </>
@@ -183,7 +183,12 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
       </Section>
       <Gap />
       <Section step={step++} title="What hardware do they have?" description="One row per group of identical nodes.">
-        <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })} />
+        <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
+          ratios={r.hardware.memDiskRatio ?? {}}
+          onRatios={(memDiskRatio) => {
+            const { memDiskRatio: _drop, ...hw } = r.hardware;
+            setReverse({ ...r, hardware: Object.keys(memDiskRatio).length ? { ...hw, memDiskRatio } : hw });
+          }} />
       </Section>
       <Gap />
       {target && (

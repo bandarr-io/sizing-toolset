@@ -52,6 +52,8 @@ export interface HardwareConfig {
   ccr?: boolean;
   airGapped?: boolean;
   autoOps?: boolean;
+  /** D25: per-tier mem:disk ratio for this scenario. Blank = constants. */
+  memDiskRatio?: Partial<Record<Tier, number>>;
 }
 
 /** D8: node template for one tier in forward mode. Omitted fields use constants. */
@@ -61,6 +63,8 @@ export interface NodeTemplate {
   diskGb?: number;
   vcpu?: number;
   diskType?: DiskType;
+  /** D25: mem:disk ratio for this tier in this scenario (GB disk per GB RAM). Blank = constants. */
+  memDiskRatio?: number;
 }
 
 /** D8: scenario-level forward inputs that are not part of any one workload. */

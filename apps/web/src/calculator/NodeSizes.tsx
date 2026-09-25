@@ -30,22 +30,28 @@ export function NodeSizes({ tiers, value, onChange }: { tiers: Tier[]; value: Fo
     <>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
         <thead>
-          <tr><th style={head}>Tier</th><th style={{ ...head, width: '22%' }}>RAM per node</th><th style={{ ...head, width: '26%' }}>Disk per node</th><th style={{ ...head, width: '14%' }}>vCPU</th><th style={{ ...head, width: 120 }}>Disk type</th></tr>
+          <tr><th style={head}>Tier</th><th style={{ ...head, width: '17%' }}>RAM per node</th><th style={{ ...head, width: '16%' }}>Mem:disk</th><th style={{ ...head, width: '21%' }}>Disk per node</th><th style={{ ...head, width: '11%' }}>vCPU</th><th style={{ ...head, width: 110 }}>Disk type</th></tr>
         </thead>
         <tbody>
           {tiers.map((t) => {
             const n = value.nodes?.[t] ?? {};
             const ram = n.ramGb ?? defRam;
-            const ratio = num(c, `mem_disk.${t}`);
+            const defaultRatio = num(c, `mem_disk.${t}`);
+            const ratio = n.memDiskRatio ?? defaultRatio;
             const diskDefault = ram * (t === 'frozen' ? num(c, 'mem_disk.hot') : ratio);
             return (
               <tr key={t}>
                 <td style={cell}>
                   <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: TIER_COLOR[t], marginRight: 8 }} />
                   <strong>{TIER_LABEL[t]}</strong>
-                  <EuiText size="xs" color="subdued">{t === 'frozen' ? `1:${ratio} object store` : `1:${ratio} mem:disk`}</EuiText>
+                  <EuiText size="xs" color="subdued">{t === 'frozen' ? 'GB searchable per GB RAM' : 'GB disk per GB RAM'}</EuiText>
                 </td>
                 <td style={cell}><EuiFieldNumber compressed aria-label={`${t} RAM`} append="GB" placeholder={String(defRam)} value={n.ramGb ?? ''} onChange={(e) => setNode(t, { ramGb: numOrUndef(e.target.value) })} /></td>
+                <td style={cell}>
+                  <EuiFieldNumber compressed aria-label={`${t} mem:disk ratio`} prepend="1:" min={0} placeholder={String(defaultRatio)} value={n.memDiskRatio ?? ''}
+                    isInvalid={n.memDiskRatio !== undefined && !(n.memDiskRatio > 0)}
+                    onChange={(e) => setNode(t, { memDiskRatio: numOrUndef(e.target.value) })} />
+                </td>
                 <td style={cell}><EuiFieldNumber compressed aria-label={`${t} disk`} append="GB" placeholder={String(diskDefault)} value={n.diskGb ?? ''} onChange={(e) => setNode(t, { diskGb: numOrUndef(e.target.value) })} /></td>
                 <td style={cell}><EuiFieldNumber compressed aria-label={`${t} vCPU`} placeholder={String(ram * num(c, 'vcpu_per_ram_gb'))} value={n.vcpu ?? ''} onChange={(e) => setNode(t, { vcpu: numOrUndef(e.target.value) })} /></td>
                 <td style={cell}>

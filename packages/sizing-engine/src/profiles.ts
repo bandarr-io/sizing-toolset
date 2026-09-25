@@ -63,6 +63,21 @@ export function memDiskKey(tier: Tier): string {
   return `mem_disk.${tier}`;
 }
 
+export type RatioOverrides = Partial<Record<Tier, number>>;
+
+/** D25: the tier's mem:disk ratio, from the scenario override when set, else constants. */
+export function tierRatio(c: ConstantSet, tier: Tier, overrides?: RatioOverrides): { value: number; keys: string[]; overridden: boolean } {
+  const o = overrides?.[tier];
+  if (o === undefined) return { value: num(c, memDiskKey(tier)), keys: [memDiskKey(tier)], overridden: false };
+  if (!(o > 0 && Number.isFinite(o))) throw new Error(`${tier} mem:disk ratio must be greater than 0; got ${o}.`);
+  return { value: o, keys: [], overridden: true };
+}
+
+export function describeOverrides(overrides: RatioOverrides): string | undefined {
+  const parts = (Object.entries(overrides) as [Tier, number][]).filter(([, v]) => v !== undefined).map(([t, v]) => `${t} 1:${v}`);
+  return parts.length ? `Scenario mem:disk ratio overrides: ${parts.join(', ')}.` : undefined;
+}
+
 export function heapGb(c: ConstantSet, ramGb: number, override?: number): number {
   return override ?? Math.min(num(c, 'heap_fraction') * ramGb, num(c, 'heap_cap_gb'));
 }
