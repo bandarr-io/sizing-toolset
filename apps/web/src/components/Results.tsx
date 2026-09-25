@@ -4,7 +4,7 @@ import {
 } from '@elastic/eui';
 import type { Constraint, MathStep, SizingResult, Warning } from '@sizing/engine';
 import { constraintLabel, solveLabel } from '../export.ts';
-import { fmtCompact, fmtNum } from '../format.ts';
+import { fmtCompact, fmtNum, fmtStorage } from '../format.ts';
 import { MathButton } from './MathFlyout.tsx';
 
 const CONF_COLOR = { high: 'success', medium: 'warning', low: 'danger' } as const;
@@ -21,6 +21,9 @@ export function NodeTable({ r }: { r: SizingResult }) {
     ...r.tiers.map((t) => ({ role: t.tier, nodes: t.nodes, ramGb: t.ramGb, diskGb: t.diskGb, vcpu: t.vcpu, counted: true, math: t.math, data: true })),
     ...r.overhead.map((o) => ({ role: o.role, nodes: o.count, ramGb: o.ramGb, diskGb: o.diskGb, vcpu: o.vcpu, counted: o.countsTowardLicense, math: o.math, data: false })),
   ];
+  const objectRow = r.objectStorage
+    ? <EuiText size="s" style={{ marginTop: 12 }}>Object storage (snapshot repository for cold and frozen): <strong>{fmtStorage(r.objectStorage.gb)}</strong>{r.objectStorage.overridden ? ' (set for this scenario)' : ''}. Not counted in RAM or ERU.</EuiText>
+    : null;
   const columns: EuiBasicTableColumn<Row>[] = [
     { field: 'role', name: 'Role', render: (role: string, row: Row) => <EuiText size="s">{row.data ? <strong>{role}</strong> : role}{!row.counted && <> <EuiBadge color="hollow">not licensed</EuiBadge></>}</EuiText> },
     { field: 'nodes', name: 'Nodes', align: 'right', render: (n: number) => <strong>{n}</strong> },
@@ -30,7 +33,7 @@ export function NodeTable({ r }: { r: SizingResult }) {
     { name: 'RAM total', align: 'right', render: (row: Row) => `${fmtNum(row.nodes * row.ramGb)} GB` },
     { name: '', width: '40px', render: (row: Row) => <MathButton title={`${row.role} nodes`} steps={row.math} /> },
   ];
-  return <EuiBasicTable<Row> tableCaption="Node table" items={rows} columns={columns} compressed />;
+  return <><EuiBasicTable<Row> tableCaption="Node table" items={rows} columns={columns} compressed />{objectRow}</>;
 }
 
 function utilColor(u: number): 'success' | 'warning' | 'danger' {

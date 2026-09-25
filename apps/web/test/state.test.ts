@@ -96,9 +96,17 @@ describe('migration from v1 scenarios', () => {
     expect(req.workloads[0]!.retentionDays).toEqual({ hot: 7, warm: 30 });
     expect(req.workloads[0]!.downsampleFactor).toEqual({ warm: 0.1 });
   });
+  it("'object' is no longer a node disk type: saved scenarios get SSD (D26)", () => {
+    const s = defaultState();
+    s.forward.options.nodes = { frozen: { diskType: 'object' as never, ramGb: 64 } };
+    s.reverse.hardware.groups = [{ role: 'frozen', count: 2, ramGb: 64, diskGb: 1920, diskType: 'object' as never, vcpu: 8 }];
+    const m = migrate(s)!;
+    expect(m.forward.options.nodes!.frozen).toEqual({ diskType: 'ssd', ramGb: 64 });
+    expect(m.reverse.hardware.groups[0]!.diskType).toBe('ssd');
+  });
   it('v2 passes through and junk is rejected', () => {
     const s = defaultState();
-    expect(migrate(s)).toBe(s);
+    expect(migrate(s)).toEqual(s);
     expect(migrate({ version: 3 })).toBeUndefined();
     expect(migrate(null)).toBeUndefined();
   });

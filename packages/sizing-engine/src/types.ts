@@ -80,6 +80,8 @@ export interface ForwardOptions {
   coordinatingNodes?: number;
   growthHorizonYears?: number;
   concurrentSearch?: boolean;
+  /** D26: replace the calculated object storage (GB) with a known size, e.g. for costing. */
+  objectStorageGb?: number;
 }
 
 export interface ForwardRequest {
@@ -166,6 +168,8 @@ export interface SizingResult {
   /** D2: totals across all sites. */
   sites: number;
   allSites: { totalRamGb: number; licenseUnits: number };
+  /** D26: snapshot repository for cold and frozen (searchable snapshots). Per site. Absent without cold or frozen data. */
+  objectStorage?: { gb: number; calculatedGb: number; overridden: boolean; math: MathStep[] };
   shards?: { total: number; perNonFrozenNode: number; indices: number; math: MathStep[] };
   constraints: Constraint[];
   warnings: Warning[];

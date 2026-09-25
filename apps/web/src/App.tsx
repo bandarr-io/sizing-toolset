@@ -116,7 +116,9 @@ function Calculator({ constants, overriddenKeys, overrides }: { constants: Const
       <EuiSpacer size="l" />
       <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
         <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
-          {state.mode === 'forward' ? <ForwardInputs state={state} setState={setState} /> : <ReverseInputs state={state} setState={setState} />}
+          {state.mode === 'forward'
+            ? <ForwardInputs state={state} setState={setState} {...('result' in outcome && outcome.result.objectStorage ? { objectStorage: outcome.result.objectStorage } : {})} />
+            : <ReverseInputs state={state} setState={setState} />}
         </EuiFlexItem>
         {/* Stretch to the inputs' height so the pinned results column stays in view for the whole scroll. */}
         <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
@@ -131,7 +133,7 @@ function Calculator({ constants, overriddenKeys, overrides }: { constants: Const
 
 type Setter = (f: (s: AppState) => AppState) => void;
 
-function ForwardInputs({ state, setState }: { state: AppState; setState: Setter }) {
+function ForwardInputs({ state, setState, objectStorage }: { state: AppState; setState: Setter; objectStorage?: SizingResult['objectStorage'] }) {
   const f = state.forward;
   const setForward = (next: AppState['forward']) => setState((s) => ({ ...s, forward: next }));
   const tiers = tiersInUse(f);
@@ -160,7 +162,7 @@ function ForwardInputs({ state, setState }: { state: AppState; setState: Setter 
       </Section>
       <Gap />
       <Section step={4} title="Node sizes and ratios" description="Defaults suit most sizings. Change a tier's node size or mem:disk ratio for this scenario only; Configurations holds the defaults.">
-        <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} />
+        <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} objectStorage={objectStorage} />
       </Section>
     </>
   );

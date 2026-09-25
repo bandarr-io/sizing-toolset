@@ -8,7 +8,7 @@ import { fleetTable } from './overhead.ts';
 import {
   describeOverrides, downsampleFor, growthFactor, heapGb, indexRatio, offheapBudgetGb, tierRatio, placementTier, replicasFor, retentionTiers, vectorCost,
 } from './profiles.ts';
-import { buildAssumptions, commonWarnings, ENGINE_VERSION, totalsFor } from './result.ts';
+import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import type {
   Constraint, ConstraintName, MathStep, NodeGroup, OverheadResult, ReverseRequest, SizingResult, Tier, TierResult,
   WorkloadProfile,
@@ -437,6 +437,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
   const demand = computeDemand(c, atMax, { growthYears: 0, ccrMultiplier: 1 });
   const dataGbByTier: Partial<Record<Tier, number>> = {};
   for (const [t, d] of demand) dataGbByTier[t] = d.dataGb;
+  const objectStorage = objectStorageFor(demand);
   const replicasByTier: Partial<Record<Tier, number>> = {};
   for (const p of atMax) {
     for (const t of new Set<Tier>([...retentionTiers(p), ...(p.totalGb || p.vector ? [placementTier(p)] : [])])) {
@@ -458,6 +459,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
     ...(solved.notes ?? []),
     ...[describeOverrides(req.hardware.memDiskRatio ?? {})].filter((x): x is string => !!x),
     ...buildAssumptions(c, { sites, ccrMode: req.hardware.ccr ? 'unidirectional' : 'none', growthYears: 0, airGapped }),
+    ...objectStorageAssumption(objectStorage),
   ];
 
   return {
@@ -476,6 +478,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
     constraints,
     warnings,
     assumptions,
+    ...(objectStorage ? { objectStorage } : {}),
     answer: {
       solve: req.solve,
       value: solved.value,

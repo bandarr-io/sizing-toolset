@@ -6,9 +6,9 @@ import type { MathStep, SizingResult } from '@sizing/engine';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConstraintPanel, NodeTable, WarningsPanel } from '../components/Results.tsx';
 import { MathButton } from '../components/MathFlyout.tsx';
-import { constraintLabel, solveLabel } from '../export.ts';
+import { constraintWithTier, solveLabel } from '../export.ts';
 import { SOLVES } from '../state.ts';
-import { fmtCompact, fmtNum } from '../format.ts';
+import { fmtCompact, fmtNum, fmtStorage } from '../format.ts';
 import { ClusterMap } from './ClusterMap.tsx';
 
 const CONF_COLOR = { high: 'success', medium: 'warning', low: 'danger' } as const;
@@ -38,6 +38,10 @@ function Totals({ r }: { r: SizingResult }) {
       <Stat label={r.sites > 1 ? 'RAM per site' : 'Total RAM'} value={`${fmtNum(r.totalRamGb)} GB`} steps={r.totalRamMath} />
       <Stat label="License units" value={`${fmtNum(r.licenseUnits.value, 0)} ERU`} steps={[...r.totalRamMath, ...r.licenseUnits.math]} />
       <Stat label="License floor" value={floor} hint={r.licenseFloorReasons.join('; ') || 'No licensed features required'} />
+      {r.objectStorage && (
+        <Stat label="Object storage" value={fmtStorage(r.objectStorage.gb)} steps={r.objectStorage.math}
+          hint={`Snapshot repository for cold and frozen${r.objectStorage.overridden ? ' (size set for this scenario)' : ''}. Not counted in RAM or ERU.`} />
+      )}
       {r.sites > 1 && <Stat label={`All ${r.sites} sites`} value={`${fmtNum(r.allSites.licenseUnits, 0)} ERU`} hint={`${fmtNum(r.allSites.totalRamGb)} GB RAM`} />}
     </EuiFlexGroup>
   );
@@ -84,7 +88,7 @@ function Answer({ r }: { r: SizingResult }) {
       </EuiFlexGroup>
       <EuiSpacer size="xs" />
       <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false} wrap>
-        <EuiFlexItem grow={false}><EuiText size="s">Limited by <strong>{constraintLabel(a.binding)}{a.bindingTier ? ` (${a.bindingTier})` : ''}</strong></EuiText></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiText size="s">Limited by <strong>{constraintWithTier(a.binding, a.bindingTier)}</strong></EuiText></EuiFlexItem>
         <EuiFlexItem grow={false}><EuiBadge color={CONF_COLOR[a.confidence]}>{a.confidence} confidence</EuiBadge></EuiFlexItem>
         {binding?.rallyRequired && <EuiFlexItem grow={false}><EuiBadge color="accent">Rally required</EuiBadge></EuiFlexItem>}
       </EuiFlexGroup>
@@ -151,7 +155,7 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
           <>
             <EuiSpacer size="s" />
             <EuiText size="xs" color="subdued">
-              Tightest constraint: <strong>{constraintLabel(binding.name)}{binding.tier ? ` (${binding.tier})` : ''}</strong>
+              Tightest constraint: <strong>{constraintWithTier(binding.name, binding.tier)}</strong>
               {binding.utilization !== undefined && Number.isFinite(binding.utilization) ? ` at ${fmtNum(binding.utilization * 100, 0)}% of usable capacity` : ''}
             </EuiText>
           </>
@@ -195,7 +199,14 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
             <EuiTitle size="s"><h2 id="detail-title">{titles[open]}</h2></EuiTitle>
           </EuiFlyoutHeader>
           <EuiFlyoutBody>
-            {open === 'map' && <ClusterMap r={r} />}
+            {open === 'map' && (
+              <>
+                <ClusterMap r={r} />
+                {r.objectStorage && (
+                  <><EuiHorizontalRule margin="m" /><EuiText size="s">Plus <strong>{fmtStorage(r.objectStorage.gb)}</strong> of object storage for cold and frozen searchable snapshots.</EuiText></>
+                )}
+              </>
+            )}
             {open === 'constraints' && <ConstraintPanel r={r} />}
             {open === 'nodes' && <NodeTable r={r} />}
             {open === 'checks' && <WarningsPanel warnings={r.warnings} />}

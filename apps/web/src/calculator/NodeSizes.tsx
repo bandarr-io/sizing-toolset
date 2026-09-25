@@ -1,18 +1,24 @@
-import { EuiButtonEmpty, EuiFieldNumber, EuiSelect, EuiText } from '@elastic/eui';
+import { EuiButtonEmpty, EuiFieldNumber, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiPanel, EuiSelect, EuiSpacer, EuiText } from '@elastic/eui';
 import { num } from '@sizing/constants';
-import type { DiskType, ForwardOptions, NodeTemplate, Tier } from '@sizing/engine';
+import type { DiskType, ForwardOptions, NodeTemplate, SizingResult, Tier } from '@sizing/engine';
+import { fmtStorage } from '../format.ts';
 import { useConstants } from '../constantsStore.tsx';
 import { TIER_COLOR, TIER_LABEL } from '../ui/tiers.ts';
 
+/** Local disk only: cold and frozen data in object storage is its own line item (D26), not a node disk type. */
 export const DISK_TYPES: { value: DiskType; text: string }[] = [
-  { value: 'nvme', text: 'NVMe' }, { value: 'ssd', text: 'SSD' }, { value: 'hdd', text: 'HDD' }, { value: 'object', text: 'Object' },
+  { value: 'nvme', text: 'NVMe' }, { value: 'ssd', text: 'SSD' }, { value: 'hdd', text: 'HDD' },
 ];
 
 const cell = { padding: '6px 8px' } as const;
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75 };
 
 /** Node template per tier in use. Empty cells fall back to the constants shown as placeholders. */
-export function NodeSizes({ tiers, value, onChange }: { tiers: Tier[]; value: ForwardOptions; onChange: (o: ForwardOptions) => void }) {
+export function NodeSizes({ tiers, value, onChange, objectStorage }: {
+  tiers: Tier[]; value: ForwardOptions; onChange: (o: ForwardOptions) => void;
+  /** From the current result; shown whenever cold or frozen holds data. */
+  objectStorage?: SizingResult['objectStorage'];
+}) {
   const { set: c } = useConstants();
   const defRam = num(c, 'node_ram_default_gb');
   const customized = tiers.filter((t) => Object.keys(value.nodes?.[t] ?? {}).length > 0);
@@ -65,6 +71,37 @@ export function NodeSizes({ tiers, value, onChange }: { tiers: Tier[]; value: Fo
       </table>
       {customized.length > 0 && (
         <EuiButtonEmpty size="xs" iconType="refresh" onClick={() => onChange({ ...value, nodes: {} })}>Reset to defaults</EuiButtonEmpty>
+      )}
+      {(objectStorage || value.objectStorageGb !== undefined) && (
+        <>
+          <EuiSpacer size="m" />
+          <EuiPanel color="subdued" paddingSize="m" hasShadow={false}>
+            <EuiFlexGroup gutterSize="m" alignItems="center" wrap responsive={false}>
+              <EuiFlexItem grow={false}><EuiIcon type="storage" size="l" /></EuiFlexItem>
+              <EuiFlexItem style={{ minWidth: 220 }}>
+                <EuiText size="s"><strong>Object storage</strong> (snapshot repository)</EuiText>
+                <EuiText size="xs" color="subdued">
+                  Added automatically for cold and frozen searchable snapshots: one copy of their data.
+                  {objectStorage && <> Calculated: <strong>{fmtStorage(objectStorage.calculatedGb)}</strong>.</>}
+                </EuiText>
+              </EuiFlexItem>
+              <EuiFlexItem grow={false} style={{ width: 200 }}>
+                <EuiFieldNumber compressed aria-label="Object storage size" append="GB" min={0}
+                  placeholder={objectStorage ? String(Math.round(objectStorage.calculatedGb)) : '0'}
+                  value={value.objectStorageGb ?? ''} isInvalid={value.objectStorageGb !== undefined && !(value.objectStorageGb >= 0)}
+                  onChange={(e) => {
+                    const { objectStorageGb: _drop, ...rest } = value;
+                    onChange(e.target.value === '' ? rest : { ...rest, objectStorageGb: Number(e.target.value) });
+                  }} />
+              </EuiFlexItem>
+              {value.objectStorageGb !== undefined && (
+                <EuiFlexItem grow={false}>
+                  <EuiButtonEmpty size="xs" iconType="refresh" onClick={() => { const { objectStorageGb: _drop, ...rest } = value; onChange(rest); }}>Use calculated</EuiButtonEmpty>
+                </EuiFlexItem>
+              )}
+            </EuiFlexGroup>
+          </EuiPanel>
+        </>
       )}
     </>
   );

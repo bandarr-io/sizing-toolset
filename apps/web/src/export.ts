@@ -10,6 +10,8 @@ const CONSTRAINT_LABEL: Record<string, string> = {
   vector_offheap: 'Vector off-heap', cpu_ingest: 'CPU / ingest', query: 'Query', fleet: 'Fleet', ml: 'ML',
 };
 export const constraintLabel = (name: string) => CONSTRAINT_LABEL[name] ?? name;
+/** Label plus tier, without repeating it ("Frozen (object store)" already names its tier). */
+export const constraintWithTier = (name: string, tier?: string) => (tier && name !== 'frozen' ? `${constraintLabel(name)} (${tier})` : constraintLabel(name));
 
 const SOLVE_LABEL: Record<string, string> = {
   max_gb_day: 'Max GB/day', max_retention: 'Max retention', max_agents: 'Max Elastic Agents',
@@ -64,6 +66,7 @@ export function toMarkdown(state: AppState, result: SizingResult, workloads: rea
   L.push(`- Total RAM: **${n(result.totalRamGb)} GB**`);
   L.push(`- License units: **${n(result.licenseUnits.value, 0)} ${result.licenseUnits.unit}** (self-managed)`);
   L.push(`- License floor: **${result.licenseFloor}**${result.licenseFloorReasons.length ? ` (${result.licenseFloorReasons.join('; ')})` : ''}`);
+  if (result.objectStorage) L.push(`- Object storage (snapshot repository for cold and frozen): **${n(result.objectStorage.gb, 0)} GB**${result.objectStorage.overridden ? ` (set for this scenario; calculated ${n(result.objectStorage.calculatedGb, 0)} GB)` : ''}`);
   if (result.sites > 1) L.push(`- All ${result.sites} sites: ${n(result.allSites.totalRamGb)} GB RAM, ${n(result.allSites.licenseUnits, 0)} ERU`);
   L.push('');
 

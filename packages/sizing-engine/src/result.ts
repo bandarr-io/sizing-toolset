@@ -1,6 +1,7 @@
 import { num, val, type ConstantSet } from '@sizing/constants';
 import { fmt, step } from './math.ts';
-import type { CcrMode, DeploymentModel, MathStep, OverheadResult, TierResult, Warning } from './types.ts';
+import type { TierDemand } from './demand.ts';
+import type { CcrMode, DeploymentModel, MathStep, OverheadResult, SizingResult, Tier, TierResult, Warning } from './types.ts';
 
 export const ENGINE_VERSION = '0.1.0';
 
@@ -51,4 +52,32 @@ export function buildAssumptions(c: ConstantSet, s: { sites: number; ccrMode: Cc
   if (s.growthUsed && s.growthYears > 0) a.push(`Growth applied over ${fmt(s.growthYears)} year(s) to workloads with a growth %.`);
   if (s.airGapped) a.push('Air-gapped: AutoOps and Cloud Connect are unavailable; use Stack Monitoring.');
   return a;
+}
+
+/**
+ * D26: cold and frozen keep their data as searchable snapshots in an object store. One copy of each
+ * tier's data (no replicas, no watermark headroom); a snapshot moving cold → frozen is the same object,
+ * so the two tiers add without double counting. Excludes other snapshots and backups.
+ */
+export function objectStorageFor(demand: ReadonlyMap<Tier, TierDemand>, override?: number): SizingResult['objectStorage'] {
+  if (override !== undefined && !(override >= 0 && Number.isFinite(override))) {
+    throw new Error(`Object storage override must be 0 GB or more; got ${override}.`);
+  }
+  const cold = demand.get('cold')?.dataGb ?? 0;
+  const frozen = demand.get('frozen')?.dataGb ?? 0;
+  const calculatedGb = cold + frozen;
+  if (calculatedGb <= 0 && override === undefined) return undefined;
+  const math = [
+    step('object storage: cold searchable snapshots', 'cold data GB (one copy, no replicas)', cold, []),
+    step('object storage: frozen searchable snapshots', 'frozen data GB (one copy)', frozen, []),
+    step('object storage (snapshot repository)', `${fmt(cold)} + ${fmt(frozen)}`, calculatedGb, []),
+  ];
+  if (override !== undefined) math.push(step('object storage (set for this scenario)', `${fmt(override)} GB replaces the calculated ${fmt(calculatedGb)} GB`, override, []));
+  return { gb: override ?? calculatedGb, calculatedGb, overridden: override !== undefined, math };
+}
+
+export function objectStorageAssumption(o: SizingResult['objectStorage']): string[] {
+  if (!o) return [];
+  const size = `${fmt(o.gb, 0)} GB${o.overridden ? ` (set for this scenario; calculated ${fmt(o.calculatedGb, 0)} GB)` : ''}`;
+  return [`Object storage (snapshot repository) for cold and frozen: ${size}, one copy of the data. Not counted in RAM or ERU; excludes other snapshots and backups.`];
 }

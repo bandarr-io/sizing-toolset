@@ -12,3 +12,10 @@ export function fmtCompact(x: number): string {
   if (abs >= 1e6) return `${(x / 1e6).toFixed(2)}M`;
   return fmtNum(x);
 }
+
+/** Storage in decimal units, matching the engine: 83,750 GB → "83.8 TB". */
+export function fmtStorage(gb: number): string {
+  if (gb >= 1_000_000) return `${fmtNum(gb / 1_000_000, 2)} PB`;
+  if (gb >= 1_000) return `${fmtNum(gb / 1_000, 1)} TB`;
+  return `${fmtNum(gb, 0)} GB`;
+}

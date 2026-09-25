@@ -6,7 +6,7 @@ import { selfManagedEru, licenseFloor } from './license.ts';
 import { ceilEps, fmt, step } from './math.ts';
 import { computeOverhead, fleetRowFor } from './overhead.ts';
 import { describeOverrides, heapGb, memDiskKey, offheapBudgetGb, placementTier, replicasFor, retentionTiers, tierRatio, type RatioOverrides } from './profiles.ts';
-import { buildAssumptions, commonWarnings, ENGINE_VERSION, totalsFor } from './result.ts';
+import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import {
   TIERS, type Constraint, type ForwardOptions, type ForwardRequest, type NodeGroup, type NodeTemplate, type SizingResult, type Tier,
   type TierResult, type WorkloadProfile,
@@ -235,6 +235,7 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
   }
   const dataGbByTier: Partial<Record<Tier, number>> = {};
   for (const [t, d] of demand) dataGbByTier[t] = d.dataGb;
+  const objectStorage = objectStorageFor(demand, opts.objectStorageGb);
   const airGapped = opts.airGapped ?? profiles.some((p) => p.airGapped);
 
   const warnings = [
@@ -268,7 +269,9 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
     assumptions: [
       ...buildAssumptions(c, { sites, ccrMode, growthYears, airGapped, growthUsed: profiles.some((p) => (p.growthPctPerYear ?? 0) !== 0) }),
       ...[describeOverrides(ratioOverrides(opts))].filter((x): x is string => !!x),
+      ...objectStorageAssumption(objectStorage),
     ],
+    ...(objectStorage ? { objectStorage } : {}),
   };
 }
 

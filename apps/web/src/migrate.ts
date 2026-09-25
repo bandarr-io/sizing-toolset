@@ -47,10 +47,23 @@ function isV1(x: Partial<AppStateV1>): x is AppStateV1 {
   return x.version === 1 && !!x.fastForward && !!x.fastReverse && !!x.expertForward && !!x.expertReverse;
 }
 
+/** D26: 'object' was once offered as a node disk type. Nodes use local disk; object storage is separate. */
+function localDisksOnly(s: AppState): AppState {
+  const fix = <T extends { diskType?: string }>(n: T): T => (n.diskType === 'object' ? { ...n, diskType: 'ssd' } : n);
+  const nodes = s.forward.options.nodes;
+  return {
+    ...s,
+    forward: nodes
+      ? { ...s.forward, options: { ...s.forward.options, nodes: Object.fromEntries(Object.entries(nodes).map(([t, n]) => [t, n ? fix(n) : n])) } }
+      : s.forward,
+    reverse: { ...s.reverse, hardware: { ...s.reverse.hardware, groups: s.reverse.hardware.groups.map(fix) } },
+  };
+}
+
 /** Any saved or exported scenario → current format, or undefined if it is not a scenario. */
 export function migrate(x: unknown): AppState | undefined {
   if (!x || typeof x !== 'object') return undefined;
-  if (isV2(x as Partial<AppState>)) return x as AppState;
+  if (isV2(x as Partial<AppState>)) return localDisksOnly(x as AppState);
   const v1 = x as Partial<AppStateV1>;
   if (!isV1(v1)) return undefined;
   const fast = v1.inputMode === 'fast';
