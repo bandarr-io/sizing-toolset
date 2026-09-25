@@ -117,7 +117,7 @@ function Calculator({ constants, overriddenKeys, overrides }: { constants: Const
         <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
           {state.mode === 'forward' ? <ForwardInputs state={state} setState={setState} /> : <ReverseInputs state={state} setState={setState} />}
         </EuiFlexItem>
-        {/* Stretch to the inputs' height so the pinned summary inside stays visible for the whole scroll. */}
+        {/* Stretch to the inputs' height so the pinned results column stays in view for the whole scroll. */}
         <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
           {'error' in outcome
             ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>

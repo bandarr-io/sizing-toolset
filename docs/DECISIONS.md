@@ -26,6 +26,7 @@ Gaps and contradictions in `docs/SPEC.md`, resolved with Dan on 2026-09-23. Test
 | D20 | Frozen local disk | Frozen node disk defaults to RAM × 30 (shared cache). HV4 does not check frozen, because 1:1500 describes object-store data, not local disk. |
 | D21 | Fast / expert (§10) | Replaced by one input model with progressive disclosure: each workload shows the §10 essentials (ingest, retention, replicas, index mode) and hides the rest under "More options". Deployment settings live in one shared section. v1 saved scenarios migrate automatically (fast inputs convert per D13). |
 | D22 | Downsampling | The downsample factor is the share of data kept, in (0, 1]; 1 = none. Elasticsearch only downsamples TSDS, so a factor other than 1 on a LogsDB or standard workload is rejected (`downsampleProblem`). The UI shows the field only in TSDS mode and clears factors when leaving TSDS. |
+| D23 | Results column (§10) | The whole results column is pinned with no scrollbar of its own. Utilization, node table, hardware checks and the full assumptions list open in flyouts. The "Estimate, not benchmark" banner stays visible in the column; the assumptions are still exported verbatim. |
 
 ## Open items found while building
 

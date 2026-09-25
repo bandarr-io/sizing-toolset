@@ -1,6 +1,6 @@
 import {
-  EuiBadge, EuiButtonEmpty, EuiFlexGroup, EuiFlexItem, EuiHorizontalRule, EuiNotificationBadge, EuiPanel, EuiSpacer, EuiTab, EuiTabs,
-  EuiText, EuiTitle, EuiToolTip, useEuiTheme,
+  EuiBadge, EuiButtonEmpty, EuiFlexGroup, EuiFlexItem, EuiFlyout, EuiFlyoutBody, EuiFlyoutHeader, EuiHorizontalRule, EuiPanel, EuiSpacer,
+  EuiText, EuiTitle, EuiToolTip,
 } from '@elastic/eui';
 import type { MathStep, SizingResult } from '@sizing/engine';
 import { useState, type ReactNode } from 'react';
@@ -11,7 +11,6 @@ import { SOLVES } from '../state.ts';
 import { fmtCompact, fmtNum } from '../format.ts';
 import { ClusterMap } from './ClusterMap.tsx';
 
-type Tab = 'constraints' | 'nodes' | 'checks';
 const CONF_COLOR = { high: 'success', medium: 'warning', low: 'danger' } as const;
 
 function Stat({ label, value, steps, hint }: { label: string; value: ReactNode; steps?: MathStep[]; hint?: string }) {
@@ -72,19 +71,29 @@ function Answer({ r }: { r: SizingResult }) {
   );
 }
 
-/** Everything about the result, in reading order: the answer, the cluster, the detail, the caveats. */
+type Detail = 'constraints' | 'nodes' | 'checks' | 'assumptions';
+
+/**
+ * The whole column is pinned, with no scrollbar of its own: the summary plus buttons that open each
+ * detail view in a flyout, so the column's height stays small enough to fit on screen.
+ */
 export function ResultsPanel({ r }: { r: SizingResult }) {
-  const { euiTheme } = useEuiTheme();
-  const [tab, setTab] = useState<Tab>('constraints');
+  const [open, setOpen] = useState<Detail | undefined>();
   const errors = r.warnings.filter((w) => w.severity === 'error').length;
   const warns = r.warnings.filter((w) => w.severity === 'warn').length;
   const binding = r.constraints.find((k) => k.binding);
+  const assumptions = r.assumptions.filter((a) => !a.startsWith('Estimate, not benchmark'));
+
+  const titles: Record<Detail, string> = {
+    constraints: r.answer ? 'Constraints and headroom' : 'Utilization by constraint',
+    nodes: r.sites > 1 ? 'Nodes per site' : 'Node table',
+    checks: 'Hardware checks (HV1 to HV12)',
+    assumptions: 'Assumptions',
+  };
 
   return (
-    <>
-      {/* Only the summary is pinned; details scroll with the page, so nothing hides inside a second scrollbar. */}
-      <div style={{ position: 'sticky', top: 0, paddingTop: 16, marginTop: -16, zIndex: 2, background: euiTheme.colors.body }}>
-      <EuiPanel hasBorder paddingSize="l" hasShadow>
+    <div style={{ position: 'sticky', top: 16 }}>
+      <EuiPanel hasBorder paddingSize="l">
         {r.answer ? <Answer r={r} /> : (
           <>
             <EuiText size="s" color="subdued">Recommended cluster{r.sites > 1 ? ` (per site, ${r.sites} sites)` : ''}</EuiText>
@@ -104,45 +113,54 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
         )}
         <EuiHorizontalRule margin="m" />
         <ClusterMap r={r} />
-        {(errors > 0 || warns > 0) && (
-          <>
-            <EuiSpacer size="s" />
-            <EuiButtonEmpty size="s" flush="left" iconType={errors ? 'error' : 'warning'} color={errors ? 'danger' : 'warning'} onClick={() => setTab('checks')}>
-              {[errors ? `${errors} error${errors > 1 ? 's' : ''}` : '', warns ? `${warns} warning${warns > 1 ? 's' : ''}` : ''].filter(Boolean).join(' and ')} to review
+        <EuiHorizontalRule margin="m" />
+        <EuiFlexGroup gutterSize="s" wrap responsive={false}>
+          <EuiFlexItem grow={false}>
+            <EuiButtonEmpty size="s" iconType="chartBarHorizontal" onClick={() => setOpen('constraints')}>{r.answer ? 'Headroom' : 'Utilization'}</EuiButtonEmpty>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiButtonEmpty size="s" iconType="table" onClick={() => setOpen('nodes')}>Node table</EuiButtonEmpty>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiButtonEmpty size="s" iconType={errors ? 'error' : warns ? 'warning' : 'check'} color={errors ? 'danger' : warns ? 'warning' : 'primary'} onClick={() => setOpen('checks')}>
+              Hardware checks{errors + warns > 0 ? ` (${errors + warns})` : ''}
             </EuiButtonEmpty>
-          </>
-        )}
-      </EuiPanel>
-      </div>
-
-      <EuiSpacer size="m" />
-      <EuiPanel hasBorder paddingSize="l">
-        <EuiTabs size="s" bottomBorder>
-          <EuiTab isSelected={tab === 'constraints'} onClick={() => setTab('constraints')}>{r.answer ? 'Constraints and headroom' : 'Utilization'}</EuiTab>
-          <EuiTab isSelected={tab === 'nodes'} onClick={() => setTab('nodes')}>Node table</EuiTab>
-          <EuiTab isSelected={tab === 'checks'} onClick={() => setTab('checks')}
-            append={errors + warns > 0 ? <EuiNotificationBadge color={errors ? 'accent' : 'subdued'}>{errors + warns}</EuiNotificationBadge> : undefined}>
-            Hardware checks
-          </EuiTab>
-        </EuiTabs>
-        <EuiSpacer size="m" />
-        {tab === 'constraints' && <ConstraintPanel r={r} />}
-        {tab === 'nodes' && <NodeTable r={r} />}
-        {tab === 'checks' && <WarningsPanel warnings={r.warnings} />}
+          </EuiFlexItem>
+        </EuiFlexGroup>
       </EuiPanel>
 
-      <EuiSpacer size="m" />
-      <EuiPanel color="warning" paddingSize="m" hasShadow={false}>
-        <EuiText size="s"><strong>Estimate, not benchmark.</strong> Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer's hardware.</EuiText>
-        <EuiSpacer size="s" />
-        <EuiText size="xs">
-          <ul style={{ marginBottom: 0 }}>
-            {r.assumptions.filter((a) => !a.startsWith('Estimate, not benchmark')).map((a, i) => <li key={i}>{a}</li>)}
-          </ul>
-        </EuiText>
-      </EuiPanel>
       <EuiSpacer size="s" />
+      <EuiPanel color="warning" paddingSize="s" hasShadow={false}>
+        <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
+          <EuiFlexItem>
+            <EuiText size="xs"><strong>Estimate, not benchmark.</strong> Storage math is reliable; CPU, query latency and ML are not. Validate with Rally.</EuiText>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiButtonEmpty size="xs" onClick={() => setOpen('assumptions')}>{assumptions.length} assumptions</EuiButtonEmpty>
+          </EuiFlexItem>
+        </EuiFlexGroup>
+      </EuiPanel>
+      <EuiSpacer size="xs" />
       <EuiText size="xs" color="subdued" textAlign="right">engine {r.engineVersion} · constants {r.constantsHash.slice(0, 12)}</EuiText>
-    </>
+
+      {open && (
+        <EuiFlyout onClose={() => setOpen(undefined)} size="m" ownFocus aria-labelledby="detail-title">
+          <EuiFlyoutHeader hasBorder>
+            <EuiTitle size="s"><h2 id="detail-title">{titles[open]}</h2></EuiTitle>
+          </EuiFlyoutHeader>
+          <EuiFlyoutBody>
+            {open === 'constraints' && <ConstraintPanel r={r} />}
+            {open === 'nodes' && <NodeTable r={r} />}
+            {open === 'checks' && <WarningsPanel warnings={r.warnings} />}
+            {open === 'assumptions' && (
+              <EuiText size="s">
+                <p><strong>Estimate, not benchmark.</strong> Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer's hardware. These assumptions are exported verbatim.</p>
+                <ul>{assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul>
+              </EuiText>
+            )}
+          </EuiFlyoutBody>
+        </EuiFlyout>
+      )}
+    </div>
   );
 }
