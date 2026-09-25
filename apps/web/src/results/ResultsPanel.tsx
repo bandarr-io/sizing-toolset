@@ -3,7 +3,7 @@ import {
   EuiText, EuiTitle, EuiToolTip,
 } from '@elastic/eui';
 import type { MathStep, SizingResult } from '@sizing/engine';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConstraintPanel, NodeTable, WarningsPanel } from '../components/Results.tsx';
 import { MathButton } from '../components/MathFlyout.tsx';
 import { constraintLabel, solveLabel } from '../export.ts';
@@ -92,14 +92,37 @@ function Answer({ r }: { r: SizingResult }) {
   );
 }
 
+const PIN_TOP = 16;
+
+/**
+ * True while the element fits in the window below the pin offset. A pinned element taller than the
+ * window would hide its own bottom forever (the page seems to stop scrolling), so it is only pinned when it fits.
+ */
+function useFitsViewport<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [fits, setFits] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setFits(el.offsetHeight + PIN_TOP * 2 <= window.innerHeight);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    window.addEventListener('resize', check);
+    return () => { ro.disconnect(); window.removeEventListener('resize', check); };
+  }, []);
+  return { ref, fits };
+}
+
 type Detail = 'map' | 'constraints' | 'nodes' | 'checks' | 'assumptions';
 
 /**
- * The whole column is pinned, with no scrollbar of its own: the summary plus buttons that open each
+ * The whole column is pinned when it fits in the window (otherwise it scrolls with the page), with no scrollbar of its own: the summary plus buttons that open each
  * detail view (cluster map included) in a flyout, so the column's height stays fixed and small.
  */
 export function ResultsPanel({ r }: { r: SizingResult }) {
   const [open, setOpen] = useState<Detail | undefined>();
+  const { ref, fits } = useFitsViewport<HTMLDivElement>();
   const errors = r.warnings.filter((w) => w.severity === 'error').length;
   const warns = r.warnings.filter((w) => w.severity === 'warn').length;
   const binding = r.constraints.find((k) => k.binding);
@@ -114,7 +137,7 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
   };
 
   return (
-    <div style={{ position: 'sticky', top: 16 }}>
+    <div ref={ref} style={fits ? { position: 'sticky', top: PIN_TOP } : undefined}>
       <EuiPanel hasBorder paddingSize="l">
         {r.answer ? <Answer r={r} /> : (
           <>
