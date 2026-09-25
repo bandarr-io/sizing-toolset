@@ -53,6 +53,14 @@ describe('reverse question handling', () => {
     expect(withSolve(base, 'max_agents').hardware.groups.some((g) => g.role === 'fleet')).toBe(true);
     expect(reverse(withSolve(base, 'max_ml_jobs')).answer!.value).toBe(30);
   });
+  it("years until full starts with today's GB/day and a growth rate, and answers in years", () => {
+    const n = withSolve(base, 'years_to_capacity');
+    expect(n.fixed[0]).toMatchObject({ rawGbPerDay: 100, growthPctPerYear: 20 });
+    const r = reverse(n);
+    expect(r.answer!.unit).toBe('years');
+    // default hardware (3 × 64 GB hot, LogsDB, 30 d) holds 102.4 GB/day: 100 → 102.4 at 20%/yr
+    expect(r.answer!.value).toBeCloseTo(Math.log(102.4 / 100) / Math.log(1.2), 6);
+  });
   it('max retention gets a GB/day input', () => {
     expect(withSolve(base, 'max_retention').fixed[0]!.rawGbPerDay).toBeGreaterThan(0);
   });

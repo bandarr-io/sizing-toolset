@@ -13,7 +13,7 @@ export const constraintLabel = (name: string) => CONSTRAINT_LABEL[name] ?? name;
 
 const SOLVE_LABEL: Record<string, string> = {
   max_gb_day: 'Max GB/day', max_retention: 'Max retention', max_agents: 'Max Elastic Agents',
-  max_vectors: 'Max vectors', max_shards: 'Max shards', max_ml_jobs: 'Max ML jobs',
+  max_vectors: 'Max vectors', max_shards: 'Max shards', max_ml_jobs: 'Max ML jobs', years_to_capacity: 'Years until full',
 };
 export const solveLabel = (s: string) => SOLVE_LABEL[s] ?? s;
 

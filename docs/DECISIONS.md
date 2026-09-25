@@ -27,6 +27,7 @@ Gaps and contradictions in `docs/SPEC.md`, resolved with Dan on 2026-09-23. Test
 | D21 | Fast / expert (§10) | Replaced by one input model with progressive disclosure: each workload shows the §10 essentials (ingest, retention, replicas, index mode) and hides the rest under "More options". Deployment settings live in one shared section. v1 saved scenarios migrate automatically (fast inputs convert per D13). |
 | D22 | Downsampling | The downsample factor is the share of data kept, in (0, 1]; 1 = none. Elasticsearch only downsamples TSDS, so a factor other than 1 on a LogsDB or standard workload is rejected (`downsampleProblem`). The UI shows the field only in TSDS mode and clears factors when leaving TSDS. |
 | D23 | Results column (§10) | The whole results column is pinned with no scrollbar of its own. The cluster map, utilization, node table, hardware checks and the full assumptions list open in flyouts. The "Estimate, not benchmark" banner stays visible in the column; the assumptions are still exported verbatim. |
+| D24 | Growth | Forward: growth has its own step (horizon of Today, 1, 2, 3 or 5 years, plus a rate per workload with the size today and at the horizon); it no longer hides in workload or deployment menus. Reverse: new question "Years until full" (`years_to_capacity`, not in spec §5.3). It finds the largest t where every fixed workload grown by (1 + g)^t still fits, by bisection on the max GB/day solver; 0 if already over, unbounded with no growth. |
 
 ## Open items found while building
 

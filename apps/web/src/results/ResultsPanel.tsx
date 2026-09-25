@@ -43,6 +43,20 @@ function Totals({ r }: { r: SizingResult }) {
   );
 }
 
+/** Short horizons read better in months: 0.13 years → "1.6 months". */
+function yearsText(years: number): { n: string; unit: string } {
+  if (years === 0) return { n: '0', unit: 'years (full today)' };
+  if (years < 1) return { n: fmtNum(years * 12, 1), unit: years * 12 === 1 ? 'month' : 'months' };
+  return { n: fmtNum(years, 1), unit: years === 1 ? 'year' : 'years' };
+}
+
+/** Calendar month the cluster fills, for a years answer. UI-only: the engine never reads the clock. */
+function fillDate(years: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + Math.round(years * 12));
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
 function Answer({ r }: { r: SizingResult }) {
   const a = r.answer!;
   const binding = r.constraints.find((k) => k.binding);
@@ -52,9 +66,16 @@ function Answer({ r }: { r: SizingResult }) {
       <EuiFlexGroup gutterSize="m" alignItems="baseline" responsive={false} wrap>
         <EuiFlexItem grow={false}>
           <div style={{ whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.1, color: '#0B64DD' }}>{fmtCompact(a.value)}</span>{' '}
-            <span style={{ fontSize: 18, fontWeight: 600 }}>{a.unit}</span>
+            {a.unit === 'years' && !Number.isFinite(a.value)
+              ? <span style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.1, color: '#0B64DD' }}>Not reached</span>
+              : <>
+                  <span style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.1, color: '#0B64DD' }}>{a.unit === 'years' ? yearsText(a.value).n : fmtCompact(a.value)}</span>{' '}
+                  <span style={{ fontSize: 18, fontWeight: 600 }}>{a.unit === 'years' ? yearsText(a.value).unit : a.unit}</span>
+                </>}
           </div>
+          {a.unit === 'years' && Number.isFinite(a.value) && a.value > 0 && (
+            <EuiText size="s" color="subdued">around {fillDate(a.value)}</EuiText>
+          )}
         </EuiFlexItem>
         {a.dataStreams !== undefined && (
           <EuiFlexItem grow={false}><EuiText size="s">≈ <strong>{fmtNum(a.dataStreams, 0)}</strong> data streams like this workload</EuiText></EuiFlexItem>

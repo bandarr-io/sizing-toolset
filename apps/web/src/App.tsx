@@ -3,6 +3,7 @@ import type { ConstantSet } from '@sizing/constants';
 import { defaultIndexMode, forward, reverse, ENGINE_VERSION, type SizingResult, type Tier, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { DeploymentSettings } from './calculator/DeploymentSettings.tsx';
+import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
 import { HardwareGroups } from './calculator/HardwareGroups.tsx';
 import { NodeSizes } from './calculator/NodeSizes.tsx';
 import { SolvePicker } from './calculator/SolvePicker.tsx';
@@ -133,8 +134,6 @@ type Setter = (f: (s: AppState) => AppState) => void;
 function ForwardInputs({ state, setState }: { state: AppState; setState: Setter }) {
   const f = state.forward;
   const setForward = (next: AppState['forward']) => setState((s) => ({ ...s, forward: next }));
-  const growthUsed = f.workloads.some((p) => (p.growthPctPerYear ?? 0) !== 0);
-  const moreCount = (f.options.coordinatingNodes ? 1 : 0) + (f.options.growthHorizonYears !== undefined ? 1 : 0);
   const tiers = tiersInUse(f);
 
   return (
@@ -143,28 +142,24 @@ function ForwardInputs({ state, setState }: { state: AppState; setState: Setter 
         <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
       </Section>
       <Gap />
-      <Section step={2} title="Where will it run?">
+      <Section step={2} title="Plan for growth" description="Size for where each workload will be, not only where it is today.">
+        <GrowthPlanner value={f} onChange={setForward} />
+      </Section>
+      <Gap />
+      <Section step={3} title="Where will it run?">
         <DeploymentSettings
-          value={deploymentOfForward(f.options)} hasLogsdb={hasLogsdb(f.workloads)} moreCount={moreCount}
+          value={deploymentOfForward(f.options)} hasLogsdb={hasLogsdb(f.workloads)} moreCount={f.options.coordinatingNodes ? 1 : 0}
           onChange={(d) => setForward({ ...f, options: withForwardDeployment(f.options, d) })}
           more={
-            <>
-              <EuiFlexItem>
-                <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
-                  helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
-              </EuiFlexItem>
-              {growthUsed && (
-                <EuiFlexItem>
-                  <NumField label="Size for growth over" append="years" value={f.options.growthHorizonYears} optional placeholder="1"
-                    onChange={(growthHorizonYears) => setForward({ ...f, options: { ...f.options, growthHorizonYears } })} />
-                </EuiFlexItem>
-              )}
-            </>
+            <EuiFlexItem>
+              <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
+                helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
+            </EuiFlexItem>
           }
         />
       </Section>
       <Gap />
-      <Section step={3} title="Node sizes" description="Defaults suit most sizings. Match them to the customer's standard hardware if they have one.">
+      <Section step={4} title="Node sizes" description="Defaults suit most sizings. Match them to the customer's standard hardware if they have one.">
         <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} />
       </Section>
     </>
@@ -193,9 +188,9 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
       <Gap />
       {target && (
         <>
-          <Section step={step++} title="What will it run?" description="Fixed parameters for the workload being solved.">
+          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "Today's volume and how fast it grows." : 'Fixed parameters for the workload being solved.'}>
             <WorkloadCard
-              p={target} kindChoices={kinds}
+              p={target} kindChoices={kinds} showGrowth={r.solve === 'years_to_capacity'}
               role={{ kind: 'reverse-target', solve: r.solve, targetTier, onTargetTier: (t) => setReverse({ ...r, targetTier: t }) }}
               onChange={(p) => setReverse({ ...r, fixed: [p, ...others], targetProfileId: p.id })}
             />
@@ -205,7 +200,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
             <EuiSpacer size="s" />
             {others.length === 0
               ? <OthersEmpty add={(w) => withOthers([w])} taken={r.fixed.map((p) => p.id)} />
-              : <WorkloadList workloads={others} onChange={withOthers} role={{ kind: 'reverse-other' }} addLabel="Add another workload" />}
+              : <WorkloadList workloads={others} onChange={withOthers} role={{ kind: 'reverse-other' }} addLabel="Add another workload" showGrowth={r.solve === 'years_to_capacity'} />}
           </Section>
           <Gap />
         </>

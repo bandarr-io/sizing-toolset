@@ -17,11 +17,12 @@ function KindPad({ onPick }: { onPick: (k: WorkloadKind) => void }) {
 }
 
 /** Workload cards plus an "add" picker. With no workloads the picker is shown inline as the call to action. */
-export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, addLabel = 'Add workload' }: {
+export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, addLabel = 'Add workload', showGrowth = false }: {
   workloads: WorkloadProfile[];
   onChange: (w: WorkloadProfile[]) => void;
   role?: CardRole;
   addLabel?: string;
+  showGrowth?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const add = (k: WorkloadKind) => { onChange([...workloads, newWorkload(k, workloads.map((w) => w.id))]); setOpen(false); };
@@ -32,7 +33,7 @@ export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, 
     <>
       {workloads.map((p, i) => (
         <div key={`${i}-${p.kind}`}>
-          <WorkloadCard p={p} role={role}
+          <WorkloadCard p={p} role={role} showGrowth={showGrowth}
             onChange={(np) => onChange(workloads.map((w, j) => (j === i ? np : w)))}
             onRemove={() => onChange(workloads.filter((_, j) => j !== i))} />
           <EuiSpacer size="m" />

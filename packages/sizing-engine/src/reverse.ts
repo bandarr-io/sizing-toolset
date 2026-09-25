@@ -6,7 +6,7 @@ import { licenseFloor, selfManagedEru } from './license.ts';
 import { fmt, floorEps, step } from './math.ts';
 import { fleetTable } from './overhead.ts';
 import {
-  downsampleFor, heapGb, indexRatio, memDiskKey, offheapBudgetGb, placementTier, replicasFor, retentionTiers, vectorCost,
+  downsampleFor, growthFactor, heapGb, indexRatio, memDiskKey, offheapBudgetGb, placementTier, replicasFor, retentionTiers, vectorCost,
 } from './profiles.ts';
 import { buildAssumptions, commonWarnings, ENGINE_VERSION, totalsFor } from './result.ts';
 import type {
@@ -89,16 +89,23 @@ interface Solved {
   target?: WorkloadProfile;
   /** Set when constraints are in different units and "lowest max" does not apply. */
   bindingIndex?: number;
+  /** Utilization numerator when it is not `value` (years_to_capacity: GB/day at the answer). */
+  utilizationDemand?: number;
+  /** Extra assumptions this question adds. */
+  notes?: string[];
+  /** Grow every fixed workload by this many years for validation at the answer. */
+  atYears?: number;
 }
 
 // ---- max_gb_day ---------------------------------------------------------------------------------
 
-function solveMaxGbDay(c: ConstantSet, req: ReverseRequest): Solved {
+/** `growthYears` grows the other fixed workloads, so they use more capacity (years_to_capacity). */
+function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): Solved {
   const groups = req.hardware.groups;
   const target = pickTarget(req, (p) => retentionTiers(p).length > 0);
   if (!target) throw new Error('max_gb_day needs a fixed workload with retention days');
   const others = req.fixed.filter((p) => p !== target);
-  const otherDemand = computeDemand(c, others, { growthYears: 0, ccrMultiplier: 1 });
+  const otherDemand = computeDemand(c, others, { growthYears, ccrMultiplier: 1 });
   const ratio = indexRatio(c, target);
   const overhead = num(c, 'storage_overhead');
   const constraints: Constraint[] = [];
@@ -137,7 +144,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest): Solved {
     const usableVcpu = sumExceptLargest(ingestNodes, (n) => n.vcpu);
     const ev = num(c, 'ev_per_s_per_vcpu');
     const capacityEv = usableVcpu * ev;
-    const othersEv = others.reduce((s, p) => s + ingestDemandEvents(c, p, ingestTier, 0, req.concurrentSearch ?? false), 0);
+    const othersEv = others.reduce((s, p) => s + ingestDemandEvents(c, p, ingestTier, growthYears, req.concurrentSearch ?? false), 0);
     const rep = replicasFor(target, ingestTier);
     const kb = avgEventKb(c, target);
     const derate = derateFactor(c, target, req.concurrentSearch ?? false);
@@ -321,6 +328,46 @@ function solveMaxShards(c: ConstantSet, req: ReverseRequest): Solved {
   };
 }
 
+// ---- years_to_capacity (D24) --------------------------------------------------------------------
+
+/**
+ * Years until compound growth outgrows the hardware: the largest t where the target at
+ * GB/day × (1 + g)^t still fits beside the other workloads grown by t. Found by bisection on
+ * the max-GB/day solver, which is monotone in t because growth rates are non-negative.
+ */
+function solveYearsToCapacity(c: ConstantSet, req: ReverseRequest): Solved {
+  const target = pickTarget(req, (p) => (p.rawGbPerDay ?? 0) > 0 && retentionTiers(p).length > 0);
+  if (!target?.rawGbPerDay) throw new Error("years_to_capacity needs a fixed workload with today's GB/day and retention");
+  const gbToday = target.rawGbPerDay;
+  const scoped: ReverseRequest = { ...req, targetProfileId: target.id };
+  const at = (t: number) => solveMaxGbDay(c, scoped, t);
+  const demandAt = (t: number) => gbToday * growthFactor(target, t);
+  const fits = (t: number) => at(t).value >= demandAt(t);
+  const CAP_YEARS = 100;
+  const anyGrowth = req.fixed.some((p) => (p.growthPctPerYear ?? 0) > 0);
+
+  const done = (t: number, notes: string[] = []): Solved => {
+    const s = at(Number.isFinite(t) ? t : 0);
+    return {
+      value: t, unit: 'years', constraints: s.constraints, target,
+      utilizationDemand: demandAt(Number.isFinite(t) ? t : 0), atYears: Number.isFinite(t) ? t : 0,
+      notes: [`Growth compounds yearly from today's ${fmt(gbToday)} GB/day; other workloads grow at their own rates.`, ...notes],
+    };
+  };
+
+  if (!fits(0)) return done(0, ['Already over capacity today: the answer is 0 years.']);
+  if (!anyGrowth) return done(Infinity, ['No growth rate set on any workload, so this hardware never fills.']);
+  if (fits(CAP_YEARS)) return done(Infinity, [`Still fits after ${CAP_YEARS} years at these growth rates.`]);
+  let lo = 0;
+  let hi = 1;
+  while (fits(hi)) { lo = hi; hi *= 2; }
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) lo = mid; else hi = mid;
+  }
+  return done(lo);
+}
+
 // ---- max_ml_jobs --------------------------------------------------------------------------------
 
 function solveMaxMlJobs(c: ConstantSet, req: ReverseRequest): Solved {
@@ -342,6 +389,7 @@ const SOLVERS = {
   max_vectors: solveMaxVectors,
   max_shards: solveMaxShards,
   max_ml_jobs: solveMaxMlJobs,
+  years_to_capacity: solveYearsToCapacity,
 } as const;
 
 /** SPEC §5.3 reverse (capacity) mode: hardware → maximum supportable workload, with the binding constraint. */
@@ -355,7 +403,8 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
     : constraints.reduce((best, k) => (k.maxValue! < best.maxValue! ? k : best), constraints[0]!);
   binding.binding = true;
   for (const k of constraints) {
-    if (k.maxValue !== undefined && req.solve !== 'max_shards') k.utilization = k.maxValue > 0 ? solved.value / k.maxValue : Infinity;
+    const demand = solved.utilizationDemand ?? solved.value;
+    if (k.maxValue !== undefined && req.solve !== 'max_shards') k.utilization = k.maxValue > 0 ? demand / k.maxValue : Infinity;
   }
 
   const groups = req.hardware.groups;
@@ -404,6 +453,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
 
   const assumptions = [
     'N−1: the largest node in each tier is removed before inverting (SPEC §5.3).',
+    ...(solved.notes ?? []),
     ...buildAssumptions(c, { sites, ccrMode: req.hardware.ccr ? 'unidirectional' : 'none', growthYears: 0, airGapped }),
   ];
 
@@ -437,6 +487,10 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
 
 /** The fixed workloads with the solved variable substituted, for validation at max workload. */
 function workloadsAtMax(req: ReverseRequest, solved: Solved): WorkloadProfile[] {
+  // years_to_capacity: validate every workload as it will be at the answer.
+  if (solved.atYears !== undefined) {
+    return req.fixed.map((p) => (p.rawGbPerDay ? { ...p, rawGbPerDay: p.rawGbPerDay * growthFactor(p, solved.atYears!) } : p));
+  }
   const t = solved.target;
   if (!t || !Number.isFinite(solved.value)) return req.fixed;
   const swap = (p: WorkloadProfile): WorkloadProfile => {

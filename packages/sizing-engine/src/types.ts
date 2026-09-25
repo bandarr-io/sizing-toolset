@@ -83,7 +83,7 @@ export interface ForwardRequest {
   options: ForwardOptions;
 }
 
-export type Solve = 'max_gb_day' | 'max_retention' | 'max_agents' | 'max_vectors' | 'max_shards' | 'max_ml_jobs';
+export type Solve = 'max_gb_day' | 'max_retention' | 'max_agents' | 'max_vectors' | 'max_shards' | 'max_ml_jobs' | 'years_to_capacity';
 
 export interface ReverseRequest {
   hardware: HardwareConfig;

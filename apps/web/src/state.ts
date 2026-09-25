@@ -43,6 +43,7 @@ export const KIND_ORDER: WorkloadKind[] = ['logs', 'siem', 'metrics', 'apm', 'se
 export const SOLVES: { value: Solve; title: string; blurb: string; icon: string }[] = [
   { value: 'max_gb_day', title: 'Max daily ingest', blurb: 'GB/day this hardware can retain', icon: 'storage' },
   { value: 'max_retention', title: 'Max retention', blurb: 'Days of data at a given ingest', icon: 'clock' },
+  { value: 'years_to_capacity', title: 'Years until full', blurb: 'When growth outgrows this hardware', icon: 'timeline' },
   { value: 'max_agents', title: 'Max Elastic Agents', blurb: 'Fleet Server and hot-tier limits', icon: 'fleetApp' },
   { value: 'max_vectors', title: 'Max vectors', blurb: 'Off-heap memory and disk limits', icon: 'logoVectorDB' },
   { value: 'max_shards', title: 'Max shards', blurb: 'Shards and data streams', icon: 'indexManagementApp' },
@@ -53,6 +54,7 @@ export const SOLVES: { value: Solve; title: string; blurb: string; icon: string 
 export const SOLVE_KINDS: Record<Solve, WorkloadKind[]> = {
   max_gb_day: ['logs', 'siem', 'metrics', 'apm'],
   max_retention: ['logs', 'siem', 'metrics', 'apm'],
+  years_to_capacity: ['logs', 'siem', 'metrics', 'apm'],
   max_shards: ['logs', 'siem', 'metrics', 'apm'],
   max_vectors: ['vector'],
   max_agents: [],
@@ -166,7 +168,9 @@ export function normalizeReverse(r: ReverseRequest): ReverseRequest {
   }
   const target = { ...fixed[0]! };
   // The solved quantity is an output; keep what the question needs as input.
-  if (r.solve === 'max_retention' && !target.rawGbPerDay) target.rawGbPerDay = 100;
+  if ((r.solve === 'max_retention' || r.solve === 'years_to_capacity') && !target.rawGbPerDay) target.rawGbPerDay = 100;
+  // A starting rate so the first answer is a date, not "never"; the card shows it for editing.
+  if (r.solve === 'years_to_capacity' && target.growthPctPerYear === undefined) target.growthPctPerYear = 20;
   fixed[0] = target;
   return { ...r, fixed, targetProfileId: target.id };
 }

@@ -39,7 +39,7 @@ function utilColor(u: number): 'success' | 'warning' | 'danger' {
   return 'danger';
 }
 
-function ConstraintRow({ k, reverse, answer }: { k: Constraint; reverse: boolean; answer?: number }) {
+function ConstraintRow({ k, reverse }: { k: Constraint; reverse: boolean }) {
   const u = k.utilization;
   const notModeled = k.name === 'query';
   const unlimited = k.maxValue !== undefined && !Number.isFinite(k.maxValue);
@@ -48,7 +48,7 @@ function ConstraintRow({ k, reverse, answer }: { k: Constraint; reverse: boolean
   else if (reverse) {
     detail = unlimited
       ? 'Not limiting'
-      : `max ${fmtCompact(k.maxValue!)} ${k.unit}${answer !== undefined && k.maxValue! > 0 && !k.binding ? ` · headroom ${fmtNum(k.maxValue! / answer, 1)}×` : ''}`;
+      : `max ${fmtCompact(k.maxValue!)} ${k.unit}${!k.binding && u !== undefined && u > 0 && Number.isFinite(u) ? ` · headroom ${fmtNum(1 / u, 1)}×` : ''}`;
   } else detail = `${fmtNum(k.demand)} / ${fmtNum(k.capacity)} ${k.unit}`;
 
   return (
@@ -83,7 +83,7 @@ export function ConstraintPanel({ r }: { r: SizingResult }) {
       </EuiText>
       <EuiSpacer size="s" />
       {r.constraints.map((k, i) => (
-        <div key={i}><ConstraintRow k={k} reverse={reverse} {...(r.answer ? { answer: r.answer.value } : {})} /><EuiSpacer size="xs" /></div>
+        <div key={i}><ConstraintRow k={k} reverse={reverse} /><EuiSpacer size="xs" /></div>
       ))}
     </>
   );

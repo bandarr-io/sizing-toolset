@@ -53,8 +53,10 @@ export function summarize(p: WorkloadProfile): string {
   return `${p.rawGbPerDay !== undefined ? `${fmtNum(p.rawGbPerDay)} GB/day` : 'GB/day solved'} · ${days} days`;
 }
 
-export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
+export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGrowth = false }: {
   p: WorkloadProfile;
+  /** Show the growth rate inline (reverse "years until full"); forward mode edits growth in its own step. */
+  showGrowth?: boolean;
   onChange: (p: WorkloadProfile) => void;
   onRemove?: () => void;
   role: CardRole;
@@ -132,6 +134,11 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
             <NumField label={<EuiToolTip content="Applies to hot and warm. Cold and frozen never carry replicas."><span>Replicas <EuiIcon type="question" size="s" /></span></EuiToolTip>}
               aria-label="Replicas" value={replicas} step={1} onChange={(v) => setReplicas(v ?? 0)} />
           </EuiFlexItem>
+          {showGrowth && (
+            <EuiFlexItem grow={false} style={{ width: 150 }}>
+              <NumField label="Growth" append="% / yr" value={p.growthPctPerYear} optional placeholder="0" onChange={(v) => set({ growthPctPerYear: v })} />
+            </EuiFlexItem>
+          )}
           {solve === 'max_shards' && (
             <EuiFlexItem style={{ flexBasis: 160, minWidth: 140 }}>
               <NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="1" onChange={(v) => set({ rolloverDays: v })} />
@@ -151,13 +158,12 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
       .filter((t) => mode === 'tsds' || p.downsampleFactor?.[t] !== undefined);
     const fieldError = (t: Tier) => downsampleProblem(p, t)?.replace(/^\[[^\]]*\] \w+: /, '');
     advancedError = downsampleTiers.some((t) => !!fieldError(t));
-    advancedCount = [p.indexRatioOverride, p.growthPctPerYear, p.avgEventKb, p.rolloverDays, p.primaryShards, p.ingestPipelines || undefined,
+    advancedCount = [p.indexRatioOverride, p.avgEventKb, p.rolloverDays, p.primaryShards, p.ingestPipelines || undefined,
       ...downsampleTiers.map((t) => p.downsampleFactor?.[t])].filter((x) => x !== undefined).length;
     advanced = (
       <>
         <EuiFlexGrid columns={3} gutterSize="l">
           <EuiFlexItem><NumField label="Index ratio override" value={p.indexRatioOverride} optional placeholder={String(num(c, `index_ratio.${mode}`))} onChange={(v) => set({ indexRatioOverride: v })} /></EuiFlexItem>
-          <EuiFlexItem><NumField label="Growth" append="% / year" value={p.growthPctPerYear} optional placeholder="0" onChange={(v) => set({ growthPctPerYear: v })} /></EuiFlexItem>
           <EuiFlexItem><NumField label="Average event size" append="KB" value={p.avgEventKb} optional placeholder={String(num(c, 'ingest.default_avg_event_kb'))} onChange={(v) => set({ avgEventKb: v })} /></EuiFlexItem>
           {solve !== 'max_shards' && <EuiFlexItem><NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="1" onChange={(v) => set({ rolloverDays: v })} /></EuiFlexItem>}
           <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="1" onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
@@ -184,12 +190,11 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
         <EuiFlexItem><NumField label="Replicas" value={replicas} step={1} onChange={(v) => setReplicas(v ?? 0)} /></EuiFlexItem>
       </EuiFlexGrid>
     );
-    advancedCount = [p.indexRatioOverride, p.growthPctPerYear, p.primaryShards, p.tier].filter((x) => x !== undefined).length;
+    advancedCount = [p.indexRatioOverride, p.primaryShards, p.tier].filter((x) => x !== undefined).length;
     advanced = (
       <EuiFlexGrid columns={3} gutterSize="l">
         <EuiFlexItem><SelectField label="Tier" value={placement} options={[{ value: 'content', text: 'Content' }, { value: 'hot', text: 'Hot' }]} onChange={(t) => set({ tier: t })} /></EuiFlexItem>
         <EuiFlexItem><NumField label="Index ratio" value={p.indexRatioOverride} optional placeholder={String(num(c, 'index_ratio.standard'))} onChange={(v) => set({ indexRatioOverride: v })} helpText="1.0 when the size above is already indexed" /></EuiFlexItem>
-        <EuiFlexItem><NumField label="Growth" append="% / year" value={p.growthPctPerYear} optional placeholder="0" onChange={(v) => set({ growthPctPerYear: v })} /></EuiFlexItem>
         <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="auto" onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
       </EuiFlexGrid>
     );
@@ -222,7 +227,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
         </EuiPanel>
       </>
     );
-    advancedCount = [v.hnswM, p.tier, p.growthPctPerYear].filter((x) => x !== undefined).length;
+    advancedCount = [v.hnswM, p.tier].filter((x) => x !== undefined).length;
     advanced = (
       <EuiFlexGrid columns={3} gutterSize="l">
         <EuiFlexItem>
@@ -231,7 +236,6 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
           }} />
         </EuiFlexItem>
         <EuiFlexItem><SelectField label="Tier" value={placement} options={[{ value: 'content', text: 'Content' }, { value: 'hot', text: 'Hot' }]} onChange={(t) => set({ tier: t })} /></EuiFlexItem>
-        <EuiFlexItem><NumField label="Growth" append="% / year" value={p.growthPctPerYear} optional placeholder="0" onChange={(n) => set({ growthPctPerYear: n })} /></EuiFlexItem>
       </EuiFlexGrid>
     );
   }
