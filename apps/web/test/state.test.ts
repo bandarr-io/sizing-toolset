@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { toJson, toMarkdown } from '../src/export.ts';
 import { fastForwardV1ToRequest, migrate } from '../src/migrate.ts';
 import {
+  withIndexMode,
   defaultState, deploymentOfForward, deploymentOfReverse, newWorkload, normalizeReverse, tiersInUse, uniqueName,
   withForwardDeployment, withReverseDeployment, withSolve,
 } from '../src/state.ts';
@@ -23,6 +24,12 @@ describe('defaults', () => {
   it('no new workload starts with a warm tier', () => {
     for (const k of ['logs', 'siem', 'metrics', 'apm'] as const) expect(newWorkload(k).retentionDays.warm).toBeUndefined();
     expect(newWorkload('metrics')).toMatchObject({ retentionDays: { hot: 7, frozen: 83 }, downsampleFactor: { frozen: 0.1 } });
+  });
+  it('leaving TSDS drops downsample factors; staying keeps them', () => {
+    const m = newWorkload('metrics');
+    expect(withIndexMode(m, 'logsdb').downsampleFactor).toBeUndefined();
+    expect(withIndexMode(m, 'logsdb').indexMode).toBe('logsdb');
+    expect(withIndexMode(m, 'tsds').downsampleFactor).toEqual({ frozen: 0.1 });
   });
   it('tiersInUse lists only tiers with data, in order', () => {
     expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['hot', 'frozen', 'content']);

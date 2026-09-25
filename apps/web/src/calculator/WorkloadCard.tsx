@@ -4,13 +4,13 @@ import {
 } from '@elastic/eui';
 import { num, val, type FleetRow } from '@sizing/constants';
 import {
-  defaultIndexMode, vectorCost, type IndexMode, type Quant, type Solve, type Tier, type WorkloadKind, type WorkloadProfile,
+  defaultIndexMode, downsampleProblem, vectorCost, type IndexMode, type Quant, type Solve, type Tier, type WorkloadKind, type WorkloadProfile,
 } from '@sizing/engine';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NumField, SelectField, SwitchField } from '../components/Fields.tsx';
 import { useConstants } from '../constantsStore.tsx';
 import { fmtCompact, fmtNum } from '../format.ts';
-import { KINDS, newWorkload } from '../state.ts';
+import { KINDS, newWorkload, withIndexMode } from '../state.ts';
 import { TIER_LABEL } from '../ui/tiers.ts';
 import { RetentionTimeline } from './RetentionTimeline.tsx';
 
@@ -123,7 +123,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
           {needsVolume && (
             <EuiFlexItem style={{ flexBasis: 280, minWidth: 270 }}>
               <EuiFormRow label="Index mode" helpText={p.indexRatioOverride !== undefined ? `Ratio overridden to ${p.indexRatioOverride}` : `Indexed size = raw × ${ratio}`}>
-                <EuiButtonGroup legend="Index mode" isFullWidth idSelected={mode} onChange={(id) => set({ indexMode: id as IndexMode })}
+                <EuiButtonGroup legend="Index mode" isFullWidth idSelected={mode} onChange={(id) => onChange(withIndexMode(p, id as IndexMode))}
                   options={(['standard', 'logsdb', 'tsds'] as IndexMode[]).map((m) => ({ id: m, label: m === 'standard' ? 'Standard' : m === 'logsdb' ? 'LogsDB' : 'TSDS' }))} />
               </EuiFormRow>
             </EuiFlexItem>
@@ -145,8 +145,12 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
         />
       </>
     );
-    const downsampleTiers = (['warm', 'cold', 'frozen'] as Tier[]).filter((t) => (p.retentionDays[t] ?? 0) > 0);
-    advancedError = downsampleTiers.some((t) => p.downsampleFactor?.[t] !== undefined && !(p.downsampleFactor[t]! > 0 && p.downsampleFactor[t]! <= 1));
+    // Downsampling is TSDS-only. A factor left on another mode stays visible, flagged, so it can be cleared.
+    const downsampleTiers = (['warm', 'cold', 'frozen'] as Tier[])
+      .filter((t) => (p.retentionDays[t] ?? 0) > 0)
+      .filter((t) => mode === 'tsds' || p.downsampleFactor?.[t] !== undefined);
+    const fieldError = (t: Tier) => downsampleProblem(p, t)?.replace(/^\[[^\]]*\] \w+: /, '');
+    advancedError = downsampleTiers.some((t) => !!fieldError(t));
     advancedCount = [p.indexRatioOverride, p.growthPctPerYear, p.avgEventKb, p.rolloverDays, p.primaryShards, p.ingestPipelines || undefined,
       ...downsampleTiers.map((t) => p.downsampleFactor?.[t])].filter((x) => x !== undefined).length;
     advanced = (
@@ -161,8 +165,8 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices }: {
           {downsampleTiers.map((t) => (
             <EuiFlexItem key={t}>
               <NumField label={`${TIER_LABEL[t]} downsample factor`} value={p.downsampleFactor?.[t]} optional placeholder="1" step={0.01}
-                helpText="Share of data kept, above 0 up to 1. Leave empty or 1 for no downsampling."
-                error={p.downsampleFactor?.[t] !== undefined && !(p.downsampleFactor[t]! > 0 && p.downsampleFactor[t]! <= 1) ? 'Must be greater than 0 and at most 1' : undefined}
+                helpText="Share of data kept after TSDS downsampling, above 0 up to 1. Leave empty for none."
+                error={fieldError(t)}
                 onChange={(v) => { const d = { ...(p.downsampleFactor ?? {}) }; if (v === undefined) delete d[t]; else d[t] = v; set({ downsampleFactor: d }); }} />
             </EuiFlexItem>
           ))}

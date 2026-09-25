@@ -22,15 +22,26 @@ export function replicasFor(p: WorkloadProfile, tier: Tier): number {
 }
 
 /**
- * Share of data kept on `tier` after downsampling: 1 = no downsampling. 0 would size the tier at
- * zero (forward drops it, reverse divides by it), so anything outside (0, 1] is an input error.
+ * Why a workload's downsample factor on `tier` is invalid, or undefined when it is fine.
+ * The factor is the share of data kept (1 = no downsampling). Elasticsearch only downsamples
+ * time series data streams, so any factor other than 1 requires TSDS index mode. A factor of 0
+ * would size the tier at zero (forward drops it, reverse divides by it).
  */
-export function downsampleFor(p: WorkloadProfile, tier: Tier): number {
-  const f = p.downsampleFactor?.[tier] ?? 1;
-  if (!(f > 0 && f <= 1)) {
-    throw new Error(`[${p.id}] ${tier} downsample factor must be greater than 0 and at most 1 (1 = no downsampling); got ${f}.`);
+export function downsampleProblem(p: WorkloadProfile, tier: Tier): string | undefined {
+  const f = p.downsampleFactor?.[tier];
+  if (f === undefined) return undefined;
+  if (!(f > 0 && f <= 1)) return `[${p.id}] ${tier}: downsample factor must be greater than 0 and at most 1 (1 = no downsampling); got ${f}.`;
+  if (f !== 1 && defaultIndexMode(p) !== 'tsds') {
+    return `[${p.id}] ${tier}: downsampling only applies to TSDS (time series) index mode; this workload uses ${defaultIndexMode(p)}. Remove the factor or switch to TSDS.`;
   }
-  return f;
+  return undefined;
+}
+
+/** Share of data kept on `tier` after downsampling. Throws on invalid input (see downsampleProblem). */
+export function downsampleFor(p: WorkloadProfile, tier: Tier): number {
+  const problem = downsampleProblem(p, tier);
+  if (problem) throw new Error(problem);
+  return p.downsampleFactor?.[tier] ?? 1;
 }
 
 /** D15: GB/day × (1 + growth)^years. */

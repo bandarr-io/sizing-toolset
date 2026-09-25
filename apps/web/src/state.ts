@@ -1,5 +1,5 @@
 import type {
-  CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
+  CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, IndexMode, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
 
 export type Mode = 'forward' | 'reverse';
@@ -79,6 +79,13 @@ export function newWorkload(kind: WorkloadKind, taken: readonly string[] = []): 
     case 'ml': return { id, kind, ml: { anomalyJobs: 10 }, retentionDays: {}, replicas: {} };
     case 'fleet': return { id, kind, fleet: { agents: 5000, defend: false }, retentionDays: {}, replicas: {} };
   }
+}
+
+/** Change index mode. Downsampling is TSDS-only, so leaving TSDS drops any downsample factors. */
+export function withIndexMode(p: WorkloadProfile, indexMode: IndexMode): WorkloadProfile {
+  if (indexMode === 'tsds' || !p.downsampleFactor) return { ...p, indexMode };
+  const { downsampleFactor: _drop, ...rest } = p;
+  return { ...rest, indexMode };
 }
 
 // ---- Deployment settings shared by both modes -----------------------------------------------------
