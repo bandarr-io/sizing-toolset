@@ -71,11 +71,11 @@ function Answer({ r }: { r: SizingResult }) {
   );
 }
 
-type Detail = 'constraints' | 'nodes' | 'checks' | 'assumptions';
+type Detail = 'map' | 'constraints' | 'nodes' | 'checks' | 'assumptions';
 
 /**
  * The whole column is pinned, with no scrollbar of its own: the summary plus buttons that open each
- * detail view in a flyout, so the column's height stays small enough to fit on screen.
+ * detail view (cluster map included) in a flyout, so the column's height stays fixed and small.
  */
 export function ResultsPanel({ r }: { r: SizingResult }) {
   const [open, setOpen] = useState<Detail | undefined>();
@@ -85,6 +85,7 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
   const assumptions = r.assumptions.filter((a) => !a.startsWith('Estimate, not benchmark'));
 
   const titles: Record<Detail, string> = {
+    map: r.sites > 1 ? 'Cluster map (per site)' : 'Cluster map',
     constraints: r.answer ? 'Constraints and headroom' : 'Utilization by constraint',
     nodes: r.sites > 1 ? 'Nodes per site' : 'Node table',
     checks: 'Hardware checks (HV1 to HV12)',
@@ -112,9 +113,10 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
           </>
         )}
         <EuiHorizontalRule margin="m" />
-        <ClusterMap r={r} />
-        <EuiHorizontalRule margin="m" />
         <EuiFlexGroup gutterSize="s" wrap responsive={false}>
+          <EuiFlexItem grow={false}>
+            <EuiButtonEmpty size="s" iconType="grid" onClick={() => setOpen('map')}>Cluster map</EuiButtonEmpty>
+          </EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiButtonEmpty size="s" iconType="chartBarHorizontal" onClick={() => setOpen('constraints')}>{r.answer ? 'Headroom' : 'Utilization'}</EuiButtonEmpty>
           </EuiFlexItem>
@@ -149,6 +151,7 @@ export function ResultsPanel({ r }: { r: SizingResult }) {
             <EuiTitle size="s"><h2 id="detail-title">{titles[open]}</h2></EuiTitle>
           </EuiFlyoutHeader>
           <EuiFlyoutBody>
+            {open === 'map' && <ClusterMap r={r} />}
             {open === 'constraints' && <ConstraintPanel r={r} />}
             {open === 'nodes' && <NodeTable r={r} />}
             {open === 'checks' && <WarningsPanel warnings={r.warnings} />}
