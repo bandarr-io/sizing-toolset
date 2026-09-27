@@ -1,11 +1,11 @@
 import { num, type ConstantSet } from '@sizing/constants';
 import type { CostSettings } from './cost.ts';
 import type {
-  ServerGroup, SiteInput, SiteRelationship, TopologyRequest,
+  HostModel, ServerGroup, SiteInput, SiteRelationship, TopologyRequest,
   CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, IndexMode, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
 
-export type Mode = 'forward' | 'reverse' | 'multisite';
+export type Mode = 'forward' | 'reverse' | 'multisite' | 'models';
 
 /**
  * One input model per mode: the engine request itself. Simple and advanced inputs edit the same data;
@@ -22,6 +22,8 @@ export interface AppState {
   cost?: CostSettings;
   /** D32: several clusters on physical servers. Absent until the mode is first used. */
   multisite?: MultiSiteState;
+  /** D33: one site's servers, compared across self-managed, ECK and ECE. */
+  models?: ModelsState;
 }
 
 export const MODELS: { value: DeploymentModel; text: string; disabled?: boolean }[] = [
@@ -290,4 +292,22 @@ export function withSiteCount(ms: MultiSiteState, n: number): MultiSiteState {
   const count = Math.max(1, Math.min(8, Math.round(n)));
   const sites = Array.from({ length: count }, (_, i) => ms.sites[i] ?? { name: siteName(i), workloads: [], servers: [] });
   return { ...ms, sites, leader: Math.min(ms.leader, count - 1) };
+}
+
+// ---- Compare deployment models (D33) ----------------------------------------------------------------
+
+export interface ModelsState {
+  workloads: WorkloadProfile[];
+  servers: ServerGroup[];
+  options: ForwardOptions;
+}
+
+export const MODEL_NAMES: Record<HostModel, string> = { self_managed: 'Self-managed', eck: 'ECK (Kubernetes)', ece: 'ECE' };
+
+export function defaultModels(): ModelsState {
+  return {
+    workloads: [{ ...newWorkload('logs'), rawGbPerDay: 2000, retentionDays: { hot: 30, frozen: 335 } }],
+    servers: defaultServers(),
+    options: { model: 'self_managed' },
+  };
 }

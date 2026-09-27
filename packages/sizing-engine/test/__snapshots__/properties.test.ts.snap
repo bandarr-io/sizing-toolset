@@ -18,7 +18,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     "Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.",
     "Object storage (snapshot repository) for cold and frozen: 100,500 GB, one copy of the data. Not counted in RAM or ERU; excludes other snapshots and backups.",
   ],
-  "constantsHash": "9d57b62d6570c22f313912c66e0fc1e6b1d97b7fbcf662f683022eeedec27d37",
+  "constantsHash": "f4a9927d55dea8905d0e7faf5ba65661f540efd82e60203cd51f8e4af8fff1e7",
   "constraints": [
     {
       "binding": true,

@@ -1,6 +1,6 @@
 import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTemplate, EuiSpacer, EuiText, EuiTitle, EuiToolTip } from '@elastic/eui';
 import type { ConstantSet } from '@sizing/constants';
-import { defaultIndexMode, forward, reverse, sizeTopology, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
+import { compareModels, defaultIndexMode, forward, reverse, sizeTopology, type ModelRow, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
@@ -16,14 +16,16 @@ import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
 import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
 import { useCostDefaults } from './costStore.tsx';
-import { download, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
+import { download, modelsMarkdown, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
+import { ModelsPanel } from './results/ModelsPanel.tsx';
+import { ServerGroups } from './calculator/ServerGroups.tsx';
 import { MultiSiteInputs } from './calculator/MultiSiteInputs.tsx';
 import { TopologyPanel } from './results/TopologyPanel.tsx';
 import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultMultiSite, defaultState, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -120,6 +122,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
   };
 
   if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
+  if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
 
   return (
     <>
@@ -154,6 +157,65 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
 }
 
 type Setter = (f: (s: AppState) => AppState) => void;
+
+/** D33: one site's servers, sized under self-managed, ECK and ECE side by side. */
+function ModelsCalculator({ state, setState, constants }: { state: AppState; setState: Setter; constants: ConstantSet }) {
+  const m = state.models ?? defaultModels();
+  useEffect(() => { if (!state.models) setState((s) => ({ ...s, models: s.models ?? defaultModels() })); }, [state.models, setState]);
+  const outcome = useMemo((): { rows: ModelRow[] } | { error: string } => {
+    try {
+      return { rows: compareModels({ workloads: m.workloads, servers: m.servers, options: m.options }, constants) };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [m, constants]);
+  const setModels = (next: typeof m) => setState((s) => ({ ...s, models: next }));
+  const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
+  const exportAs = (kind: 'md' | 'json') => {
+    if ('error' in outcome) return;
+    const at = new Date().toISOString();
+    if (kind === 'md') download(`${slug(state.name)}-models.md`, modelsMarkdown(state.name, outcome.rows, at), 'text/markdown');
+    else download(`${slug(state.name)}-models.json`, JSON.stringify({ exportedAt: at, engineVersion: ENGINE_VERSION, constantsHash: constants.hash, scenario: state, result: outcome.rows }, null, 2), 'application/json');
+  };
+  const hasLogsdbWorkload = m.workloads.some((p) => defaultIndexMode(p) === 'logsdb');
+
+  return (
+    <>
+      <Toolbar
+        state={state}
+        canExport={!('error' in outcome)}
+        onMode={(mode) => patch({ mode })}
+        onRename={(name) => patch({ name })}
+        onLoad={(s) => setState(() => s)}
+        onReset={() => setState((s) => ({ ...s, models: defaultModels() }))}
+        onExportMd={() => exportAs('md')}
+        onExportJson={() => exportAs('json')}
+      />
+      <EuiSpacer size="l" />
+      <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
+        <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
+          <Section step={1} title="What will the cluster hold?" description="The same workloads are sized under every model.">
+            <WorkloadList workloads={m.workloads} onChange={(workloads) => setModels({ ...m, workloads })} />
+          </Section>
+          <Gap />
+          <Section step={2} title="What servers do they have?" description="One row per group of identical servers. Each model carves them up differently; master servers become the ECE control plane.">
+            <ServerGroups servers={m.servers} onChange={(servers) => setModels({ ...m, servers })} />
+          </Section>
+          <Gap />
+          <Section step={3} title="Deployment" description="Requirements shared by every model.">
+            <DeploymentSettings hideSites hideModel value={deploymentOfForward(m.options)} hasLogsdb={hasLogsdbWorkload}
+              onChange={(d) => setModels({ ...m, options: withForwardDeployment(m.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
+          </Section>
+        </EuiFlexItem>
+        <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
+          {'error' in outcome
+            ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
+            : <ModelsPanel rows={outcome.rows} />}
+        </EuiFlexItem>
+      </EuiFlexGroup>
+    </>
+  );
+}
 
 type TopologyOutcome = { result: TopologyResult; compare?: Partial<Record<SiteRelationship, TopologyResult>> } | { error: string };
 

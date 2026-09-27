@@ -1,5 +1,5 @@
 import type { Constant } from '@sizing/constants';
-import type { SizingResult, TopologyResult, WorkloadProfile } from '@sizing/engine';
+import type { ModelRow, SizingResult, TopologyResult, WorkloadProfile } from '@sizing/engine';
 import type { CostReport } from './cost.ts';
 import { fmtMoney } from './format.ts';
 import type { AppState } from './state.ts';
@@ -150,5 +150,28 @@ export function topologyMarkdown(name: string, t: TopologyResult, exportedAt: st
   }
   L.push('## Assumptions', '', ...[...t.assumptions, ...(t.sites[0]?.result.assumptions ?? [])].map((a) => `- ${a}`), '');
   L.push('---', `Engine ${t.sites[0]?.result.engineVersion ?? ''} · constants ${t.sites[0]?.result.constantsHash.slice(0, 12) ?? ''} · exported ${exportedAt}`);
+  return L.join('\n');
+}
+
+const MODEL_LABEL: Record<string, string> = { self_managed: 'Self-managed', eck: 'ECK (Kubernetes)', ece: 'ECE' };
+
+/** D33: Markdown for a deployment-model comparison on one site's servers. */
+export function modelsMarkdown(name: string, rows: readonly ModelRow[], exportedAt: string): string {
+  const L: string[] = [`# ${name}: deployment models compared`, ''];
+  L.push('> **Estimate, not benchmark.** ECK and ECE overheads are cautious defaults. Validate with Rally and the platform team.', '');
+  L.push('| Model | Fits | Headroom | Servers needed | ERU | Best on |', '|---|---|---:|---:|---:|---|');
+  for (const r of rows) {
+    const s = r.topology.headroom?.scale;
+    const head = s === undefined ? '–' : Number.isFinite(s) ? `${n(s, 2)}×` : 'unlimited';
+    L.push(`| ${MODEL_LABEL[r.model]} | ${r.topology.fitsAll ? 'yes' : 'no'} | ${head} | ${r.topology.totals.neededServers} / ${r.topology.totals.availableServers} | ${r.eru} | ${r.best.join(', ') || '–'} |`);
+  }
+  L.push('');
+  for (const r of rows) {
+    L.push(`## ${MODEL_LABEL[r.model]}`, '', ...r.requirements.map((q) => `- ${q}`), '');
+    L.push('| Role | Servers needed | Available | Nodes per server | Status |', '|---|---:|---:|---:|---|');
+    for (const f of r.topology.sites[0]!.fit) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${f.status} |`);
+    L.push('');
+  }
+  L.push('---', `Engine ${rows[0]?.topology.sites[0]?.result.engineVersion ?? ''} · constants ${rows[0]?.topology.sites[0]?.result.constantsHash.slice(0, 12) ?? ''} · exported ${exportedAt}`);
   return L.join('\n');
 }

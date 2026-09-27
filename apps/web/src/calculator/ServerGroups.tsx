@@ -110,7 +110,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
           ))} />
         </EuiPopover>
         <EuiText size="xs" color="subdued">
-          {total} servers. Nodes per server defaults to RAM ÷ 64 GB for data and master servers, 1 for the rest. Failover reserves a whole server per tier.
+          {total} servers. Nodes per server defaults to RAM ÷ 64 GB for data servers; masters, frozen, ML, Kibana, Fleet and APM run one per server. Failover reserves a whole server per tier.
         </EuiText>
       </div>
     </>

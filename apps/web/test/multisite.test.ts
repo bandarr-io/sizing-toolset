@@ -49,3 +49,34 @@ describe('multi-site state (D32)', () => {
     expect(s.multisite).toBeUndefined();
   });
 });
+
+describe('compare deployment models (D33)', () => {
+  it('on the default 35 servers only self-managed fits: 32 GB master servers are too small for ECK master pods and the ECE control plane', async () => {
+    const { compareModels } = await import('@sizing/engine');
+    const { defaultModels } = await import('../src/state.ts');
+    const m = defaultModels();
+    const rows = compareModels({ workloads: m.workloads, servers: m.servers, options: m.options });
+    expect(rows.map((r) => [r.model, r.topology.fitsAll])).toEqual([['self_managed', true], ['eck', false], ['ece', false]]);
+    expect(rows[0]!.best).toEqual(expect.arrayContaining(['eru', 'headroom', 'servers']));
+  });
+
+  it('with 128 GB master servers, ECK and ECE fit too, and the table picks winners among them', async () => {
+    const { compareModels } = await import('@sizing/engine');
+    const { defaultModels } = await import('../src/state.ts');
+    const m = defaultModels();
+    const servers = m.servers.map((g) => (g.role === 'master' ? { ...g, ramGb: 128 } : g));
+    const rows = compareModels({ workloads: m.workloads, servers, options: m.options });
+    expect(rows.every((r) => r.topology.fitsAll)).toBe(true);
+    expect(rows.find((r) => r.model === 'ece')!.eru).toBeGreaterThan(rows.find((r) => r.model === 'eck')!.eru);
+  });
+
+  it('exports a Markdown comparison', async () => {
+    const { compareModels } = await import('@sizing/engine');
+    const { defaultModels } = await import('../src/state.ts');
+    const { modelsMarkdown } = await import('../src/export.ts');
+    const m = defaultModels();
+    const md = modelsMarkdown('Deal', compareModels({ workloads: m.workloads, servers: m.servers, options: m.options }), '2026-09-27T00:00:00Z');
+    expect(md).toContain('| ECE |');
+    expect(md).toContain('control-plane hosts');
+  });
+});

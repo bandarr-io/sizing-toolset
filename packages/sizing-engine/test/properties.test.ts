@@ -129,5 +129,5 @@ describe('§11.3 properties', () => {
     }));
   });
 
-  it.todo('P6 units: ECK GiB/GB round-trip (ECK adapter is out of MVP scope)');
+  // P6 (ECK GiB/GB round-trip within 0.1%) lives with the ECK adapter in test/models.test.ts.
 });

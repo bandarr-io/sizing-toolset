@@ -21,11 +21,12 @@ const STATUS: Record<RoleFit['status'], { color: string; text: string }> = {
 
 function scaleText(scale: number): string {
   if (!Number.isFinite(scale)) return 'Not limited by these servers';
+  if (scale === 0) return 'Does not fit at any volume';
   if (scale >= 1) return `Room for ${fmtNum(scale, 2)}× today's data volume`;
   return `Holds ${fmtNum(scale * 100, 0)}% of today's data volume`;
 }
 
-function FitRow({ f }: { f: RoleFit }) {
+export function FitRow({ f }: { f: RoleFit }) {
   const label = ROLE_LABEL[f.role as keyof typeof ROLE_LABEL] ?? f.role;
   const measurable = f.status === 'ok' || f.status === 'short';
   const u = f.availableServers > 0 ? f.neededServers / f.availableServers : 1;
@@ -39,7 +40,10 @@ function FitRow({ f }: { f: RoleFit }) {
       </EuiFlexItem>
       <EuiFlexItem grow={false} style={{ width: 150, textAlign: 'right' }}>
         <EuiText size="xs">
-          {f.status === 'idle' ? `${f.availableServers} servers` : `${f.neededServers} of ${f.availableServers} servers`}
+          {f.status === 'idle' ? `${f.availableServers} servers`
+            : f.nodesPerServer === 0 ? 'node larger than these servers'
+            : f.status === 'short' && f.neededServers <= f.availableServers ? `${f.availableServers} servers, too small`
+            : `${f.neededServers} of ${f.availableServers} servers`}
           {f.nodesPerServer > 1 && <span style={{ opacity: 0.7 }}> ({f.nodesPerServer} nodes each)</span>}
         </EuiText>
       </EuiFlexItem>

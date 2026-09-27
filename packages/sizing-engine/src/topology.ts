@@ -31,8 +31,13 @@ export interface SiteInput {
   servers: ServerGroup[];
 }
 
+/** D33: how Elasticsearch runs on the servers. Decides node layout, overhead and licensing. */
+export type HostModel = 'self_managed' | 'eck' | 'ece';
+
 export interface TopologyRequest {
   relationship: SiteRelationship;
+  /** D33: default self_managed. */
+  hostModel?: HostModel;
   sites: SiteInput[];
   /** Scenario options shared by every site (model, air-gapped, FIPS, ratios...). Node sizes come from the servers. */
   options: ForwardOptions;
@@ -56,6 +61,8 @@ export interface RoleFit {
 
 export interface SiteResult {
   name: string;
+  /** License units under the request's host model (self-managed ERU, ECK pod GiB, ECE allocator capacity). */
+  license: { eru: number; math: MathStep[] };
   /** Workload IDs this site holds; followed data is prefixed with the source site. */
   holds: string[];
   result: SizingResult;
@@ -74,11 +81,14 @@ export interface TopologyResult {
 }
 
 const DATA_TIERS = new Set<string>(['hot', 'warm', 'cold', 'frozen', 'content']);
-const SINGLE_NODE_ROLES = new Set<string>(['frozen', 'ml', 'kibana', 'fleet', 'apm']);
+const SINGLE_NODE_ROLES = new Set<string>(['frozen', 'ml', 'master', 'kibana', 'fleet', 'apm']);
+/** Roles whose instances must sit on different servers: masters for quorum, the rest as HA pairs. */
+const SPREAD_ROLES = new Set<string>(['master', 'kibana', 'fleet', 'apm']);
 
 /**
- * Nodes on one server. Data and master servers are split into nodes of at most node_ram_practical_max_gb
- * (HV1); frozen and ML may exceed it and supporting services run once per server.
+ * Nodes on one server. Data servers are split into nodes of at most node_ram_practical_max_gb (HV1);
+ * frozen and ML may exceed it; masters and supporting services run once per server so losing a server
+ * costs one master vote or one member of an HA pair.
  */
 export function nodesPerServer(c: ConstantSet, g: ServerGroup): number {
   if (g.nodesPerServer !== undefined) {
@@ -90,6 +100,69 @@ export function nodesPerServer(c: ConstantSet, g: ServerGroup): number {
   if (SINGLE_NODE_ROLES.has(g.role)) return 1;
   return Math.max(1, Math.floor(g.ramGb / num(c, 'node_ram_practical_max_gb') + 1e-9));
 }
+
+export interface ServerLayout {
+  /** Elasticsearch nodes (processes, pods or instances) per server. */
+  nodes: number;
+  nodeRamGb: number;
+  nodeDiskGb: number;
+  nodeVcpu: number;
+  /** RAM available to Elasticsearch on the server after the model's own overhead. */
+  usableRamGb: number;
+  expr: string;
+  keys: string[];
+}
+
+/** 1 GiB = 2^30 bytes; the engine's GB are 10^9 bytes. */
+export const gbToGib = (gb: number) => (gb * 1e9) / 2 ** 30;
+export const gibToGb = (gib: number) => (gib * 2 ** 30) / 1e9;
+
+/**
+ * D33: how one server is carved up under each host model.
+ * - self_managed: RAM ÷ node_ram_practical_max_gb nodes (data and master roles), else 1.
+ * - eck: RAM minus the Kubernetes reserve, split into pods of at most node_ram_practical_max_gb.
+ * - ece: allocator planned to ece.allocator_planning_fraction of RAM; instances of at most node_ram_practical_max_gb.
+ * A nodes-per-server value on the row always wins.
+ */
+export function serverLayout(c: ConstantSet, g: ServerGroup, model: HostModel = 'self_managed'): ServerLayout {
+  const max = num(c, 'node_ram_practical_max_gb');
+  const explicit = g.nodesPerServer !== undefined ? nodesPerServer(c, g) : undefined;
+  const single = SINGLE_NODE_ROLES.has(g.role);
+  if (model === 'eck') {
+    const reserve = num(c, 'eck.k8s_reserve_ram_gb');
+    const vReserve = num(c, 'eck.k8s_reserve_vcpu');
+    const usable = Math.max(0, g.ramGb - reserve);
+    const n = explicit ?? (single ? 1 : Math.max(1, ceilEps(usable / max)));
+    return {
+      nodes: n, nodeRamGb: usable / n, nodeDiskGb: g.diskGb / n, nodeVcpu: Math.max(0, g.vcpu - vReserve) / n, usableRamGb: usable,
+      expr: `(${fmt(g.ramGb)} − ${reserve} GB Kubernetes reserve) / ${n} pod${n === 1 ? '' : 's'}`,
+      keys: ['eck.k8s_reserve_ram_gb', 'eck.k8s_reserve_vcpu', ...(explicit === undefined && !single ? ['node_ram_practical_max_gb'] : [])],
+    };
+  }
+  if (model === 'ece') {
+    const plan = num(c, 'ece.allocator_planning_fraction');
+    const usable = g.ramGb * plan;
+    const n = explicit ?? (single ? 1 : Math.max(1, Math.floor(usable / max + 1e-9)));
+    const nodeRam = explicit !== undefined || single ? usable / n : Math.min(max, usable / n);
+    return {
+      nodes: n, nodeRamGb: nodeRam, nodeDiskGb: g.diskGb / n, nodeVcpu: g.vcpu / n, usableRamGb: usable,
+      expr: `${fmt(g.ramGb)} GB × ${plan} planned = ${fmt(usable)} GB → ${n} × ${fmt(nodeRam)} GB instance${n === 1 ? '' : 's'}`,
+      keys: ['ece.allocator_planning_fraction', ...(explicit === undefined && !single ? ['node_ram_practical_max_gb'] : [])],
+    };
+  }
+  const n = nodesPerServer(c, g);
+  return {
+    nodes: n, nodeRamGb: g.ramGb / n, nodeDiskGb: g.diskGb / n, nodeVcpu: g.vcpu / n, usableRamGb: g.ramGb,
+    expr: `${fmt(g.ramGb)} GB / ${n} node${n === 1 ? '' : 's'}`,
+    keys: explicit === undefined && !single ? ['node_ram_practical_max_gb'] : [],
+  };
+}
+
+const MODEL_TEXT: Record<HostModel, (c: ConstantSet) => string> = {
+  self_managed: (c) => `Self-managed: data servers split into nodes of at most ${num(c, 'node_ram_practical_max_gb')} GB; frozen, ML, masters, Kibana, Fleet and APM run one node per server unless nodes per server is set.`,
+  eck: (c) => `ECK: each server keeps ${num(c, 'eck.k8s_reserve_ram_gb')} GB RAM and ${num(c, 'eck.k8s_reserve_vcpu')} vCPU for Kubernetes; the rest is split into pods of at most ${num(c, 'node_ram_practical_max_gb')} GB. The Kubernetes control plane is not counted.`,
+  ece: (c) => `ECE: master-role servers are the ${num(c, 'ece.control_plane_hosts')} control-plane hosts (${num(c, 'ece.control_plane_ram_gb')} GB each for coordinator, director and proxy); allocators are planned to ${num(c, 'ece.allocator_planning_fraction') * 100}% of RAM with instances of at most ${num(c, 'node_ram_practical_max_gb')} GB.`,
+};
 
 const RELATIONSHIP_TEXT: Record<SiteRelationship, string> = {
   independent: 'Independent clusters: each site holds only the data it ingests.',
@@ -116,12 +189,12 @@ function siteOptions(c: ConstantSet, req: TopologyRequest, site: SiteInput): For
     // One server spec per tier: the first group listed for it.
     const g = site.servers.find((x) => x.role === tier && x.count > 0);
     if (!g) continue;
-    const n = nodesPerServer(c, g);
+    const l = serverLayout(c, g, req.hostModel);
     const ratio = req.options.nodes?.[tier]?.memDiskRatio;
     nodes[tier] = {
       ...(ratio !== undefined ? { memDiskRatio: ratio } : {}),
-      ramGb: g.ramGb / n, diskGb: g.diskGb / n, vcpu: g.vcpu / n, diskType: g.diskType,
-      ...(g.diskWriteMBps !== undefined ? { diskWriteMBps: g.diskWriteMBps / n } : {}),
+      ramGb: l.nodeRamGb, diskGb: l.nodeDiskGb, vcpu: l.nodeVcpu, diskType: g.diskType,
+      ...(g.diskWriteMBps !== undefined ? { diskWriteMBps: g.diskWriteMBps / l.nodes } : {}),
     };
   }
   return {
@@ -131,18 +204,17 @@ function siteOptions(c: ConstantSet, req: TopologyRequest, site: SiteInput): For
   };
 }
 
-function fitFor(c: ConstantSet, result: SizingResult, site: SiteInput): RoleFit[] {
+function fitFor(c: ConstantSet, result: SizingResult, site: SiteInput, model: HostModel = 'self_managed'): RoleFit[] {
   const failover = num(c, 'failover_nodes_per_tier');
   const out: RoleFit[] = [];
   const serversFor = (role: string) => site.servers.filter((g) => g.role === role && g.count > 0);
-  const layoutKeys = (g: ServerGroup | undefined) =>
-    g && g.nodesPerServer === undefined && !SINGLE_NODE_ROLES.has(g.role) ? ['node_ram_practical_max_gb'] : [];
 
   for (const t of result.tiers) {
     if (t.nodes <= 0) continue;
     const groups = serversFor(t.tier);
     const g = groups[0];
-    const nps = g ? nodesPerServer(c, g) : 1;
+    const l = g ? serverLayout(c, g, model) : undefined;
+    const nps = l?.nodes ?? 1;
     const available = groups.reduce((s, x) => s + x.count, 0);
     const base = Math.max(0, t.nodes - failover);
     // Failover is a whole server: losing one takes all of its nodes.
@@ -151,14 +223,41 @@ function fitFor(c: ConstantSet, result: SizingResult, site: SiteInput): RoleFit[
     out.push({
       role: t.tier, neededNodes: t.nodes, nodesPerServer: nps, neededServers: needed, availableServers: available, status, fits: status === 'ok',
       math: [
-        step(`${t.tier} servers needed`, `ROUNDUP(${base} nodes / ${nps} per server) + ${failover} failover server`, needed, ['failover_nodes_per_tier', ...layoutKeys(g)]),
+        ...(l ? [step(`${t.tier} nodes per server`, l.expr, nps, l.keys)] : []),
+        step(`${t.tier} servers needed`, `ROUNDUP(${base} nodes / ${nps} per server) + ${failover} failover server`, needed, ['failover_nodes_per_tier']),
         step(`${t.tier} servers available`, g ? `${available} × ${fmt(g.ramGb)} GB servers` : 'none listed', available, []),
       ],
     });
   }
 
+  // ECE: the master-role servers are the control-plane hosts; ES master instances use what they have left.
+  const masterOverhead = result.overhead.find((o) => o.role === 'master' && o.count > 0);
+  if (model === 'ece') {
+    const groups = serversFor('master');
+    const g = groups[0];
+    const hosts = num(c, 'ece.control_plane_hosts');
+    const cpRam = num(c, 'ece.control_plane_ram_gb');
+    const plan = num(c, 'ece.allocator_planning_fraction');
+    const available = groups.reduce((s, x) => s + x.count, 0);
+    const bigEnough = !!g && g.ramGb >= cpRam;
+    const spare = g ? Math.max(0, (g.ramGb - cpRam) * plan) : 0;
+    // One master per host: two on one host would lose two votes with it.
+    const perHost = masterOverhead ? Math.min(1, Math.floor(spare / masterOverhead.ramGb + 1e-9)) : 0;
+    const forMasters = masterOverhead ? (perHost > 0 ? ceilEps(masterOverhead.count / perHost) : Infinity) : 0;
+    const needed = Math.max(hosts, forMasters);
+    const status = !g ? 'missing' : bigEnough && Number.isFinite(needed) && needed <= available ? 'ok' : 'short';
+    out.push({
+      role: 'master', neededNodes: masterOverhead?.count ?? 0, nodesPerServer: Math.max(1, perHost), neededServers: Number.isFinite(needed) ? needed : hosts,
+      availableServers: available, status, fits: status === 'ok',
+      math: [
+        step('ECE control plane hosts', `${hosts} hosts, each ≥ ${cpRam} GB (coordinator + director + proxy)${g ? `; listed: ${available} × ${fmt(g.ramGb)} GB` : '; none listed'}`, hosts, ['ece.control_plane_hosts', 'ece.control_plane_ram_gb']),
+        ...(masterOverhead ? [step('ES master instances on control-plane hosts', `(${fmt(g?.ramGb ?? 0)} − ${cpRam}) × ${plan} = ${fmt(spare)} GB spare / ${fmt(masterOverhead.ramGb)} GB = ${perHost} per host`, perHost, ['ece.allocator_planning_fraction'])] : []),
+      ],
+    });
+  }
+
   for (const o of result.overhead) {
-    if (o.count <= 0) continue;
+    if (o.count <= 0 || (model === 'ece' && o.role === 'master')) continue;
     const groups = serversFor(o.role);
     const g = groups[0];
     const available = groups.reduce((s, x) => s + x.count, 0);
@@ -167,20 +266,51 @@ function fitFor(c: ConstantSet, result: SizingResult, site: SiteInput): RoleFit[
         math: [step(`${o.role} servers`, `${o.count} needed; no ${o.role} servers listed (co-located or hosted elsewhere)`, o.count, [])] });
       continue;
     }
-    const nps = nodesPerServer(c, g);
-    const needed = ceilEps(o.count / nps);
-    const status = needed <= available ? 'ok' : 'short';
-    out.push({ role: o.role, neededNodes: o.count, nodesPerServer: nps, neededServers: needed, availableServers: available, status, fits: status === 'ok',
-      math: [step(`${o.role} servers needed`, `ROUNDUP(${o.count} nodes / ${nps} per server)`, needed, layoutKeys(g))] });
+    // Self-managed runs supporting services per server; ECK and ECE pack pods or instances of the role's size.
+    const l = serverLayout(c, g, model);
+    const packed = Math.floor(l.usableRamGb / o.ramGb + 1e-9);
+    const nps = model === 'self_managed' || g.nodesPerServer !== undefined ? l.nodes
+      : SPREAD_ROLES.has(o.role) ? Math.min(1, packed) : packed;
+    const needed = nps > 0 ? ceilEps(o.count / nps) : Infinity;
+    const status = Number.isFinite(needed) && needed <= available ? 'ok' : 'short';
+    out.push({ role: o.role, neededNodes: o.count, nodesPerServer: Math.max(nps, 0), neededServers: Number.isFinite(needed) ? needed : o.count, availableServers: available, status, fits: status === 'ok',
+      math: [step(`${o.role} servers needed`, nps > 0 ? `ROUNDUP(${o.count} × ${fmt(o.ramGb)} GB / ${nps} per server)` : `${fmt(o.ramGb)} GB does not fit in ${fmt(l.usableRamGb)} GB usable`, Number.isFinite(needed) ? needed : 0, l.keys)] });
   }
 
   // Servers listed for a role the sizing does not use.
   for (const g of site.servers) {
     if (g.count <= 0 || out.some((f) => f.role === g.role)) continue;
-    out.push({ role: g.role, neededNodes: 0, nodesPerServer: nodesPerServer(c, g), neededServers: 0, availableServers: g.count, status: 'idle', fits: true,
+    out.push({ role: g.role, neededNodes: 0, nodesPerServer: serverLayout(c, g, model).nodes, neededServers: 0, availableServers: g.count, status: 'idle', fits: true,
       math: [step(`${g.role} servers`, 'nothing in this sizing uses this role', 0, [])] });
   }
   return out;
+}
+
+/** D33: license units under each host model. */
+function licenseFor(c: ConstantSet, model: HostModel, result: SizingResult, fit: RoleFit[], site: SiteInput): SiteResult['license'] {
+  const per = num(c, 'eru_gb');
+  if (model === 'eck') {
+    const counted = c.byKey.get('eru.counted_components')?.value as Record<string, boolean> | undefined;
+    const podGb = result.tiers.reduce((s, t) => s + t.nodes * t.ramGb, 0)
+      + result.overhead.filter((o) => o.countsTowardLicense).reduce((s, o) => s + o.count * o.ramGb, 0);
+    const gib = gbToGib(podGb);
+    const eru = ceilEps(gib / per);
+    return { eru, math: [
+      step('ECK pod memory limits', `${fmt(podGb)} GB = ${fmt(gib)} GiB (Elasticsearch, Kibana, APM; Elastic Agent not counted)`, gib, counted ? ['eru.counted_components'] : []),
+      step('ERU (ECK)', `ROUNDUP(${fmt(gib)} GiB / ${per})`, eru, ['eru_gb']),
+    ] };
+  }
+  if (model === 'ece') {
+    const ramOf = (role: string) => site.servers.find((g) => g.role === role && g.count > 0)?.ramGb ?? 0;
+    const used = fit.filter((f) => f.status !== 'idle' && f.status !== 'unplaced');
+    const hostGb = used.reduce((s, f) => s + f.neededServers * ramOf(f.role), 0);
+    const eru = ceilEps(hostGb / per);
+    return { eru, math: [
+      step('ECE allocator capacity', used.map((f) => `${f.neededServers} × ${fmt(ramOf(f.role))} GB ${f.role}`).join(' + ') || '0', hostGb, []),
+      step('ERU (ECE)', `ROUNDUP(${fmt(hostGb)} GB / ${per})`, eru, ['eru_gb']),
+    ] };
+  }
+  return { eru: result.licenseUnits.value, math: result.licenseUnits.math };
 }
 
 function scaleWorkloads(ws: readonly WorkloadProfile[], s: number): WorkloadProfile[] {
@@ -195,9 +325,10 @@ function scaleWorkloads(ws: readonly WorkloadProfile[], s: number): WorkloadProf
 function evaluate(c: ConstantSet, req: TopologyRequest): SiteResult[] {
   return req.sites.map((site, i) => {
     const held = holdings(req, i);
+    const model = req.hostModel ?? 'self_managed';
     const result = forward({ workloads: held, options: siteOptions(c, req, site) }, c);
-    const fit = fitFor(c, result, site);
-    return { name: site.name, holds: held.map((w) => w.id), result, fit, fits: fit.every((f) => f.fits) };
+    const fit = fitFor(c, result, site, model);
+    return { name: site.name, license: licenseFor(c, model, result, fit, site), holds: held.map((w) => w.id), result, fit, fits: fit.every((f) => f.fits) };
   });
 }
 
@@ -254,7 +385,7 @@ export function sizeTopology(req: TopologyRequest, c: ConstantSet = defaultConst
   const dataFits = (s: SiteResult) => s.fit.filter((f) => f.status !== 'unplaced' && f.status !== 'idle');
   const totals = {
     ramGb: sites.reduce((s, x) => s + x.result.totalRamGb, 0),
-    eru: sites.reduce((s, x) => s + x.result.licenseUnits.value, 0),
+    eru: sites.reduce((s, x) => s + x.license.eru, 0),
     objectStorageGb: sites.reduce((s, x) => s + (x.result.objectStorage?.gb ?? 0), 0),
     neededServers: sites.reduce((s, x) => s + dataFits(x).reduce((a, f) => a + f.neededServers, 0), 0),
     availableServers: req.sites.reduce((s, x) => s + x.servers.reduce((a, g) => a + g.count, 0), 0),
@@ -264,9 +395,79 @@ export function sizeTopology(req: TopologyRequest, c: ConstantSet = defaultConst
     relationship: req.relationship, sites, fitsAll, totals, ...(headroom ? { headroom } : {}),
     assumptions: [
       RELATIONSHIP_TEXT[req.relationship],
-      `Servers are split into nodes of at most ${num(c, 'node_ram_practical_max_gb')} GB RAM for data and master roles (frozen, ML, Kibana, Fleet and APM run one node per server) unless nodes per server is set.`,
+      MODEL_TEXT[req.hostModel ?? 'self_managed'](c),
       'Failover reserves one whole server per tier: losing a server loses all of its nodes.',
       'Totals add the sites; each cluster is licensed separately, so ERU is summed per site.',
     ],
   };
+}
+
+// ---- D33: compare deployment models on the same servers ----------------------------------------
+
+export interface ModelComparisonRequest {
+  workloads: WorkloadProfile[];
+  servers: ServerGroup[];
+  options: ForwardOptions;
+}
+
+export type BestOn = 'eru' | 'headroom' | 'servers';
+
+export interface ModelRow {
+  model: HostModel;
+  topology: TopologyResult;
+  eru: number;
+  eruMath: MathStep[];
+  /** What running this model asks of the customer. */
+  requirements: string[];
+  /** Measures on which this model is best (among models that fit, or all when none fit). */
+  best: BestOn[];
+}
+
+export const HOST_MODELS: HostModel[] = ['self_managed', 'eck', 'ece'];
+
+function requirementsFor(c: ConstantSet, model: HostModel): string[] {
+  if (model === 'eck') {
+    return [
+      'Needs a Kubernetes platform and the skills to run it; the Kubernetes control plane is not counted here.',
+      `Keeps ${num(c, 'eck.k8s_reserve_ram_gb')} GB RAM and ${num(c, 'eck.k8s_reserve_vcpu')} vCPU per server for Kubernetes, plus ${num(c, 'eck.operator_ram_gb')} GB for the operator.`,
+      'Licenses pod memory limits (GiB); Elastic Agent and Beats pods are free.',
+      'Works air-gapped with a private image registry.',
+    ];
+  }
+  if (model === 'ece') {
+    return [
+      `Needs ${num(c, 'ece.control_plane_hosts')} control-plane hosts with at least ${num(c, 'ece.control_plane_ram_gb')} GB RAM each.`,
+      'Licenses the full RAM of every allocator host used, busy or not.',
+      `Plans allocators to ${num(c, 'ece.allocator_planning_fraction') * 100}% of RAM; gives a UI and API for many clusters, upgrades and snapshots.`,
+      'Works air-gapped with an offline install.',
+    ];
+  }
+  return [
+    'You install, upgrade, secure and scale Elasticsearch yourself.',
+    'Least overhead per server; licenses node RAM of Elasticsearch, Kibana and APM.',
+    'Works air-gapped.',
+  ];
+}
+
+/** D33: size the same workloads on the same servers under each host model, for a trade-off table. */
+export function compareModels(req: ModelComparisonRequest, c: ConstantSet = defaultConstants): ModelRow[] {
+  const rows: ModelRow[] = HOST_MODELS.map((model) => {
+    const topology = sizeTopology({
+      relationship: 'independent', hostModel: model, options: req.options,
+      sites: [{ name: 'Servers', workloads: req.workloads, servers: req.servers }],
+    }, c);
+    const site = topology.sites[0]!;
+    return { model, topology, eru: topology.totals.eru, eruMath: site.license.math, requirements: requirementsFor(c, model), best: [] };
+  });
+  const pool = rows.some((r) => r.topology.fitsAll) ? rows.filter((r) => r.topology.fitsAll) : rows;
+  const mark = (key: BestOn, score: (r: ModelRow) => number, better: 'low' | 'high') => {
+    const vals = pool.map(score).filter((v) => !Number.isNaN(v));
+    if (!vals.length) return;
+    const target = better === 'low' ? Math.min(...vals) : Math.max(...vals);
+    for (const r of pool) if (score(r) === target) r.best.push(key);
+  };
+  mark('eru', (r) => r.eru, 'low');
+  mark('headroom', (r) => r.topology.headroom?.scale ?? NaN, 'high');
+  mark('servers', (r) => r.topology.totals.neededServers, 'low');
+  return rows;
 }
