@@ -5,7 +5,7 @@ import { defaultIndexMode, type SiteInput, type WorkloadProfile } from '@sizing/
 import { useState, type ReactNode } from 'react';
 import { NumField, SelectField } from '../components/Fields.tsx';
 import {
-  deploymentOfForward, RELATIONSHIPS, withForwardDeployment, withSiteCount, type AppState, type MultiSiteState,
+  deploymentOfForward, modelOptionsFor, RELATIONSHIPS, withForwardDeployment, withSiteCount, type AppState, type MultiSiteState,
 } from '../state.ts';
 import { Gap, Section } from '../ui/Section.tsx';
 import { DeploymentSettings } from './DeploymentSettings.tsx';
@@ -138,8 +138,8 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
       </Section>
       <Gap />
 
-      <Section step={4} title="Deployment" description="Shared by every site.">
-        <DeploymentSettings hideSites value={deploymentOfForward(ms.options)} hasLogsdb={hasLogsdb}
+      <Section step={4} title="Deployment" description="Shared by every site. Self-managed, ECK and ECE each carve the servers differently.">
+        <DeploymentSettings hideSites modelOptions={modelOptionsFor('multisite')} value={deploymentOfForward(ms.options)} hasLogsdb={hasLogsdb}
           onChange={(d) => set({ ...ms, options: withForwardDeployment(ms.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
       </Section>
     </>

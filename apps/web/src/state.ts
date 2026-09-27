@@ -26,7 +26,10 @@ export interface AppState {
   models?: ModelsState;
 }
 
-export const MODELS: { value: DeploymentModel; text: string; disabled?: boolean }[] = [
+export type ModelOption = { value: DeploymentModel; text: string; disabled?: boolean };
+
+/** Default list; see modelOptionsFor for what each mode offers. */
+export const MODELS: ModelOption[] = [
   { value: 'self_managed', text: 'Self-managed' },
   { value: 'eck', text: 'ECK (coming in v2)', disabled: true },
   { value: 'ece', text: 'ECE (coming in v2)', disabled: true },
@@ -284,7 +287,8 @@ export function topologyRequest(ms: MultiSiteState, relationship: SiteRelationsh
     const ingests = relationship !== 'dr' || i === ms.leader;
     return { name: s.name, servers: template.servers, workloads: ingests ? template.workloads : [] };
   });
-  return { relationship, sites, options: ms.options, leader: ms.leader };
+  const hostModel = (HOST_MODEL_VALUES as string[]).includes(ms.options.model) ? (ms.options.model as HostModel) : 'self_managed';
+  return { relationship, sites, options: ms.options, leader: ms.leader, hostModel };
 }
 
 /** Add or remove sites, keeping existing ones. */
@@ -310,4 +314,40 @@ export function defaultModels(): ModelsState {
     servers: defaultServers(),
     options: { model: 'self_managed' },
   };
+}
+
+// ---- Deployment model selector per mode (D34) -----------------------------------------------------
+
+/** Models that run on the customer's servers; the server-based modes size them directly. */
+export const HOST_MODEL_VALUES: DeploymentModel[] = ['self_managed', 'eck', 'ece'];
+
+/**
+ * What the selector offers in each mode. Node-based modes (forward, reverse) size self-managed; choosing
+ * ECK or ECE there opens Compare models, which needs servers. Server-based modes size all three.
+ */
+export function modelOptionsFor(mode: Mode): ModelOption[] {
+  const cloud: ModelOption[] = [
+    { value: 'ech', text: 'Elastic Cloud Hosted (coming in v2)', disabled: true },
+    { value: 'serverless', text: 'Serverless (coming in v2)', disabled: true },
+  ];
+  if (mode === 'multisite' || mode === 'models') {
+    return [
+      { value: 'self_managed', text: 'Self-managed' },
+      { value: 'eck', text: 'ECK (Kubernetes)' },
+      { value: 'ece', text: 'ECE' },
+      ...cloud.map((o) => ({ ...o, text: o.text.replace('(coming in v2)', '(cloud; not on these servers)') })),
+    ];
+  }
+  return [
+    { value: 'self_managed', text: 'Self-managed' },
+    { value: 'eck', text: 'ECK: compare on real servers →' },
+    { value: 'ece', text: 'ECE: compare on real servers →' },
+    ...cloud,
+  ];
+}
+
+/** ECK or ECE picked in a node-based mode: open Compare models with the same workloads and settings. */
+export function redirectToModels(s: AppState, workloads: WorkloadProfile[], options: ForwardOptions): AppState {
+  const base = s.models ?? defaultModels();
+  return { ...s, mode: 'models', models: { ...base, workloads, options: { ...options, model: 'self_managed', sites: 1, ccrMode: 'none' } } };
 }

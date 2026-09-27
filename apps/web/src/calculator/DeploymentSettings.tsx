@@ -42,7 +42,7 @@ export function CpuThroughputField({ value, onChange }: { value: number | undefi
 }
 
 /** Deployment facts shared by forward and reverse. Shown once, in one place; the step itself folds, so nothing hides behind a toggle. */
-export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more, hideSites = false, hideModel = false }: {
+export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more, hideSites = false, hideModel = false, modelOptions = MODELS }: {
   value: Deployment;
   onChange: (d: Deployment) => void;
   /** Only offer the full-LogsDB licensing switch when a LogsDB workload exists. */
@@ -54,13 +54,15 @@ export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more, 
   hideSites?: boolean;
   /** Compare-models mode evaluates every model, so there is nothing to pick. */
   hideModel?: boolean;
+  /** D34: what this mode can size (see modelOptionsFor). */
+  modelOptions?: typeof MODELS;
 }) {
   const set = (patch: Partial<Deployment>) => onChange({ ...value, ...patch });
   const ccrOptions = reverse ? CCR.slice(0, 2).map((o) => (o.value === 'unidirectional' ? { ...o, text: 'Cross-cluster replication in use' } : o)) : CCR;
   return (
     <>
       <EuiFlexGrid columns={2} gutterSize="l">
-        {!hideModel && <EuiFlexItem><SelectField label="Deployment model" value={value.model} options={MODELS} onChange={(model) => set({ model })} /></EuiFlexItem>}
+        {!hideModel && <EuiFlexItem><SelectField label="Deployment model" value={value.model} options={modelOptions} onChange={(model) => set({ model })} /></EuiFlexItem>}
         {!hideSites && <EuiFlexItem>
           <NumField label="Sites" value={value.sites} step={1} min={1} onChange={(sites) => set({ sites: Math.max(1, sites ?? 1) })}
             helpText={value.sites > 1 ? 'Node counts are per site; totals cover all sites.' : undefined} />

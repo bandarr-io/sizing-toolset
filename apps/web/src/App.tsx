@@ -25,7 +25,7 @@ import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultModels, defaultMultiSite, defaultState, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -264,6 +264,7 @@ function MultiSiteCalculator({ state, setState, constants }: { state: AppState; 
           {'error' in outcome
             ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
             : <TopologyPanel result={outcome.result} {...(outcome.compare ? { compare: outcome.compare } : {})}
+                modelName={MODEL_NAMES[topologyRequest(ms).hostModel ?? 'self_managed']}
                 onPick={(relationship) => setState((s) => ({ ...s, multisite: { ...(s.multisite ?? defaultMultiSite()), relationship } }))} />}
         </EuiFlexItem>
       </EuiFlexGroup>
@@ -289,8 +290,10 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
     <>
       <Section step={1} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings
-          value={deployment} hasLogsdb={hasLogsdb(f.workloads)}
-          onChange={(d) => setForward({ ...f, options: withForwardDeployment(f.options, d) })}
+          value={deployment} hasLogsdb={hasLogsdb(f.workloads)} modelOptions={modelOptionsFor('forward')}
+          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
+            ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
+            : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
           more={
             <>
               <EuiFlexItem>
@@ -338,8 +341,10 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   return (
     <>
       <Section step={step++} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
-        <DeploymentSettings value={deployment} hasLogsdb={hasLogsdb(r.fixed)} reverse
-          onChange={(d) => setReverse(withReverseDeployment(r, d))}
+        <DeploymentSettings value={deployment} hasLogsdb={hasLogsdb(r.fixed)} reverse modelOptions={modelOptionsFor('reverse')}
+          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
+            ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
+            : setReverse(withReverseDeployment(r, d)))}
           more={
             <EuiFlexItem>
               <CpuThroughputField value={r.eventsPerSecondPerVcpu} onChange={(eventsPerSecondPerVcpu) => setReverse({ ...r, eventsPerSecondPerVcpu })} />

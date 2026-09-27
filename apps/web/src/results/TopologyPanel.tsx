@@ -63,7 +63,7 @@ function SiteCard({ s, onDetails }: { s: SiteResult; onDetails: () => void }) {
         <EuiFlexItem grow={false}><EuiButtonEmpty size="xs" onClick={onDetails}>Details</EuiButtonEmpty></EuiFlexItem>
       </EuiFlexGroup>
       <EuiText size="xs" color="subdued">
-        Holds {s.holds.length ? s.holds.join(', ') : 'no data'}{followed.length ? ` (${followed.length} followed from another site)` : ''} · {fmtNum(s.result.totalRamGb)} GB RAM needed · {s.result.licenseUnits.value} ERU
+        Holds {s.holds.length ? s.holds.join(', ') : 'no data'}{followed.length ? ` (${followed.length} followed from another site)` : ''} · {fmtNum(s.result.totalRamGb)} GB RAM needed · {s.license.eru} ERU
       </EuiText>
       <EuiSpacer size="s" />
       {s.fit.map((f) => <FitRow key={f.role} f={f} />)}
@@ -71,11 +71,13 @@ function SiteCard({ s, onDetails }: { s: SiteResult; onDetails: () => void }) {
   );
 }
 
-export function TopologyPanel({ result, compare, onPick }: {
+export function TopologyPanel({ result, compare, onPick, modelName }: {
   result: TopologyResult;
   /** All three relationships, when comparing. */
   compare?: Partial<Record<SiteRelationship, TopologyResult>>;
   onPick: (r: SiteRelationship) => void;
+  /** D34: the host model the sites are sized under. */
+  modelName?: string;
 }) {
   const { ref, fits } = useFitsViewport<HTMLDivElement>();
   const [details, setDetails] = useState<number | undefined>();
@@ -86,7 +88,7 @@ export function TopologyPanel({ result, compare, onPick }: {
   return (
     <div ref={ref} style={fits ? { position: 'sticky', top: PIN_TOP } : undefined}>
       <EuiPanel hasBorder paddingSize="l">
-        <EuiText size="s" color="subdued">{RELATIONSHIPS.find((r) => r.value === result.relationship)?.title} · {result.sites.length} sites</EuiText>
+        <EuiText size="s" color="subdued">{RELATIONSHIPS.find((r) => r.value === result.relationship)?.title} · {result.sites.length} sites{modelName ? ` · ${modelName}` : ''}</EuiText>
         <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
           <EuiFlexItem grow={false}><EuiIcon type={result.fitsAll ? 'checkCircleFill' : 'error'} color={result.fitsAll ? 'success' : 'danger'} size="l" /></EuiFlexItem>
           <EuiFlexItem><EuiTitle size="m"><h2>{result.fitsAll ? 'Fits on these servers' : 'Short of servers'}</h2></EuiTitle></EuiFlexItem>

@@ -80,3 +80,39 @@ describe('compare deployment models (D33)', () => {
     expect(md).toContain('control-plane hosts');
   });
 });
+
+describe('deployment model selector per mode (D34)', () => {
+  it('node-based modes offer ECK and ECE as links to Compare models; cloud models stay disabled', async () => {
+    const { modelOptionsFor } = await import('../src/state.ts');
+    const fwd = modelOptionsFor('forward');
+    expect(fwd.find((o) => o.value === 'eck')).toMatchObject({ text: expect.stringMatching(/compare on real servers/) });
+    expect(fwd.find((o) => o.value === 'eck')!.disabled).toBeFalsy();
+    expect(fwd.find((o) => o.value === 'ech')!.disabled).toBe(true);
+  });
+
+  it('server-based modes size ECK and ECE directly', async () => {
+    const { modelOptionsFor } = await import('../src/state.ts');
+    const ms = modelOptionsFor('multisite');
+    expect(ms.filter((o) => !o.disabled).map((o) => o.value)).toEqual(['self_managed', 'eck', 'ece']);
+  });
+
+  it('the multi-site selector drives the engine: ECE layout and licensing across both sites', () => {
+    const ms = { ...defaultMultiSite(), options: { model: 'ece' as const } };
+    const req = topologyRequest(ms);
+    expect(req.hostModel).toBe('ece');
+    const t = sizeTopology(req);
+    expect(t.sites[0]!.fit.find((f) => f.role === 'hot')!.nodesPerServer).toBe(3);
+    expect(t.totals.eru).toBe(t.sites.reduce((s, x) => s + x.license.eru, 0));
+    expect(t.sites[0]!.license.math.map((m) => m.label).join(' ')).toMatch(/ECE/);
+  });
+
+  it('picking ECK in Size a workload opens Compare models with the same workloads', async () => {
+    const { redirectToModels } = await import('../src/state.ts');
+    const s = defaultState();
+    const next = redirectToModels(s, s.forward.workloads, { model: 'self_managed', fips: true });
+    expect(next.mode).toBe('models');
+    expect(next.models!.workloads).toEqual(s.forward.workloads);
+    expect(next.models!.options).toMatchObject({ model: 'self_managed', fips: true });
+    expect(next.forward).toBe(s.forward);
+  });
+});
