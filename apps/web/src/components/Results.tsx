@@ -1,18 +1,12 @@
 import {
-  EuiBadge, EuiBasicTable, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiPanel, EuiProgress, EuiSpacer, EuiStat, EuiText,
-  EuiTitle, EuiToolTip, type EuiBasicTableColumn,
+  EuiBadge, EuiBasicTable, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiPanel, EuiProgress, EuiSpacer, EuiText,
+  type EuiBasicTableColumn,
 } from '@elastic/eui';
 import type { Constraint, MathStep, SizingResult, Warning } from '@sizing/engine';
-import { constraintLabel, solveLabel } from '../export.ts';
+import { constraintLabel } from '../export.ts';
 import { fmtCompact, fmtNum, fmtStorage } from '../format.ts';
+import { ConfidenceBadge } from './ConfidenceBadge.tsx';
 import { MathButton } from './MathFlyout.tsx';
-
-const CONF_COLOR = { high: 'success', medium: 'warning', low: 'danger' } as const;
-
-function ConfidenceBadge({ c }: { c: 'high' | 'medium' | 'low' }) {
-  return <EuiBadge color={CONF_COLOR[c]}>{c} confidence</EuiBadge>;
-}
-
 
 interface Row { role: string; nodes: number; ramGb: number; diskGb: number; vcpu: number; counted: boolean; math: MathStep[]; data: boolean }
 
@@ -36,39 +30,50 @@ export function NodeTable({ r }: { r: SizingResult }) {
   return <><EuiBasicTable<Row> tableCaption="Node table" items={rows} columns={columns} compressed />{objectRow}</>;
 }
 
-function utilColor(u: number): 'success' | 'warning' | 'danger' {
-  if (u < 0.7) return 'success';
-  if (u < 0.9) return 'warning';
-  return 'danger';
+/** Whole numbers once a quantity is large enough that decimals are noise. */
+function fmtQty(x: number | undefined): string {
+  return fmtNum(x, x !== undefined && Math.abs(x) >= 100 ? 0 : 1);
+}
+
+const measurable = (k: Constraint) => k.name !== 'query' && k.utilization !== undefined && Number.isFinite(k.utilization);
+
+/** Most utilized first; the unmodeled query constraint goes last. */
+export function sortedConstraints(constraints: readonly Constraint[]): Constraint[] {
+  return [...constraints].sort((a, b) => (measurable(b) ? b.utilization! : -1) - (measurable(a) ? a.utilization! : -1));
+}
+
+/** High utilization is the goal of a sizing, so bars stay neutral; only the binding constraint and overflow stand out. */
+function barColor(k: Constraint): 'primary' | 'subdued' | 'danger' {
+  if (k.utilization !== undefined && k.utilization > 1) return 'danger';
+  return k.binding ? 'primary' : 'subdued';
+}
+
+function detailText(k: Constraint, reverse: boolean): string {
+  const u = k.utilization;
+  if (k.name === 'query') return 'Not modeled. Requires Rally with customer queries.';
+  if (!reverse) return `${fmtQty(k.demand)} / ${fmtQty(k.capacity)} ${k.unit}`;
+  if (k.maxValue !== undefined && !Number.isFinite(k.maxValue)) return 'Not limiting';
+  const headroom = !k.binding && u !== undefined && u > 0 && Number.isFinite(u) ? ` · headroom ${fmtNum(1 / u, 1)}×` : '';
+  return `max ${fmtCompact(k.maxValue!)} ${k.unit}${headroom}`;
 }
 
 function ConstraintRow({ k, reverse }: { k: Constraint; reverse: boolean }) {
   const u = k.utilization;
-  const notModeled = k.name === 'query';
-  const unlimited = k.maxValue !== undefined && !Number.isFinite(k.maxValue);
-  let detail: string;
-  if (notModeled) detail = 'Not modeled. Requires Rally with customer queries.';
-  else if (reverse) {
-    detail = unlimited
-      ? 'Not limiting'
-      : `max ${fmtCompact(k.maxValue!)} ${k.unit}${!k.binding && u !== undefined && u > 0 && Number.isFinite(u) ? ` · headroom ${fmtNum(1 / u, 1)}×` : ''}`;
-  } else detail = `${fmtNum(k.demand)} / ${fmtNum(k.capacity)} ${k.unit}`;
-
   return (
     <EuiPanel paddingSize="s" hasBorder={k.binding} color={k.binding ? 'primary' : 'transparent'}>
       <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false} wrap>
         <EuiFlexItem grow={false} style={{ minWidth: 150 }}>
-          <EuiText size="s"><strong>{constraintLabel(k.name)}</strong>{k.tier ? ` · ${k.tier}` : ''}</EuiText>
+          <EuiText size="s"><strong>{constraintLabel(k.name)}</strong>{k.tier && k.name !== 'frozen' ? ` · ${k.tier}` : ''}</EuiText>
         </EuiFlexItem>
         <EuiFlexItem style={{ minWidth: 120 }}>
-          {!notModeled && u !== undefined && Number.isFinite(u)
-            ? <EuiProgress value={Math.min(u, 1) * 100} max={100} size="m" color={reverse && k.binding ? 'primary' : utilColor(u)} label={`${fmtNum(u * 100, 1)}%`} valueText={false} />
+          {measurable(k)
+            ? <EuiProgress value={Math.min(u!, 1) * 100} max={100} size="m" color={barColor(k)} label={`${fmtNum(u! * 100, 1)}%`} valueText={false} />
             : <EuiText size="xs" color="subdued">–</EuiText>}
         </EuiFlexItem>
         <EuiFlexItem grow={false}><MathButton title={constraintLabel(k.name)} steps={k.math} /></EuiFlexItem>
       </EuiFlexGroup>
       <EuiFlexGroup gutterSize="xs" alignItems="center" responsive={false} wrap>
-        <EuiFlexItem grow={false}><EuiText size="xs" color="subdued">{detail}</EuiText></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiText size="xs" color="subdued">{detailText(k, reverse)}</EuiText></EuiFlexItem>
         {k.binding && <EuiFlexItem grow={false}><EuiBadge color="primary">binding</EuiBadge></EuiFlexItem>}
         <EuiFlexItem grow={false}><ConfidenceBadge c={k.confidence} /></EuiFlexItem>
         {k.rallyRequired && <EuiFlexItem grow={false}><EuiBadge color="accent">Rally required</EuiBadge></EuiFlexItem>}
@@ -85,18 +90,74 @@ export function ConstraintPanel({ r }: { r: SizingResult }) {
         <p>{reverse ? 'Bar = answer as a share of each constraint\'s maximum. The binding constraint sets the answer.' : 'Demand as a share of usable capacity (after the failover node). Highest = binding.'}</p>
       </EuiText>
       <EuiSpacer size="s" />
-      {r.constraints.map((k, i) => (
+      {sortedConstraints(r.constraints).map((k, i) => (
         <div key={i}><ConstraintRow k={k} reverse={reverse} /><EuiSpacer size="xs" /></div>
       ))}
     </>
   );
 }
 
-const SEVERITY: Record<Warning['severity'], { color: 'danger' | 'warning' | 'primary'; icon: string; title: string }> = {
-  error: { color: 'danger', icon: 'error', title: 'Errors' },
-  warn: { color: 'warning', icon: 'warning', title: 'Warnings' },
-  info: { color: 'primary', icon: 'info', title: 'Notes' },
+/** Compact bars for the few constraints closest to their limit, for the results column. */
+export function TopConstraints({ r, count = 3 }: { r: SizingResult; count?: number }) {
+  const top = sortedConstraints(r.constraints).filter(measurable).slice(0, count);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 11rem) 1fr 3rem', columnGap: 12, rowGap: 6, alignItems: 'center' }}>
+      {top.map((k, i) => (
+        <div key={i} style={{ display: 'contents' }}>
+          <EuiText size="xs" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {k.binding ? <strong>{constraintLabel(k.name)}</strong> : constraintLabel(k.name)}{k.tier && k.name !== 'frozen' ? ` · ${k.tier}` : ''}
+          </EuiText>
+          <EuiProgress value={Math.min(k.utilization!, 1) * 100} max={100} size="s" color={barColor(k)} />
+          <EuiText size="xs" textAlign="right">{fmtNum(k.utilization! * 100, 0)}%</EuiText>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const TIER_WORD = /\b(hot|warm|cold|frozen|content)\b/;
+const TIER_ORDER = ['hot', 'warm', 'cold', 'frozen', 'content'];
+
+export interface Finding { id: string; severity: Warning['severity']; message: string; count: number }
+
+/** One entry per check, merging findings that differ only by tier ("hot, warm, cold shards ≈ 250 GB"). */
+export function groupFindings(warnings: readonly Warning[]): Finding[] {
+  const groups = new Map<string, { w: Warning; tiers: string[]; count: number }>();
+  for (const w of warnings) {
+    const tier = w.message.match(TIER_WORD)?.[1];
+    const key = `${w.severity}|${w.id}|${tier ? w.message.replace(TIER_WORD, '{tier}') : w.message}`;
+    const g = groups.get(key);
+    if (g) { g.count++; if (tier && !g.tiers.includes(tier)) g.tiers.push(tier); } else groups.set(key, { w, tiers: tier ? [tier] : [], count: 1 });
+  }
+  return [...groups.values()].map(({ w, tiers, count }) => {
+    const ordered = [...tiers].sort((a, b) => TIER_ORDER.indexOf(a) - TIER_ORDER.indexOf(b));
+    return { id: w.id, severity: w.severity, count, message: ordered.length > 1 ? w.message.replace(TIER_WORD, ordered.join(', ')) : w.message };
+  });
+}
+
+const SEVERITY: Record<Warning['severity'], { color: 'danger' | 'warning' | 'primary'; icon: string; title: string; rank: number }> = {
+  error: { color: 'danger', icon: 'error', title: 'Errors', rank: 0 },
+  warn: { color: 'warning', icon: 'warning', title: 'Warnings', rank: 1 },
+  info: { color: 'primary', icon: 'info', title: 'Notes', rank: 2 },
 };
+
+/** The most severe findings as one-line sentences, for the results column. */
+export function FindingsSummary({ warnings, max = 2 }: { warnings: readonly Warning[]; max?: number }) {
+  const findings = groupFindings(warnings.filter((w) => w.severity !== 'info')).sort((a, b) => SEVERITY[a.severity].rank - SEVERITY[b.severity].rank);
+  if (findings.length === 0) {
+    return <EuiText size="xs" color="subdued"><EuiIcon type="check" color="success" size="s" /> No hardware check warnings</EuiText>;
+  }
+  return (
+    <>
+      {findings.slice(0, max).map((f, i) => (
+        <EuiFlexGroup key={i} gutterSize="s" alignItems="flexStart" responsive={false}>
+          <EuiFlexItem grow={false}><EuiIcon type={SEVERITY[f.severity].icon} color={SEVERITY[f.severity].color} size="s" style={{ marginTop: 3 }} /></EuiFlexItem>
+          <EuiFlexItem><EuiText size="xs"><strong>{f.id}</strong> {f.message}</EuiText></EuiFlexItem>
+        </EuiFlexGroup>
+      ))}
+    </>
+  );
+}
 
 export function WarningsPanel({ warnings }: { warnings: Warning[] }) {
   if (warnings.length === 0) {
@@ -105,13 +166,13 @@ export function WarningsPanel({ warnings }: { warnings: Warning[] }) {
   return (
     <>
       {(['error', 'warn', 'info'] as const).map((sev) => {
-        const list = warnings.filter((w) => w.severity === sev);
+        const list = groupFindings(warnings.filter((w) => w.severity === sev));
         if (!list.length) return null;
         const s = SEVERITY[sev];
         return (
           <div key={sev}>
             <EuiCallOut size="s" color={s.color} iconType={s.icon} title={`${s.title} (${list.length})`}>
-              <ul>{list.map((w, i) => <li key={i}><strong>{w.id}</strong>: {w.message}</li>)}</ul>
+              <ul>{list.map((f, i) => <li key={i}><strong>{f.id}</strong>: {f.message}</li>)}</ul>
             </EuiCallOut>
             <EuiSpacer size="s" />
           </div>
@@ -120,4 +181,3 @@ export function WarningsPanel({ warnings }: { warnings: Warning[] }) {
     </>
   );
 }
-

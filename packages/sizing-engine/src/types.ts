@@ -43,6 +43,8 @@ export interface NodeGroup {
   diskType: DiskType;
   vcpu: number;
   heapGbOverride?: number;
+  /** D28: sustained sequential write throughput per node in MB/s. When set, adds a disk_write constraint. */
+  diskWriteMBps?: number;
 }
 
 export interface HardwareConfig {
@@ -65,6 +67,8 @@ export interface NodeTemplate {
   diskType?: DiskType;
   /** D25: mem:disk ratio for this tier in this scenario (GB disk per GB RAM). Blank = constants. */
   memDiskRatio?: number;
+  /** D28: sustained sequential write throughput per node in MB/s. When set, adds a disk_write constraint (Low confidence, Rally required). */
+  diskWriteMBps?: number;
 }
 
 /** D8: scenario-level forward inputs that are not part of any one workload. */
@@ -82,6 +86,10 @@ export interface ForwardOptions {
   concurrentSearch?: boolean;
   /** D26: replace the calculated object storage (GB) with a known size, e.g. for costing. */
   objectStorageGb?: number;
+  /** D27: fraction of total frozen data cached on local disk (0–1]. Default: frozen_cache_fraction constant (10%). Raise for frequently queried frozen data. */
+  frozenCacheFraction?: number;
+  /** D28: override the CPU ingest throughput constant (events/s per vCPU). Default: ev_per_s_per_vcpu constant (1,500). Use Rally benchmark results. */
+  eventsPerSecondPerVcpu?: number;
 }
 
 export interface ForwardRequest {
@@ -101,11 +109,15 @@ export interface ReverseRequest {
   fullLogsdb?: boolean;
   fips?: boolean;
   concurrentSearch?: boolean;
+  /** D27: fraction of total frozen data cached on local disk (0–1]. Default: frozen_cache_fraction constant (10%). */
+  frozenCacheFraction?: number;
+  /** D28: override the CPU ingest throughput constant (events/s per vCPU). Default: ev_per_s_per_vcpu constant (1,500). */
+  eventsPerSecondPerVcpu?: number;
 }
 
 export type ConstraintName =
   | 'storage' | 'disk' | 'frozen' | 'heap_shards' | 'masters' | 'vector_offheap'
-  | 'cpu_ingest' | 'query' | 'fleet' | 'ml';
+  | 'cpu_ingest' | 'disk_write' | 'query' | 'fleet' | 'ml';
 
 export interface MathStep {
   label: string;
@@ -149,7 +161,8 @@ export interface OverheadResult extends NodeGroup {
   math: MathStep[];
 }
 
-export type LicenseTier = 'basic' | 'platinum' | 'enterprise';
+/** D29: self-managed offers only Basic and Enterprise. */
+export type LicenseTier = 'basic' | 'enterprise';
 
 export interface SizingResult {
   engineVersion: string;

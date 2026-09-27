@@ -6,6 +6,8 @@ import {
 import { constantFiles, type Constant } from '@sizing/constants';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConstantEditor } from '../components/ConstantEditor.tsx';
+import { CostRatesForm } from '../components/CostRatesForm.tsx';
+import { useCostDefaults } from '../costStore.tsx';
 import { daysBetween, expiryDate, formatValue } from '../components/constantFormat.ts';
 import { localToday, useConstants, type Overrides } from '../constantsStore.tsx';
 import { download } from '../export.ts';
@@ -21,6 +23,22 @@ const FILE_LABEL: Record<string, string> = {
   'ingest.json': 'Ingest / CPU heuristic',
   'federal.json': 'Federal',
 };
+
+/** Default prices for cost estimates. Browser-only: list prices have no public source, so they never go to the repo. */
+function CostDefaultsPanel() {
+  const { defaults, setDefaults } = useCostDefaults();
+  return (
+    <EuiPanel hasBorder paddingSize="m">
+      <EuiFlexGroup alignItems="baseline" gutterSize="s" responsive={false}>
+        <EuiFlexItem grow={false}><EuiTitle size="xs"><h3>Cost defaults</h3></EuiTitle></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiText size="xs" color="subdued">US dollars · this browser only, not written to the repo</EuiText></EuiFlexItem>
+      </EuiFlexGroup>
+      <EuiText size="xs" color="subdued"><p>Every scenario uses these unless it sets its own price on the Total cost page. Leave a price blank to leave that component out.</p></EuiText>
+      <EuiSpacer size="s" />
+      <CostRatesForm value={defaults} onChange={setDefaults} />
+    </EuiPanel>
+  );
+}
 
 type Filter = 'all' | 'overridden' | 'carried' | 'expiring';
 const EXPIRING_DAYS = 60;
@@ -187,6 +205,8 @@ export function ConfigPage() {
         </ul>
       </EuiCallOut>
       <EuiSpacer size="m" />
+      <CostDefaultsPanel />
+      <EuiSpacer size="l" />
 
       <EuiFlexGroup gutterSize="s" alignItems="center" wrap>
         <EuiFlexItem style={{ minWidth: 240 }}>

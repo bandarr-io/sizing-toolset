@@ -73,6 +73,13 @@ export function tierRatio(c: ConstantSet, tier: Tier, overrides?: RatioOverrides
   return { value: o, keys: [], overridden: true };
 }
 
+/** D27: share of frozen data held in local cache, from the scenario when set, else constants. */
+export function frozenCacheFraction(c: ConstantSet, override?: number): number {
+  if (override === undefined) return num(c, 'frozen_cache_fraction');
+  if (!(override > 0 && override <= 1)) throw new Error(`Frozen cache fraction must be above 0 and at most 1; got ${override}.`);
+  return override;
+}
+
 export function describeOverrides(overrides: RatioOverrides): string | undefined {
   const parts = (Object.entries(overrides) as [Tier, number][]).filter(([, v]) => v !== undefined).map(([t, v]) => `${t} 1:${v}`);
   return parts.length ? `Scenario mem:disk ratio overrides: ${parts.join(', ')}.` : undefined;

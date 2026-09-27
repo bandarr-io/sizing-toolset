@@ -9,7 +9,11 @@ export const TIER_COLOR: Record<Tier, string> = {
   content: '#54B399',
 };
 
-export const ROLE_COLOR: Record<string, string> = { ...TIER_COLOR };
+/** Overhead roles use distinct grays (ML its own hue) so the cluster map tells them apart without competing with the tiers. */
+export const ROLE_COLOR: Record<string, string> = {
+  ...TIER_COLOR,
+  master: '#535966', coordinating: '#7A8291', kibana: '#98A2B3', fleet: '#B0B8C6', apm: '#C4CAD4', ml: '#D36086',
+};
 export const NEUTRAL_ROLE = '#98A2B3';
 
 export const TIER_LABEL: Record<Tier, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold', frozen: 'Frozen', content: 'Content' };

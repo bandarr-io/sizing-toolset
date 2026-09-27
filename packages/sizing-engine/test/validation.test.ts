@@ -65,6 +65,14 @@ describe('§5.7 hardware validation', () => {
     expect(ids(run({ dataGbByTier: { hot: 3000 } }))).not.toContain('HV7/warn');
   });
 
+  it('HV7: data on a tier with no nodes names the missing tier instead of an infinite percentage', () => {
+    const hv7 = run({ dataGbByTier: { content: 500 } }).filter((w) => w.id === 'HV7');
+    expect(hv7).toHaveLength(1);
+    expect(hv7[0]!.severity).toBe('warn');
+    expect(hv7[0]!.message).toMatch(/no content nodes/);
+    expect(hv7[0]!.message).not.toMatch(/∞/);
+  });
+
   it('HV8: too many shards per node, or shards outside 10–50 GB', () => {
     const shards = { indices: 10, nonFrozenShards: 4000, frozenShards: 0, shardSizes: [] };
     expect(ids(run({ shards }))).toContain('HV8/warn');

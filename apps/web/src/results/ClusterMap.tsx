@@ -38,8 +38,8 @@ export function ClusterMap({ r }: { r: SizingResult }) {
   return (
     <div>
       {rows.map((row) => (
-        <EuiFlexGroup key={row.key} gutterSize="m" alignItems="center" responsive={false} style={{ padding: '6px 0' }}>
-          <EuiFlexItem grow={false} style={{ width: 176 }}>
+        <EuiFlexGroup key={row.key} gutterSize="m" alignItems="center" responsive={false} style={{ padding: '3px 0' }}>
+          <EuiFlexItem grow={false} style={{ width: 200, whiteSpace: 'nowrap' }}>
             <EuiText size="s">
               <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: roleColor(row.role), marginRight: 8 }} />
               <strong>{row.count}</strong> {ROLE_LABEL[row.role as keyof typeof ROLE_LABEL] ?? row.role}

@@ -3,13 +3,13 @@
 exports[`§11.3 properties > P4 determinism: same inputs + constants hash → same outputs 1`] = `
 {
   "allSites": {
-    "licenseUnits": 17,
-    "totalRamGb": 1088,
+    "licenseUnits": 16,
+    "totalRamGb": 1024,
   },
   "assumptions": [
     "Estimate, not benchmark. Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer's hardware.",
     "Storage = data × 1.25 (15% watermark headroom + 10% margin), plus 1 failover node per tier.",
-    "Default data node: 64 GB RAM; mem:disk hot 1:30, warm 1:160, cold 1:160, frozen 1:1500 (object store).",
+    "Default data node: 64 GB RAM; mem:disk hot 1:30, warm 1:160, cold 1:160, frozen disk-cache (1:750 local disk, 10% cache fraction, D27).",
     "Heap = min(50% RAM, 30 GB); vector off-heap = RAM − heap − 1 GB.",
     "Index ratios: standard 1.2, LogsDB 0.5, TSDS 0.3 (±30%).",
     "Cold and frozen tiers carry no replicas.",
@@ -18,7 +18,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     "Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.",
     "Object storage (snapshot repository) for cold and frozen: 100,500 GB, one copy of the data. Not counted in RAM or ERU; excludes other snapshots and backups.",
   ],
-  "constantsHash": "b69a04d54a404332663b2ced9c88d2e841cb156d191a12f92a8ab64a294a5eab",
+  "constantsHash": "3d87bc472c3431389a71e20e9099582cf51747bcf90a084b538eb275ca09bc3e",
   "constraints": [
     {
       "binding": true,
@@ -40,21 +40,21 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     },
     {
       "binding": false,
-      "capacity": 192000,
+      "capacity": 384000,
       "confidence": "medium",
       "demand": 100500,
       "math": [
         {
           "constantKeys": [],
-          "expr": "100,500 / 192,000 (2 usable nodes)",
+          "expr": "100,500 / 384,000 (1 usable nodes)",
           "label": "frozen utilization (frozen)",
-          "value": 0.5234375,
+          "value": 0.26171875,
         },
       ],
       "name": "frozen",
       "tier": "frozen",
       "unit": "GB",
-      "utilization": 0.5234375,
+      "utilization": 0.26171875,
     },
     {
       "binding": false,
@@ -165,13 +165,13 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
           "eru_gb",
           "eru.counted_components",
         ],
-        "expr": "ROUNDUP(1,088 GB / 64)",
+        "expr": "ROUNDUP(1,024 GB / 64)",
         "label": "ERU (self-managed)",
-        "value": 17,
+        "value": 16,
       },
     ],
     "unit": "ERU",
-    "value": 17,
+    "value": 16,
   },
   "mode": "forward",
   "objectStorage": {
@@ -208,15 +208,15 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
       "math": [
         {
           "constantKeys": [],
-          "expr": "16",
+          "expr": "15",
           "label": "data nodes (all data tiers, D4)",
-          "value": 16,
+          "value": 15,
         },
         {
           "constantKeys": [
             "masters.sizing",
           ],
-          "expr": "row with min data nodes ≤ 16",
+          "expr": "row with min data nodes ≤ 15",
           "label": "dedicated master row",
           "value": 16,
         },
@@ -244,7 +244,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
             "kibana.ha_min_data_nodes",
             "kibana.ha_count",
           ],
-          "expr": "16 data nodes ≥ 6 → 2",
+          "expr": "15 data nodes ≥ 6 → 2",
           "label": "Kibana instances",
           "value": 2,
         },
@@ -332,7 +332,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
       "vcpu": 8,
     },
     {
-      "diskGb": 1920,
+      "diskGb": 48000,
       "math": [
         {
           "constantKeys": [],
@@ -348,42 +348,52 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
         },
         {
           "constantKeys": [
-            "mem_disk.frozen",
+            "frozen_local_disk_ratio",
           ],
-          "expr": "64 GB RAM × 1500",
-          "label": "frozen data per node",
-          "value": 96000,
+          "expr": "64 GB RAM × 750",
+          "label": "frozen local disk per node",
+          "value": 48000,
+        },
+        {
+          "constantKeys": [
+            "frozen_local_disk_ratio",
+            "frozen_cache_fraction",
+            "storage_overhead",
+          ],
+          "expr": "48,000 GB disk / 1.25 overhead / 0.1 cache fraction",
+          "label": "frozen capacity per node",
+          "value": 384000,
         },
         {
           "constantKeys": [],
-          "expr": "ROUNDUP(100,500 / 96,000)",
+          "expr": "ROUNDUP(100,500 / 384,000)",
           "label": "frozen nodes before failover",
-          "value": 2,
+          "value": 1,
         },
         {
           "constantKeys": [
             "failover_nodes_per_tier",
           ],
-          "expr": "2 + 1 failover",
+          "expr": "1 + 1 failover",
           "label": "frozen nodes",
-          "value": 3,
+          "value": 2,
         },
       ],
-      "nodes": 3,
+      "nodes": 2,
       "ramGb": 64,
       "tier": "frozen",
       "vcpu": 8,
     },
   ],
-  "totalRamGb": 1088,
+  "totalRamGb": 1024,
   "totalRamMath": [
     {
       "constantKeys": [
         "eru.counted_components",
       ],
-      "expr": "13×64 hot + 3×64 frozen + 3×16 master + 2×8 kibana",
+      "expr": "13×64 hot + 2×64 frozen + 3×16 master + 2×8 kibana",
       "label": "total RAM GB (counted components, D3)",
-      "value": 1088,
+      "value": 1024,
     },
   ],
   "warnings": [

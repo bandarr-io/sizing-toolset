@@ -89,7 +89,7 @@ describe('migration from v1 scenarios', () => {
     const s = migrate(v1)!;
     expect(s.version).toBe(2);
     expect(s.forward.workloads[0]!.retentionDays).toEqual({ hot: 30, frozen: 335 });
-    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([41, 5]);
+    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([41, 2]); // D27: frozen re-baselined
   });
   it('v1 metrics remainder goes to warm with downsampling', () => {
     const req = fastForwardV1ToRequest({ useCase: 'metrics', gbPerDay: 100, hotDays: 7, totalRetentionDays: 37, replicas: 1, model: 'self_managed' });

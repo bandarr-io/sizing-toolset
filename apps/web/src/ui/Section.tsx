@@ -1,10 +1,20 @@
-import { EuiFlexGroup, EuiFlexItem, EuiPanel, EuiSpacer, EuiText, EuiTitle } from '@elastic/eui';
-import type { ReactNode } from 'react';
+import { EuiButtonEmpty, EuiFlexGroup, EuiFlexItem, EuiPanel, EuiSpacer, EuiText, EuiTitle } from '@elastic/eui';
+import { useState, type ReactNode } from 'react';
 
-/** A numbered input step. Consistent spacing is the point: every section breathes the same way. */
-export function Section({ step, title, description, actions, children }: {
-  step?: number; title: string; description?: ReactNode; actions?: ReactNode; children: ReactNode;
+/**
+ * A numbered input step. Consistent spacing is the point: every section breathes the same way.
+ * With a `summary`, the step can fold to that one line; it starts folded only when `startCollapsed` is set.
+ */
+export function Section({ step, title, description, actions, summary, startCollapsed = false, children }: {
+  step?: number; title: string; description?: ReactNode; actions?: ReactNode;
+  summary?: ReactNode; startCollapsed?: boolean; children: ReactNode;
 }) {
+  const [collapsed, setCollapsed] = useState(summary !== undefined && startCollapsed);
+  const toggle = summary !== undefined && (
+    <EuiButtonEmpty size="s" iconType={collapsed ? 'pencil' : 'chevronSingleUp'} onClick={() => setCollapsed(!collapsed)}>
+      {collapsed ? 'Edit' : 'Collapse'}
+    </EuiButtonEmpty>
+  );
   return (
     <EuiPanel hasBorder paddingSize="l">
       <EuiFlexGroup gutterSize="m" alignItems="flexStart" responsive={false}>
@@ -18,12 +28,20 @@ export function Section({ step, title, description, actions, children }: {
         )}
         <EuiFlexItem>
           <EuiTitle size="s"><h2>{title}</h2></EuiTitle>
-          {description && <EuiText size="s" color="subdued"><p>{description}</p></EuiText>}
+          {collapsed
+            ? <EuiText size="s" color="subdued"><p>{summary}</p></EuiText>
+            : description && <EuiText size="s" color="subdued"><p>{description}</p></EuiText>}
         </EuiFlexItem>
-        {actions && <EuiFlexItem grow={false}>{actions}</EuiFlexItem>}
+        {(actions || toggle) && (
+          <EuiFlexItem grow={false}>
+            <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
+              {actions && !collapsed && <EuiFlexItem grow={false}>{actions}</EuiFlexItem>}
+              {toggle && <EuiFlexItem grow={false}>{toggle}</EuiFlexItem>}
+            </EuiFlexGroup>
+          </EuiFlexItem>
+        )}
       </EuiFlexGroup>
-      <EuiSpacer size="l" />
-      {children}
+      {!collapsed && <><EuiSpacer size="l" />{children}</>}
     </EuiPanel>
   );
 }

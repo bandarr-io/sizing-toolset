@@ -25,7 +25,7 @@ function ScalarInput({ keyName, value, onChange, label }: { keyName: string; val
   if (keyName.startsWith('license.floor.')) {
     return (
       <EuiSelect compressed aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}
-        options={['basic', 'platinum', 'enterprise'].map((t) => ({ value: t, text: t }))} />
+        options={['basic', 'enterprise'].map((t) => ({ value: t, text: t }))} />
     );
   }
   return <EuiFieldText compressed aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />;

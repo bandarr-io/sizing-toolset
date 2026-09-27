@@ -86,7 +86,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
           inputAriaLabel="Workload name" size="m" defaultValue={p.id}
           onSave={(v) => { if (v.trim()) set({ id: v.trim() }); return true; }}
         />
-        <EuiText size="xs" color="subdued">{meta.label} · {meta.blurb}</EuiText>
+        <EuiText size="xs" color="subdued">{p.id.startsWith(meta.label) ? meta.blurb : `${meta.label} · ${meta.blurb}`}</EuiText>
       </EuiFlexItem>
       {kindChoices && kindChoices.length > 1 && (
         <EuiFlexItem grow={false}>
@@ -113,24 +113,24 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     const indexed = p.rawGbPerDay !== undefined ? p.rawGbPerDay * ratio : undefined;
     body = (
       <>
-        <EuiFlexGroup gutterSize="l" wrap>
+        <EuiFlexGroup gutterSize="m" wrap>
           {needsVolume && (
-            <EuiFlexItem style={{ flexBasis: 200, minWidth: 180 }}>
+            <EuiFlexItem style={{ flexBasis: 150, minWidth: 140 }}>
               {solvingGb
-                ? <EuiFormRow label="Daily ingest"><EuiPanel paddingSize="s" color="primary" hasShadow={false}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
+                ? <EuiFormRow label="Daily ingest"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
                 : <NumField label="Daily ingest (raw)" append="GB/day" value={p.rawGbPerDay} onChange={(v) => set({ rawGbPerDay: v ?? 0 })}
                     helpText={indexed !== undefined ? `≈ ${fmtNum(indexed)} GB/day indexed` : undefined} />}
             </EuiFlexItem>
           )}
           {needsVolume && (
-            <EuiFlexItem style={{ flexBasis: 280, minWidth: 270 }}>
+            <EuiFlexItem style={{ flexBasis: 270, minWidth: 260 }}>
               <EuiFormRow label="Index mode" helpText={p.indexRatioOverride !== undefined ? `Ratio overridden to ${p.indexRatioOverride}` : `Indexed size = raw × ${ratio}`}>
-                <EuiButtonGroup legend="Index mode" isFullWidth idSelected={mode} onChange={(id) => onChange(withIndexMode(p, id as IndexMode))}
+                <EuiButtonGroup legend="Index mode" isFullWidth buttonSize="m" idSelected={mode} onChange={(id) => onChange(withIndexMode(p, id as IndexMode))}
                   options={(['standard', 'logsdb', 'tsds'] as IndexMode[]).map((m) => ({ id: m, label: m === 'standard' ? 'Standard' : m === 'logsdb' ? 'LogsDB' : 'TSDS' }))} />
               </EuiFormRow>
             </EuiFlexItem>
           )}
-          <EuiFlexItem grow={false} style={{ width: 110 }}>
+          <EuiFlexItem grow={false} style={{ width: 84 }}>
             <NumField label={<EuiToolTip content="Applies to hot and warm. Cold and frozen never carry replicas."><span>Replicas <EuiIcon type="question" size="s" /></span></EuiToolTip>}
               aria-label="Replicas" value={replicas} step={1} onChange={(v) => setReplicas(v ?? 0)} />
           </EuiFlexItem>
@@ -210,7 +210,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
         <EuiFlexGrid columns={2} gutterSize="l">
           <EuiFlexItem>
             {solvingCount
-              ? <EuiFormRow label="Vectors"><EuiPanel paddingSize="s" color="primary" hasShadow={false}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
+              ? <EuiFormRow label="Vectors"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
               : <NumField label="Vectors" value={v.count} step={1} onChange={(n) => set({ vector: { ...v, count: n ?? 0 } })} helpText={fmtCompact(v.count)} />}
           </EuiFlexItem>
           <EuiFlexItem><NumField label="Dimensions" value={v.dims} step={1} onChange={(n) => set({ vector: { ...v, dims: n ?? 0 } })} /></EuiFlexItem>

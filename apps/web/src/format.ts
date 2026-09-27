@@ -13,6 +13,11 @@ export function fmtCompact(x: number): string {
   return fmtNum(x);
 }
 
+/** US dollars, whole units: 98000 → "$98,000". */
+export function fmtMoney(x: number): string {
+  return x.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+}
+
 /** Storage in decimal units, matching the engine: 83,750 GB → "83.8 TB". */
 export function fmtStorage(gb: number): string {
   if (gb >= 1_000_000) return `${fmtNum(gb / 1_000_000, 2)} PB`;

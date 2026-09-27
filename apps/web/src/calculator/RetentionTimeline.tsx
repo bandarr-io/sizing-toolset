@@ -26,8 +26,25 @@ export function humanDays(days: number): string {
   return `${days} day${days === 1 ? '' : 's'}`;
 }
 
+/** Bar width follows the square root of days, so a short tier stays readable beside a much longer one. */
+function visualWeight(days: number): number {
+  return Math.sqrt(Math.max(days, 1));
+}
+
+/** A thin, label-free version of the lifecycle bar for collapsed workload rows. */
+export function RetentionStrip({ value }: { value: Retention }) {
+  const tiers = ORDER.filter((t) => (value[t] ?? 0) > 0);
+  if (tiers.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', height: 8, width: 120, borderRadius: 4, overflow: 'hidden', gap: 1 }}
+      title={tiers.map((t) => `${TIER_LABEL[t]} ${value[t]} d`).join(', ')}>
+      {tiers.map((t) => <div key={t} style={{ flexGrow: visualWeight(value[t]!), flexBasis: 0, background: TIER_COLOR[t] }} />)}
+    </div>
+  );
+}
+
 /**
- * Data lifecycle for one workload: a proportional bar of tiers with day inputs beneath.
+ * Data lifecycle for one workload: a bar of tiers with day inputs beneath.
  * `solving` marks the tier whose retention is the reverse-mode answer.
  */
 export function RetentionTimeline({ value, onChange, solving, onSolvingChange }: {
@@ -40,7 +57,7 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
   const enabled = ORDER.filter((t) => t === 'hot' || (value[t] ?? 0) > 0 || t === solving);
   const missing = ORDER.filter((t) => !enabled.includes(t));
   const known = enabled.filter((t) => t !== solving).reduce((s, t) => s + (value[t] ?? 0), 0);
-  const total = Math.max(1, known);
+  const knownWeight = enabled.filter((t) => t !== solving).reduce((s, t) => s + visualWeight(value[t] ?? 0), 0);
 
   const set = (t: Tier, days: number | undefined) => {
     const next = { ...value };
@@ -67,18 +84,17 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
       </EuiFlexGroup>
       <EuiSpacer size="xs" />
 
-      {/* Proportional lifecycle bar */}
       <div style={{ display: 'flex', height: 30, borderRadius: 6, overflow: 'hidden', gap: 2 }} role="img"
         aria-label={enabled.map((t) => `${TIER_LABEL[t]} ${t === solving ? 'solved' : `${value[t] ?? 0} days`}`).join(', ')}>
         {enabled.map((t) => {
           const days = value[t] ?? 0;
           const isSolving = t === solving;
-          // A solved tier has no length yet: give it a fixed share, or the whole bar when it is the only tier.
-          const grow = isSolving ? (known > 0 ? total * 0.25 : 1) : Math.max(days, total * 0.1);
+          const weight = isSolving ? (knownWeight > 0 ? knownWeight * 0.5 : 1) : visualWeight(days);
           return (
-            <div key={t} style={{
-              flexGrow: grow, flexBasis: 0, minWidth: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
+            <div key={t} title={`${TIER_LABEL[t]} · ${isSolving ? 'solved' : `${days} days`}`} style={{
+              flexGrow: weight, flexShrink: 1, flexBasis: 'auto', minWidth: 0, boxSizing: 'border-box',
+              padding: '0 12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               background: isSolving
                 ? `repeating-linear-gradient(45deg, ${TIER_COLOR[t]}, ${TIER_COLOR[t]} 6px, ${TIER_COLOR[t]}bb 6px, ${TIER_COLOR[t]}bb 12px)`
                 : TIER_COLOR[t],
@@ -90,23 +106,24 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
       </div>
       <EuiSpacer size="m" />
 
-      <EuiFlexGroup gutterSize="m" wrap responsive={false}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${enabled.length}, minmax(0, 1fr))`, columnGap: 16, alignItems: 'start' }}>
         {enabled.map((t) => (
-          <EuiFlexItem key={t} style={{ minWidth: 140, maxWidth: 220 }}>
-            <EuiFormRow
-              label={<span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: TIER_COLOR[t], marginRight: 6 }} />{TIER_LABEL[t]}</span>}
-              labelAppend={t !== 'hot' && t !== solving
-                ? <EuiButtonIcon iconType="cross" size="xs" color="text" aria-label={`Remove ${t} tier`} onClick={() => set(t, undefined)} />
-                : undefined}
-            >
-              {t === solving
-                ? <EuiFieldNumber disabled value="" placeholder="solved" append="days" aria-label={`${t} days (solved)`} />
-                : <EuiFieldNumber value={value[t] ?? ''} min={t === 'hot' ? 1 : 0} append="days" aria-label={`${t} days`}
-                    onChange={(e) => set(t, e.target.value === '' ? undefined : Number(e.target.value))} />}
-            </EuiFormRow>
-          </EuiFlexItem>
+          <EuiFormRow
+            key={t}
+            fullWidth
+            style={{ marginBlock: 0 }}
+            label={<span style={{ display: 'inline-flex', alignItems: 'center', minHeight: 24 }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: TIER_COLOR[t], marginRight: 6 }} />{TIER_LABEL[t]}</span>}
+            labelAppend={t !== 'hot' && t !== solving
+              ? <EuiButtonIcon iconType="cross" size="xs" color="text" aria-label={`Remove ${t} tier`} onClick={() => set(t, undefined)} />
+              : undefined}
+          >
+            {t === solving
+              ? <EuiFieldNumber fullWidth disabled value="" placeholder="solved" append="days" aria-label={`${t} days (solved)`} />
+              : <EuiFieldNumber fullWidth value={value[t] ?? ''} min={t === 'hot' ? 1 : 0} append="days" aria-label={`${t} days`}
+                  onChange={(e) => set(t, e.target.value === '' ? undefined : Number(e.target.value))} />}
+          </EuiFormRow>
         ))}
-      </EuiFlexGroup>
+      </div>
 
       {(missing.length > 0 || onSolvingChange) && <EuiSpacer size="s" />}
       <EuiFlexGroup gutterSize="s" alignItems="center" wrap responsive={false}>

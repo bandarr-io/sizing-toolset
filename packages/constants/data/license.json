@@ -37,33 +37,35 @@
   },
   {
     "key": "license.floor.ml",
-    "value": "platinum",
+    "value": "enterprise",
     "unit": "tier",
     "source_url": "https://www.elastic.co/subscriptions",
     "as_of_date": "2026-09-01",
     "stack_version": "9.4",
     "confidence": "high",
-    "carried_forward": true
+    "carried_forward": true,
+    "notes": "D29: self-managed now offers only Basic and Enterprise (Platinum removed); decision by Dan, not re-verified against the source page."
   },
   {
     "key": "license.floor.ccr",
-    "value": "platinum",
+    "value": "enterprise",
     "unit": "tier",
     "source_url": "https://www.elastic.co/docs/deploy-manage/tools/cross-cluster-replication",
     "as_of_date": "2026-09-01",
     "stack_version": "9.4",
     "confidence": "high",
-    "carried_forward": true
+    "carried_forward": true,
+    "notes": "D29: self-managed now offers only Basic and Enterprise (Platinum removed); decision by Dan, not re-verified against the source page."
   },
   {
     "key": "license.floor.fips_140_3",
-    "value": "platinum",
+    "value": "enterprise",
     "unit": "tier",
     "source_url": "https://www.elastic.co/docs/deploy-manage/security/fips",
     "as_of_date": "2026-09-01",
     "stack_version": "9.4",
     "confidence": "high",
-    "notes": "9.4+ or 8.19.15+ self-managed.",
+    "notes": "9.4+ or 8.19.15+ self-managed. D29: self-managed now offers only Basic and Enterprise (Platinum removed); decision by Dan, not re-verified against the source page.",
     "carried_forward": true
   },
   {

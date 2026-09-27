@@ -10,11 +10,12 @@ export const CONFIDENCE: Record<ConstraintName, Confidence> = {
   vector_offheap: 'medium',
   fleet: 'medium',
   cpu_ingest: 'low',
+  disk_write: 'low',
   query: 'low',
   ml: 'low',
 };
 
-export const RALLY_REQUIRED = new Set<ConstraintName>(['cpu_ingest', 'query']);
+export const RALLY_REQUIRED = new Set<ConstraintName>(['cpu_ingest', 'disk_write', 'query']);
 
 /** Forward: binding = highest utilization. `query` is never binding (not modeled). */
 export function markBindingForward(constraints: Constraint[]): void {

@@ -92,6 +92,10 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
   for (const [tier, dataGb] of Object.entries(v.dataGbByTier ?? {}) as [Tier, number][]) {
     if (tier === 'frozen' || dataGb <= 0) continue;
     const gs = v.groups.filter((g) => g.role === tier && g.count > 0);
+    if (gs.length === 0) {
+      add('HV7', 'warn', `${fmt(dataGb, 0)} GB of data is placed on ${tier}, but there are no ${tier} nodes. Add a ${tier} node group or move the workload.`);
+      continue;
+    }
     const total = gs.reduce((s, g) => s + g.count * g.diskGb, 0);
     const largest = Math.max(0, ...gs.map((g) => g.diskGb));
     const usable = total - largest;

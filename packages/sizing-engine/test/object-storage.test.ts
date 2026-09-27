@@ -32,7 +32,7 @@ describe('forward: object storage', () => {
   it('is absent without cold or frozen data, and does not count toward RAM or ERU', () => {
     const hotOnly: WorkloadProfile = { ...siem, retentionDays: { hot: 30 } };
     expect(forward({ workloads: [hotOnly], options: SM }).objectStorage).toBeUndefined();
-    expect(forward({ workloads: [siem], options: SM }).totalRamGb).toBe(3056); // §11.1 F3 unchanged
+    expect(forward({ workloads: [siem], options: SM }).totalRamGb).toBe(2864); // §11.1 F3 re-baselined by D27
   });
 
   it('rejects a negative override', () => {
@@ -48,7 +48,7 @@ describe('reverse: object storage at the answer', () => {
     ];
     const target: WorkloadProfile = { id: 'l', kind: 'logs', indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 }, replicas: {} };
     const r = reverse({ hardware: { model: 'self_managed', groups }, fixed: [target], solve: 'max_gb_day' });
-    // frozen binds at (2 − 1) × 64 × 1,500 = 96,000 GB of object-store data
-    expect(r.objectStorage!.gb).toBeCloseTo(96_000, 6);
+    // D27: frozen binds at (2 − 1) × 1,920 GB disk / 1.25 / 0.10 = 15,360 GB; object store = answer × ratio × days = 15,360 GB
+    expect(r.objectStorage!.gb).toBeCloseTo(15_360, 6);
   });
 });

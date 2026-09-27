@@ -1,3 +1,5 @@
+import { num, type ConstantSet } from '@sizing/constants';
+import type { CostSettings } from './cost.ts';
 import type {
   CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, IndexMode, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
@@ -15,6 +17,8 @@ export interface AppState {
   mode: Mode;
   forward: ForwardRequest;
   reverse: ReverseRequest;
+  /** Prices, term and export choice for this scenario; blank prices fall back to the browser's cost defaults. */
+  cost?: CostSettings;
 }
 
 export const MODELS: { value: DeploymentModel; text: string; disabled?: boolean }[] = [
@@ -130,6 +134,11 @@ export function withReverseDeployment(r: ReverseRequest, d: Deployment): Reverse
   };
 }
 
+/** Local disk a tier gets when the scenario does not choose one: NVMe where data is written, SSD elsewhere. */
+export function defaultDiskType(tier: Tier): 'nvme' | 'ssd' {
+  return tier === 'hot' || tier === 'content' ? 'nvme' : 'ssd';
+}
+
 // ---- Reverse helpers ------------------------------------------------------------------------------
 
 export const GROUP_DEFAULTS: Record<NodeGroup['role'], Omit<NodeGroup, 'role'>> = {
@@ -146,8 +155,11 @@ export const GROUP_DEFAULTS: Record<NodeGroup['role'], Omit<NodeGroup, 'role'>> 
   apm: { count: 2, ramGb: 8, diskGb: 50, diskType: 'ssd', vcpu: 1 },
 };
 
-export function newGroup(role: NodeGroup['role']): NodeGroup {
-  return { role, ...GROUP_DEFAULTS[role] };
+/** With constants, a frozen group's disk follows `frozen_local_disk_ratio` (D27) so it matches forward sizing. */
+export function newGroup(role: NodeGroup['role'], c?: ConstantSet): NodeGroup {
+  const g: NodeGroup = { role, ...GROUP_DEFAULTS[role] };
+  if (role === 'frozen' && c) g.diskGb = g.ramGb * num(c, 'frozen_local_disk_ratio');
+  return g;
 }
 
 /** Keep the solved workload first, of a kind the question can use, and name it as the target. */

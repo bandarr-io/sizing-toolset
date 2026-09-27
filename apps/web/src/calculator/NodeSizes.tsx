@@ -1,8 +1,9 @@
-import { EuiButtonEmpty, EuiFieldNumber, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiPanel, EuiSelect, EuiSpacer, EuiText } from '@elastic/eui';
-import { num } from '@sizing/constants';
+import { EuiButtonEmpty, EuiFieldNumber, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiIcon, EuiPanel, EuiSelect, EuiSpacer, EuiText, EuiToolTip } from '@elastic/eui';
+import { num, type ConstantSet } from '@sizing/constants';
 import type { DiskType, ForwardOptions, NodeTemplate, SizingResult, Tier } from '@sizing/engine';
-import { fmtStorage } from '../format.ts';
+import { fmtNum, fmtStorage } from '../format.ts';
 import { useConstants } from '../constantsStore.tsx';
+import { defaultDiskType } from '../state.ts';
 import { TIER_COLOR, TIER_LABEL } from '../ui/tiers.ts';
 
 /** Local disk only: cold and frozen data in object storage is its own line item (D26), not a node disk type. */
@@ -13,6 +14,48 @@ export const DISK_TYPES: { value: DiskType; text: string }[] = [
 const cell = { padding: '6px 8px' } as const;
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75 };
 
+/** D27: share of frozen data kept in local cache, edited as a percent and stored as a fraction. */
+export function CacheFractionField({ value, onChange, prepend }: { value: number | undefined; onChange: (v: number | undefined) => void; prepend?: string }) {
+  const { set: c } = useConstants();
+  return (
+    <EuiFieldNumber compressed fullWidth aria-label="frozen cache fraction" append="%" min={0} max={100}
+      {...(prepend ? { prepend } : {})}
+      placeholder={String(num(c, 'frozen_cache_fraction') * 100)}
+      value={value === undefined ? '' : +(value * 100).toFixed(4)}
+      isInvalid={value !== undefined && !(value > 0 && value <= 1)}
+      onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value) / 100)} />
+  );
+}
+
+/** The tier that takes ingest, as the engine picks it: hot, else content. Only its write speed is used (D28). */
+export function ingestTierOf(tiers: readonly string[]): 'hot' | 'content' | undefined {
+  return tiers.includes('hot') ? 'hot' : tiers.includes('content') ? 'content' : undefined;
+}
+export const DISK_WRITE_HELP = 'Sustained sequential write throughput per node. Adds a disk write constraint. Low confidence; validate with Rally.';
+
+/** D28: per-node disk write speed on an ingest tier. Blank means no disk write constraint. */
+export function DiskWriteField({ tier, value, onChange }: { tier: string; value: number | undefined; onChange: (v: number | undefined) => void }) {
+  return (
+    <EuiFieldNumber compressed fullWidth aria-label={`${tier} disk write MB/s`} min={1} placeholder="–"
+      value={value ?? ''} isInvalid={value !== undefined && !(value >= 1)}
+      onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))} />
+  );
+}
+
+/** True when no tier template (including disk write speed), cache fraction or object storage size is set for this scenario. */
+export function isDefaultNodeSizes(o: ForwardOptions): boolean {
+  return Object.values(o.nodes ?? {}).every((n) => Object.keys(n ?? {}).length === 0)
+    && o.frozenCacheFraction === undefined && o.objectStorageGb === undefined;
+}
+
+/** One line for the folded step. */
+export function nodeSizesSummary(c: ConstantSet, tiers: Tier[], objectStorage?: SizingResult['objectStorage']): string {
+  const ram = num(c, 'node_ram_default_gb');
+  const parts = [`${fmtNum(ram)} GB RAM, ${fmtNum(ram * num(c, 'vcpu_per_ram_gb'))} vCPU nodes on ${tiers.map((t) => TIER_LABEL[t].toLowerCase()).join(', ') || 'no tiers yet'}`];
+  if (objectStorage) parts.push(`object storage ${fmtStorage(objectStorage.gb)} calculated`);
+  return `Defaults: ${parts.join(' · ')}`;
+}
+
 /** Node template per tier in use. Empty cells fall back to the constants shown as placeholders. */
 export function NodeSizes({ tiers, value, onChange, objectStorage }: {
   tiers: Tier[]; value: ForwardOptions; onChange: (o: ForwardOptions) => void;
@@ -22,6 +65,7 @@ export function NodeSizes({ tiers, value, onChange, objectStorage }: {
   const { set: c } = useConstants();
   const defRam = num(c, 'node_ram_default_gb');
   const customized = tiers.filter((t) => Object.keys(value.nodes?.[t] ?? {}).length > 0);
+  const ingestTier = ingestTierOf(tiers);
 
   const setNode = (t: Tier, patch: Partial<NodeTemplate>) => {
     const cur = { ...(value.nodes?.[t] ?? {}), ...patch } as Record<string, unknown>;
@@ -36,63 +80,87 @@ export function NodeSizes({ tiers, value, onChange, objectStorage }: {
     <>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
         <thead>
-          <tr><th style={head}>Tier</th><th style={{ ...head, width: '17%' }}>RAM per node</th><th style={{ ...head, width: '16%' }}>Mem:disk</th><th style={{ ...head, width: '21%' }}>Disk per node</th><th style={{ ...head, width: '11%' }}>vCPU</th><th style={{ ...head, width: 110 }}>Disk type</th></tr>
+          <tr>
+            <th style={head}>Tier</th>
+            <th style={{ ...head, width: '12%' }}>RAM (GB)</th>
+            <th style={{ ...head, width: '15%' }}>{tiers.includes('frozen') ? 'Mem:disk · cache' : 'Mem:disk'}</th>
+            <th style={{ ...head, width: '15%' }}>Disk (GB)</th>
+            <th style={{ ...head, width: '9%' }}>vCPU</th>
+            <th style={{ ...head, width: 100 }}>Disk type</th>
+            <th style={{ ...head, width: '14%' }}>
+              <EuiToolTip content={DISK_WRITE_HELP}><span>Write (MB/s) <EuiIcon type="question" size="s" /></span></EuiToolTip>
+            </th>
+          </tr>
         </thead>
         <tbody>
           {tiers.map((t) => {
             const n = value.nodes?.[t] ?? {};
             const ram = n.ramGb ?? defRam;
-            const defaultRatio = num(c, `mem_disk.${t}`);
-            const ratio = n.memDiskRatio ?? defaultRatio;
-            const diskDefault = ram * (t === 'frozen' ? num(c, 'mem_disk.hot') : ratio);
+            const isFrozen = t === 'frozen';
+            // D27: frozen local disk comes from frozen_local_disk_ratio; the mem:disk ratio does not apply.
+            const defaultRatio = num(c, isFrozen ? 'frozen_local_disk_ratio' : `mem_disk.${t}`);
+            const ratio = isFrozen ? defaultRatio : n.memDiskRatio ?? defaultRatio;
+            const diskDefault = ram * ratio;
             return (
               <tr key={t}>
                 <td style={cell}>
                   <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: TIER_COLOR[t], marginRight: 8 }} />
                   <strong>{TIER_LABEL[t]}</strong>
-                  <EuiText size="xs" color="subdued">{t === 'frozen' ? 'GB searchable per GB RAM' : 'GB disk per GB RAM'}</EuiText>
+                  <EuiText size="xs" color="subdued">{isFrozen ? 'Local disk caches part of the data' : 'GB disk per GB RAM'}</EuiText>
                 </td>
-                <td style={cell}><EuiFieldNumber compressed aria-label={`${t} RAM`} append="GB" placeholder={String(defRam)} value={n.ramGb ?? ''} onChange={(e) => setNode(t, { ramGb: numOrUndef(e.target.value) })} /></td>
+                <td style={cell}><EuiFieldNumber compressed aria-label={`${t} RAM`} placeholder={String(defRam)} value={n.ramGb ?? ''} onChange={(e) => setNode(t, { ramGb: numOrUndef(e.target.value) })} /></td>
                 <td style={cell}>
-                  <EuiFieldNumber compressed aria-label={`${t} mem:disk ratio`} prepend="1:" min={0} placeholder={String(defaultRatio)} value={n.memDiskRatio ?? ''}
-                    isInvalid={n.memDiskRatio !== undefined && !(n.memDiskRatio > 0)}
-                    onChange={(e) => setNode(t, { memDiskRatio: numOrUndef(e.target.value) })} />
+                  {isFrozen
+                    ? <CacheFractionField value={value.frozenCacheFraction} onChange={(v) => {
+                        const { frozenCacheFraction: _drop, ...rest } = value;
+                        onChange(v === undefined ? rest : { ...rest, frozenCacheFraction: v });
+                      }} />
+                    : <EuiFieldNumber compressed aria-label={`${t} mem:disk ratio`} prepend="1:" min={0} placeholder={String(defaultRatio)} value={n.memDiskRatio ?? ''}
+                        isInvalid={n.memDiskRatio !== undefined && !(n.memDiskRatio > 0)}
+                        onChange={(e) => setNode(t, { memDiskRatio: numOrUndef(e.target.value) })} />}
                 </td>
-                <td style={cell}><EuiFieldNumber compressed aria-label={`${t} disk`} append="GB" placeholder={String(diskDefault)} value={n.diskGb ?? ''} onChange={(e) => setNode(t, { diskGb: numOrUndef(e.target.value) })} /></td>
+                <td style={cell}><EuiFieldNumber compressed aria-label={`${t} disk`} placeholder={String(diskDefault)} value={n.diskGb ?? ''} onChange={(e) => setNode(t, { diskGb: numOrUndef(e.target.value) })} /></td>
                 <td style={cell}><EuiFieldNumber compressed aria-label={`${t} vCPU`} placeholder={String(ram * num(c, 'vcpu_per_ram_gb'))} value={n.vcpu ?? ''} onChange={(e) => setNode(t, { vcpu: numOrUndef(e.target.value) })} /></td>
                 <td style={cell}>
                   <EuiSelect compressed aria-label={`${t} disk type`} options={DISK_TYPES}
-                    value={n.diskType ?? (t === 'hot' || t === 'content' ? 'nvme' : 'ssd')} onChange={(e) => setNode(t, { diskType: e.target.value as DiskType })} />
+                    value={n.diskType ?? defaultDiskType(t)} onChange={(e) => setNode(t, { diskType: e.target.value as DiskType })} />
+                </td>
+                <td style={cell}>
+                  {t === ingestTier
+                    ? <DiskWriteField tier={t} value={n.diskWriteMBps} onChange={(diskWriteMBps) => setNode(t, { diskWriteMBps })} />
+                    : <EuiText size="xs" color="subdued" textAlign="center">–</EuiText>}
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      {customized.length > 0 && (
-        <EuiButtonEmpty size="xs" iconType="refresh" onClick={() => onChange({ ...value, nodes: {} })}>Reset to defaults</EuiButtonEmpty>
+      {(customized.length > 0 || value.frozenCacheFraction !== undefined) && (
+        <EuiButtonEmpty size="xs" iconType="refresh" onClick={() => { const { frozenCacheFraction: _drop, ...rest } = value; onChange({ ...rest, nodes: {} }); }}>Reset to defaults</EuiButtonEmpty>
       )}
       {(objectStorage || value.objectStorageGb !== undefined) && (
         <>
           <EuiSpacer size="m" />
           <EuiPanel color="subdued" paddingSize="m" hasShadow={false}>
-            <EuiFlexGroup gutterSize="m" alignItems="center" wrap responsive={false}>
+            <EuiFlexGroup gutterSize="m" alignItems="flexStart" wrap responsive={false}>
               <EuiFlexItem grow={false}><EuiIcon type="storage" size="l" /></EuiFlexItem>
               <EuiFlexItem style={{ minWidth: 220 }}>
                 <EuiText size="s"><strong>Object storage</strong> (snapshot repository)</EuiText>
-                <EuiText size="xs" color="subdued">
-                  Added automatically for cold and frozen searchable snapshots: one copy of their data.
-                  {objectStorage && <> Calculated: <strong>{fmtStorage(objectStorage.calculatedGb)}</strong>.</>}
+                <EuiText size="s">
+                  Cold and frozen searchable snapshots add one copy of their data
+                  {objectStorage ? <>, calculated at <strong>{fmtStorage(objectStorage.calculatedGb)}</strong>.</> : '.'}
                 </EuiText>
               </EuiFlexItem>
-              <EuiFlexItem grow={false} style={{ width: 200 }}>
-                <EuiFieldNumber compressed aria-label="Object storage size" append="GB" min={0}
-                  placeholder={objectStorage ? String(Math.round(objectStorage.calculatedGb)) : '0'}
-                  value={value.objectStorageGb ?? ''} isInvalid={value.objectStorageGb !== undefined && !(value.objectStorageGb >= 0)}
-                  onChange={(e) => {
-                    const { objectStorageGb: _drop, ...rest } = value;
-                    onChange(e.target.value === '' ? rest : { ...rest, objectStorageGb: Number(e.target.value) });
-                  }} />
+              <EuiFlexItem grow={false} style={{ width: 248 }}>
+                <EuiFormRow label="Override" helpText={<span style={{ whiteSpace: 'nowrap' }}>Leave blank to use the calculated size.</span>} fullWidth style={{ marginBlockEnd: 0 }}>
+                  <EuiFieldNumber compressed fullWidth aria-label="Object storage override" append="GB" min={0}
+                    placeholder={objectStorage ? String(Math.round(objectStorage.calculatedGb)) : '0'}
+                    value={value.objectStorageGb ?? ''} isInvalid={value.objectStorageGb !== undefined && !(value.objectStorageGb >= 0)}
+                    onChange={(e) => {
+                      const { objectStorageGb: _drop, ...rest } = value;
+                      onChange(e.target.value === '' ? rest : { ...rest, objectStorageGb: Number(e.target.value) });
+                    }} />
+                </EuiFormRow>
               </EuiFlexItem>
               {value.objectStorageGb !== undefined && (
                 <EuiFlexItem grow={false}>

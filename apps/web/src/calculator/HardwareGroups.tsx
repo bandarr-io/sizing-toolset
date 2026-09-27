@@ -1,6 +1,6 @@
 import {
   EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiCallOut, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldNumber, EuiFlexGroup, EuiFlexItem,
-  EuiPopover, EuiSelect, EuiSpacer, EuiText,
+  EuiIcon, EuiPopover, EuiSelect, EuiSpacer, EuiText, EuiToolTip,
 } from '@elastic/eui';
 import { num } from '@sizing/constants';
 import type { DiskType, NodeGroup, Solve, Tier } from '@sizing/engine';
@@ -9,21 +9,25 @@ import { useState } from 'react';
 import { fmtNum } from '../format.ts';
 import { newGroup } from '../state.ts';
 import { ROLE_LABEL, TIER_LABEL, roleColor } from '../ui/tiers.ts';
-import { DISK_TYPES } from './NodeSizes.tsx';
+import { CacheFractionField, DISK_TYPES, DISK_WRITE_HELP, DiskWriteField, ingestTierOf } from './NodeSizes.tsx';
 
 const ROLES: NodeGroup['role'][] = ['hot', 'warm', 'cold', 'frozen', 'content', 'master', 'ml', 'coordinating', 'kibana', 'fleet', 'apm'];
 const DATA = new Set(['hot', 'warm', 'cold', 'frozen', 'content']);
-const cell = { padding: '6px 6px' } as const;
+const cell = { padding: '6px 4px' } as const;
+/** Short names so the role select never truncates; the add menu keeps the full names. */
+const ROLE_SHORT: Partial<Record<NodeGroup['role'], string>> = { fleet: 'Fleet', coordinating: 'Coordinator' };
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75, whiteSpace: 'nowrap' as const };
 
 /** Node groups as an editable table, with prompts for the group the chosen question depends on. */
-export function HardwareGroups({ groups, onChange, solve, ratios, onRatios }: {
+export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cacheFraction, onCacheFraction }: {
   groups: NodeGroup[];
   onChange: (g: NodeGroup[]) => void;
   solve: Solve;
-  /** D25: per-tier mem:disk ratio for this scenario; blank = constants. */
+  /** D25: per-tier mem:disk ratio for this scenario; blank = constants. Frozen uses the cache fraction instead (D27). */
   ratios: Partial<Record<Tier, number>>;
   onRatios: (r: Partial<Record<Tier, number>>) => void;
+  cacheFraction: number | undefined;
+  onCacheFraction: (v: number | undefined) => void;
 }) {
   const { set: c } = useConstants();
   const [adding, setAdding] = useState(false);
@@ -32,15 +36,19 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios }: {
     if (j !== i) return g;
     const next = { ...g, ...patch } as NodeGroup & Record<string, unknown>;
     if (next.heapGbOverride === undefined) delete next.heapGbOverride;
+    if (next.diskWriteMBps === undefined) delete next.diskWriteMBps;
     return next;
   }));
-  const add = (role: NodeGroup['role']) => { onChange([...groups, newGroup(role)]); setAdding(false); };
+  const add = (role: NodeGroup['role']) => { onChange([...groups, newGroup(role, c)]); setAdding(false); };
   const n = (s: string) => (s === '' ? 0 : Number(s));
 
   const dataNodes = groups.filter((g) => DATA.has(g.role)).reduce((s, g) => s + g.count, 0);
   const ram = groups.reduce((s, g) => s + g.count * g.ramGb, 0);
   const has = (r: NodeGroup['role']) => groups.some((g) => g.role === r && g.count > 0);
-  const dataTiers = (['hot', 'warm', 'cold', 'frozen', 'content'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
+  const ratioTiers = (['hot', 'warm', 'cold', 'content'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
+  const hasFrozen = groups.some((g) => g.role === 'frozen');
+  const ingestTier = ingestTierOf(groups.filter((g) => g.count > 0).map((g) => g.role));
+  const writeRow = groups.findIndex((g) => g.role === ingestTier && g.count > 0);
 
   return (
     <>
@@ -54,25 +62,33 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios }: {
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 560 }}>
           <thead>
             <tr>
-              <th style={head}>Role</th><th style={head}>Nodes</th><th style={head}>RAM</th><th style={head}>Disk</th>
+              <th style={head}>Role</th><th style={head}>Nodes</th><th style={head}>RAM (GB)</th><th style={head}>Disk (GB)</th>
+              {writeRow >= 0 && <th style={head}><EuiToolTip content={DISK_WRITE_HELP}><span>Write (MB/s) <EuiIcon type="question" size="s" /></span></EuiToolTip></th>}
               <th style={head}>Disk type</th><th style={head}>vCPU</th>{showHeap && <th style={head}>Heap</th>}<th />
             </tr>
           </thead>
           <tbody>
             {groups.map((g, i) => (
               <tr key={i}>
-                <td style={{ ...cell, minWidth: 130 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <td style={{ ...cell, width: 140 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 10, height: 10, borderRadius: 5, background: roleColor(g.role), flex: 'none' }} />
-                    <EuiSelect compressed aria-label="Role" value={g.role} options={ROLES.map((r) => ({ value: r, text: ROLE_LABEL[r] }))}
+                    <EuiSelect compressed aria-label="Role" value={g.role} options={ROLES.map((r) => ({ value: r, text: ROLE_SHORT[r] ?? ROLE_LABEL[r] }))}
                       onChange={(e) => set(i, { role: e.target.value as NodeGroup['role'] })} />
                   </div>
                 </td>
-                <td style={{ ...cell, width: 80 }}><EuiFieldNumber compressed aria-label="Nodes" min={0} value={g.count} onChange={(e) => set(i, { count: n(e.target.value) })} /></td>
-                <td style={cell}><EuiFieldNumber compressed aria-label="RAM GB" append="GB" value={g.ramGb} onChange={(e) => set(i, { ramGb: n(e.target.value) })} /></td>
-                <td style={cell}><EuiFieldNumber compressed aria-label="Disk GB" append="GB" value={g.diskGb} onChange={(e) => set(i, { diskGb: n(e.target.value) })} /></td>
-                <td style={{ ...cell, width: 100 }}><EuiSelect compressed aria-label="Disk type" options={DISK_TYPES} value={g.diskType} onChange={(e) => set(i, { diskType: e.target.value as DiskType })} /></td>
-                <td style={{ ...cell, width: 80 }}><EuiFieldNumber compressed aria-label="vCPU" value={g.vcpu} onChange={(e) => set(i, { vcpu: n(e.target.value) })} /></td>
+                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="Nodes" min={0} value={g.count} onChange={(e) => set(i, { count: n(e.target.value) })} /></td>
+                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="RAM GB" value={g.ramGb} onChange={(e) => set(i, { ramGb: n(e.target.value) })} /></td>
+                <td style={cell}><EuiFieldNumber compressed aria-label="Disk GB" value={g.diskGb} onChange={(e) => set(i, { diskGb: n(e.target.value) })} /></td>
+                {writeRow >= 0 && (
+                  <td style={{ ...cell, width: 84 }}>
+                    {i === writeRow
+                      ? <DiskWriteField tier={g.role} value={g.diskWriteMBps} onChange={(diskWriteMBps) => set(i, { diskWriteMBps })} />
+                      : <EuiText size="xs" color="subdued" textAlign="center">–</EuiText>}
+                  </td>
+                )}
+                <td style={{ ...cell, width: 92 }}><EuiSelect compressed aria-label="Disk type" options={DISK_TYPES} value={g.diskType} onChange={(e) => set(i, { diskType: e.target.value as DiskType })} /></td>
+                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="vCPU" value={g.vcpu} onChange={(e) => set(i, { vcpu: n(e.target.value) })} /></td>
                 {showHeap && (
                   <td style={{ ...cell, width: 100 }}>
                     <EuiFieldNumber compressed aria-label="Heap GB" placeholder="auto" value={g.heapGbOverride ?? ''}
@@ -87,14 +103,14 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios }: {
           </tbody>
         </table>
       </div>
-      {dataTiers.length > 0 && (
+      {(ratioTiers.length > 0 || hasFrozen) && (
         <>
           <EuiSpacer size="m" />
           <EuiFlexGroup gutterSize="m" alignItems="center" wrap responsive={false}>
             <EuiFlexItem grow={false}>
-              <EuiText size="xs"><strong>Mem:disk ratio</strong><br /><span style={{ opacity: 0.7 }}>Blank uses the default</span></EuiText>
+              <EuiText size="xs"><strong>Tier ratios</strong><br /><span style={{ opacity: 0.7 }}>Blank uses the default</span></EuiText>
             </EuiFlexItem>
-            {dataTiers.map((t) => {
+            {ratioTiers.map((t) => {
               const v = ratios[t];
               return (
                 <EuiFlexItem grow={false} key={t} style={{ width: 150 }}>
@@ -110,6 +126,11 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios }: {
                 </EuiFlexItem>
               );
             })}
+            {hasFrozen && (
+              <EuiFlexItem grow={false} style={{ width: 200 }}>
+                <CacheFractionField value={cacheFraction} onChange={onCacheFraction} prepend="Frozen cache" />
+              </EuiFlexItem>
+            )}
           </EuiFlexGroup>
         </>
       )}

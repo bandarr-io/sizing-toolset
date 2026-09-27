@@ -117,8 +117,8 @@ describe('§5.3 reverse details', () => {
   it('solves frozen jointly with hot', () => {
     const frozen: NodeGroup = { role: 'frozen', count: 2, ramGb: 64, diskGb: 1920, diskType: 'ssd', vcpu: 8 };
     const r = reverse(req([hot(41, { vcpu: 64 }), frozen], [logs({ indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 } })], 'max_gb_day'));
-    // frozen: (2 − 1) × 64 × 1,500 / (335 × 0.5) = 573.1 GB/day, below hot's 2,048.
-    expect(r.answer!.value).toBeCloseTo(96000 / (335 * 0.5), 9);
+    // D27: frozen capacity (N−1) = 1 × 1,920 GB disk / 1.25 overhead / 0.10 cache fraction = 15,360 GB → 15,360 / (335 × 0.5) = 91.64 GB/day, below hot's 2,048.
+    expect(r.answer!.value).toBeCloseTo(15360 / (335 * 0.5), 9);
     expect(r.answer!.binding).toBe('frozen');
   });
 });

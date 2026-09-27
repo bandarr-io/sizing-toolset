@@ -37,15 +37,16 @@ describe('§11.1 forward regression', () => {
     expect(r.licenseUnits.value).toBe(9);
   });
 
-  it('F3: 2 TB/day SIEM LogsDB, 30d hot + 335d frozen → 41 hot, 5 frozen, 3,056 GB, 48 ERU', () => {
+  // D27: frozen re-baselined. disk-cache model at 10%: 335,000 GB / (64×750/1.25/0.10) = 0.87 → 1+1 = 2 nodes.
+  it('F3: 2 TB/day SIEM LogsDB, 30d hot + 335d frozen → 41 hot, 2 frozen, 2,864 GB, 45 ERU', () => {
     const r = forward({
       workloads: [{ id: 's', kind: 'siem', rawGbPerDay: 2000, indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 }, replicas: {} }],
       options: SM,
     });
     expect(nodes(r, 'hot')).toBe(41);
-    expect(nodes(r, 'frozen')).toBe(5);
-    expect(r.totalRamGb).toBe(3056);
-    expect(r.licenseUnits.value).toBe(48);
+    expect(nodes(r, 'frozen')).toBe(2);
+    expect(r.totalRamGb).toBe(2864);
+    expect(r.licenseUnits.value).toBe(45);
     expect(r.licenseFloor).toBe('enterprise');
   });
 
@@ -114,7 +115,7 @@ describe('§11.1 forward regression', () => {
     expect(overheadCount(r, 'ml')).toBe(3);
     expect(r.totalRamGb - without.totalRamGb).toBe(192);
     expect(r.licenseUnits.value - without.licenseUnits.value).toBe(3);
-    expect(r.licenseFloor).toBe('platinum');
+    expect(r.licenseFloor).toBe('enterprise'); // §11.1 F8 said platinum; D29: self-managed has only Basic and Enterprise
   });
 
   describe('F9: air-gapped, 2 sites, CCR, 500 GB/day/site LogsDB, 30d hot + 335d frozen (D2)', () => {
@@ -133,7 +134,8 @@ describe('§11.1 forward regression', () => {
     });
   });
 
-  it('F10: 40k agents + Defend, 600 GB/day LogsDB, 30d hot + 335d frozen → 2 Fleet, 13 hot, 3 frozen, 1,088 GB, 17 ERU', () => {
+  // D27: frozen re-baselined. 100,500 GB / 384,000 GB/node = 0.26 → 1+1 = 2 frozen nodes.
+  it('F10: 40k agents + Defend, 600 GB/day LogsDB, 30d hot + 335d frozen → 2 Fleet, 13 hot, 2 frozen, 1,024 GB, 16 ERU', () => {
     const r = forward({
       workloads: [
         logs({ id: 'l', rawGbPerDay: 600, indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 } }),
@@ -145,9 +147,9 @@ describe('§11.1 forward regression', () => {
     expect(fleet.reduce((s, o) => s + o.count, 0)).toBe(2);
     expect(fleet[0]!.ramGb).toBe(8);
     expect(nodes(r, 'hot')).toBe(13);
-    expect(nodes(r, 'frozen')).toBe(3);
-    expect(r.totalRamGb).toBe(1088);
-    expect(r.licenseUnits.value).toBe(17);
+    expect(nodes(r, 'frozen')).toBe(2);
+    expect(r.totalRamGb).toBe(1024);
+    expect(r.licenseUnits.value).toBe(16);
   });
 });
 

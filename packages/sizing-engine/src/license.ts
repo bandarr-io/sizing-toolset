@@ -3,7 +3,7 @@ import { ceilEps, fmt, step } from './math.ts';
 import { defaultIndexMode } from './profiles.ts';
 import type { LicenseTier, MathStep, WorkloadProfile } from './types.ts';
 
-const RANK: Record<LicenseTier, number> = { basic: 0, platinum: 1, enterprise: 2 };
+const RANK: Record<LicenseTier, number> = { basic: 0, enterprise: 1 };
 
 export interface FloorInput {
   hasFrozen: boolean;

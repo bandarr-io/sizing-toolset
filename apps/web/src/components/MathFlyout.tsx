@@ -6,6 +6,7 @@ import type { MathStep } from '@sizing/engine';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useConstants } from '../constantsStore.tsx';
 import { fmtNum } from '../format.ts';
+import { ConfidenceBadge } from './ConfidenceBadge.tsx';
 
 interface MathView { title: string; steps: MathStep[]; note?: string }
 const MathContext = createContext<(v: MathView) => void>(() => {});
@@ -47,7 +48,7 @@ function ConstantChip({ k }: { k: string }) {
         <EuiFlexItem grow={false}><EuiCode>{c.key}</EuiCode></EuiFlexItem>
         <EuiFlexItem grow={false}><EuiText size="xs"><strong>{value}</strong> {c.unit}</EuiText></EuiFlexItem>
         <EuiFlexItem grow={false}>
-          <EuiBadge color={c.confidence === 'high' ? 'success' : c.confidence === 'medium' ? 'warning' : 'danger'}>{c.confidence}</EuiBadge>
+          <ConfidenceBadge c={c.confidence} short />
         </EuiFlexItem>
         {c.carried_forward && <EuiFlexItem grow={false}><EuiBadge color="hollow">carried forward</EuiBadge></EuiFlexItem>}
         {isOverridden(k) && <EuiFlexItem grow={false}><EuiBadge color="primary">overridden in this browser</EuiBadge></EuiFlexItem>}

@@ -6,7 +6,7 @@ import { licenseFloor, selfManagedEru } from './license.ts';
 import { fmt, floorEps, step } from './math.ts';
 import { fleetTable } from './overhead.ts';
 import {
-  describeOverrides, downsampleFor, growthFactor, heapGb, indexRatio, offheapBudgetGb, tierRatio, placementTier, replicasFor, retentionTiers, vectorCost,
+  describeOverrides, downsampleFor, frozenCacheFraction, growthFactor, heapGb, indexRatio, offheapBudgetGb, tierRatio, placementTier, replicasFor, retentionTiers, vectorCost,
 } from './profiles.ts';
 import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import type {
@@ -19,13 +19,13 @@ import { validateHardware } from './validation.ts';
 const DATA_TIERS = new Set<string>(TIERS);
 
 /** One physical node expanded from a NodeGroup. */
-interface Node { ramGb: number; diskGb: number; vcpu: number; heapOverride: number | undefined }
+interface Node { ramGb: number; diskGb: number; vcpu: number; heapOverride: number | undefined; diskWriteMBps: number | undefined }
 
 function expand(groups: readonly NodeGroup[], role: string): Node[] {
   const out: Node[] = [];
   for (const g of groups) {
     if (g.role !== role) continue;
-    for (let i = 0; i < g.count; i++) out.push({ ramGb: g.ramGb, diskGb: g.diskGb, vcpu: g.vcpu, heapOverride: g.heapGbOverride });
+    for (let i = 0; i < g.count; i++) out.push({ ramGb: g.ramGb, diskGb: g.diskGb, vcpu: g.vcpu, heapOverride: g.heapGbOverride, diskWriteMBps: g.diskWriteMBps });
   }
   return out;
 }
@@ -40,25 +40,32 @@ function sumExceptLargest(nodes: readonly Node[], f: (n: Node) => number): numbe
 interface TierCapacity {
   tier: Tier;
   count: number;
-  /** Non-frozen: Σ_{N−1} min(RAM × ratio, disk). Frozen: Σ_{N−1} RAM × 1500. */
+  /** Non-frozen: Σ_{N−1} min(RAM × ratio, disk). Frozen (D27): Σ_{N−1} disk / storage_overhead / cache_fraction. */
   usableGb: number;
   diskBound: boolean;
   math: MathStep[];
 }
 
-function tierCapacity(c: ConstantSet, groups: readonly NodeGroup[], tier: Tier, overrides?: Partial<Record<Tier, number>>): TierCapacity {
+function tierCapacity(c: ConstantSet, groups: readonly NodeGroup[], tier: Tier, overrides?: Partial<Record<Tier, number>>, cacheFraction?: number): TierCapacity {
   const nodes = expand(groups, tier);
+  if (tier === 'frozen') {
+    // D27: disk-cache model. Use the node's explicit diskGb if set; otherwise derive from RAM × local disk ratio.
+    const localDiskRatio = num(c, 'frozen_local_disk_ratio');
+    const overhead = num(c, 'storage_overhead');
+    const cf = frozenCacheFraction(c, cacheFraction);
+    const usableGb = sumExceptLargest(nodes, (n) => {
+      const disk = n.diskGb > 0 ? n.diskGb : n.ramGb * localDiskRatio;
+      return disk / overhead / cf;
+    });
+    return {
+      tier, count: nodes.length, usableGb, diskBound: false,
+      math: [step('frozen usable capacity (N−1)', `Σ_{${Math.max(0, nodes.length - 1)} nodes} disk / ${overhead} overhead / ${fmt(cf)} cache fraction`, usableGb, ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage_overhead'])],
+    };
+  }
   const r = tierRatio(c, tier, overrides);
   const ratio = r.value;
   const keys = r.keys;
   const note = r.overridden ? ' (scenario override)' : '';
-  if (tier === 'frozen') {
-    const usableGb = sumExceptLargest(nodes, (n) => n.ramGb * ratio);
-    return {
-      tier, count: nodes.length, usableGb, diskBound: false,
-      math: [step('frozen usable capacity (N−1)', `Σ_{${Math.max(0, nodes.length - 1)} nodes} RAM × ${ratio}${note}`, usableGb, keys)],
-    };
-  }
   const per = (n: Node) => Math.min(n.ramGb * ratio, n.diskGb);
   const usableGb = sumExceptLargest(nodes, per);
   const diskBound = nodes.some((n) => n.diskGb < n.ramGb * ratio);
@@ -113,7 +120,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
   const constraints: Constraint[] = [];
 
   for (const tier of retentionTiers(target)) {
-    const cap = tierCapacity(c, groups, tier, req.hardware.memDiskRatio);
+    const cap = tierCapacity(c, groups, tier, req.hardware.memDiskRatio, req.frozenCacheFraction);
     const days = target.retentionDays[tier]!;
     const ds = downsampleFor(target, tier);
     const used = otherDemand.get(tier)?.dataGb ?? 0;
@@ -144,7 +151,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
   const ingestNodes = expand(groups, ingestTier);
   if (ingestNodes.length > 0) {
     const usableVcpu = sumExceptLargest(ingestNodes, (n) => n.vcpu);
-    const ev = num(c, 'ev_per_s_per_vcpu');
+    const ev = req.eventsPerSecondPerVcpu ?? num(c, 'ev_per_s_per_vcpu');
     const capacityEv = usableVcpu * ev;
     const othersEv = others.reduce((s, p) => s + ingestDemandEvents(c, p, ingestTier, growthYears, req.concurrentSearch ?? false), 0);
     const rep = replicasFor(target, ingestTier);
@@ -154,6 +161,27 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
     constraints.push(constraint('cpu_ingest', max, 'GB/day', [
       step('usable vCPU (N−1)', `Σ_{${ingestNodes.length - 1} nodes} vCPU`, usableVcpu, []),
       step('max GB/day (CPU)', `${fmt(usableVcpu)} × ${ev} × ${fmt(kb)} KB × 86,400 / 1e6 / (${rep} + 1)${derate.factor !== 1 ? ` × ${fmt(derate.factor)} (${derate.notes.join(', ')})` : ''}${othersEv > 0 ? ' after other workloads' : ''}`, max, ['ev_per_s_per_vcpu', 'ingest.default_avg_event_kb', ...derate.keys]),
+    ], { tier: ingestTier }));
+  }
+
+  // Disk write throughput (D28): only when diskWriteMBps is set on the ingest-tier nodes.
+  const mbps = ingestNodes[0]?.diskWriteMBps;
+  if (mbps !== undefined) {
+    const usableWrite = ingestNodes.length - 1;
+    const writeCapacity = usableWrite * mbps * 86_400 / 1_000;
+    const othersWrite = others.reduce((s, p) => {
+      if (!retentionTiers(p).includes(ingestTier)) return s;
+      const ir = indexRatio(c, p).value;
+      const ds = p.downsampleFactor?.[ingestTier] ?? 1;
+      const rep = replicasFor(p, ingestTier);
+      return s + (p.rawGbPerDay ?? 0) * ir * ds * (rep + 1);
+    }, 0);
+    const rep = replicasFor(target, ingestTier);
+    const maxWrite = Math.max(0, (writeCapacity - othersWrite) / (rep + 1) / ratio.value);
+    constraints.push(constraint('disk_write', maxWrite, 'GB/day', [
+      step('usable nodes (N−1)', `${ingestNodes.length} − 1`, usableWrite, []),
+      step('disk write capacity', `${usableWrite} × ${fmt(mbps)} MB/s × 86,400 / 1,000`, writeCapacity, []),
+      step('max GB/day (disk write)', `${fmt(writeCapacity)} / (${rep + 1} copies × ${fmt(ratio.value)} ratio)${othersWrite > 0 ? ' after other workloads' : ''}`, maxWrite, ratio.keys),
     ], { tier: ingestTier }));
   }
 
@@ -182,7 +210,7 @@ function solveMaxRetention(c: ConstantSet, req: ReverseRequest): Solved {
   const others = req.fixed.filter((p) => p !== target);
   const withoutTier: WorkloadProfile = { ...target, retentionDays: { ...target.retentionDays, [tier]: 0 } };
   const used = computeDemand(c, [...others, withoutTier], { growthYears: 0, ccrMultiplier: 1 }).get(tier)?.dataGb ?? 0;
-  const cap = tierCapacity(c, req.hardware.groups, tier, req.hardware.memDiskRatio);
+  const cap = tierCapacity(c, req.hardware.groups, tier, req.hardware.memDiskRatio, req.frozenCacheFraction);
   const ratio = indexRatio(c, target);
   const ds = downsampleFor(target, tier);
   const gbDay = target.rawGbPerDay;
@@ -270,7 +298,7 @@ function solveMaxVectors(c: ConstantSet, req: ReverseRequest): Solved {
   const byOffheap = Math.max(0, floorEps((freeOff * 1e9) / (cost.offheapBytes * (rep + 1))));
   const sample = nodes[0];
 
-  const cap = tierCapacity(c, groups, tier, req.hardware.memDiskRatio);
+  const cap = tierCapacity(c, groups, tier, req.hardware.memDiskRatio, req.frozenCacheFraction);
   const overhead = num(c, 'storage_overhead');
   const freeDisk = cap.usableGb / overhead - (otherDemand?.dataGb ?? 0);
   const byDisk = Math.max(0, floorEps((freeDisk * 1e9) / (cost.diskBytes * (rep + 1))));
@@ -396,6 +424,7 @@ const SOLVERS = {
 
 /** SPEC §5.3 reverse (capacity) mode: hardware → maximum supportable workload, with the binding constraint. */
 export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants): SizingResult {
+  frozenCacheFraction(c, req.frozenCacheFraction);
   const solved = SOLVERS[req.solve](c, req);
   const constraints = solved.constraints;
 

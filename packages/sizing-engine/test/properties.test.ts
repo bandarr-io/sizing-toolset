@@ -111,7 +111,7 @@ describe('§11.3 properties', () => {
   });
 
   it('P5 license floor: adding frozen → Enterprise; removing licensed features never raises the floor', () => {
-    const rank = { basic: 0, platinum: 1, enterprise: 2 } as const;
+    const rank = { basic: 0, enterprise: 1 } as const;
     fc.assert(fc.property(profileArb, fc.boolean(), fc.boolean(), fc.boolean(), (p, ml, fips, ccr) => {
       const withFrozen = forward(req({ ...p, frozen: Math.max(1, p.frozen) }));
       expect(withFrozen.licenseFloor).toBe('enterprise');

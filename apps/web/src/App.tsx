@@ -2,19 +2,23 @@ import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTempla
 import type { ConstantSet } from '@sizing/constants';
 import { defaultIndexMode, forward, reverse, ENGINE_VERSION, type SizingResult, type Tier, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
-import { DeploymentSettings } from './calculator/DeploymentSettings.tsx';
+import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
 import { HardwareGroups } from './calculator/HardwareGroups.tsx';
-import { NodeSizes } from './calculator/NodeSizes.tsx';
+import { isDefaultNodeSizes, NodeSizes, nodeSizesSummary } from './calculator/NodeSizes.tsx';
 import { SolvePicker } from './calculator/SolvePicker.tsx';
 import { Toolbar } from './calculator/Toolbar.tsx';
 import { WorkloadCard } from './calculator/WorkloadCard.tsx';
 import { WorkloadList } from './calculator/WorkloadList.tsx';
 import { NumField } from './components/Fields.tsx';
 import { MathProvider } from './components/MathFlyout.tsx';
+import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
+import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
+import { useCostDefaults } from './costStore.tsx';
 import { download, slug, toJson, toMarkdown } from './export.ts';
 import { ConfigPage } from './pages/ConfigPage.tsx';
+import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
   defaultState, deploymentOfForward, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
@@ -44,8 +48,9 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
 
 const hasLogsdb = (w: readonly WorkloadProfile[]) => w.some((p) => (p.rawGbPerDay !== undefined || p.retentionDays.hot) && defaultIndexMode(p) === 'logsdb');
 
-type Page = 'calculator' | 'config';
-const pageFromHash = (): Page => (window.location.hash.startsWith('#/config') ? 'config' : 'calculator');
+type Page = 'calculator' | 'tco' | 'config';
+const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', config: '#/config' };
+const pageFromHash = (): Page => (window.location.hash.startsWith('#/config') ? 'config' : window.location.hash.startsWith('#/tco') ? 'tco' : 'calculator');
 
 export function App() {
   const [page, setPage] = useState<Page>(pageFromHash);
@@ -54,19 +59,22 @@ export function App() {
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
-  const go = (p: Page) => { window.location.hash = p === 'config' ? '#/config' : '#/'; };
+  const go = (p: Page) => { window.location.hash = HASH[p]; };
 
   const { set: constants, overrides } = useConstants();
   const overriddenKeys = useMemo(() => Object.keys(overrides).sort(), [overrides]);
+  // One scenario shared by the calculator and the TCO page.
+  const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
+  useEffect(() => saveCurrent(state), [state]);
 
   return (
     <MathProvider>
       <EuiPageTemplate panelled={false} restrictWidth={1600} grow>
         <EuiPageTemplate.Header
           pageTitle="Cluster Sizing Calculator"
-          description="Size Elasticsearch clusters from workloads, or find the limits of existing hardware."
           tabs={[
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
+            { label: 'Total cost', isSelected: page === 'tco', onClick: () => go('tco') },
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
           ]}
           rightSideItems={[
@@ -81,23 +89,31 @@ export function App() {
           ]}
         />
         <EuiPageTemplate.Section>
-          {page === 'config' ? <ConfigPage /> : <Calculator constants={constants} overriddenKeys={overriddenKeys} overrides={Object.values(overrides)} />}
+          {page === 'config' && <ConfigPage />}
+          {page === 'tco' && <TcoPage state={state} setState={setState} constants={constants} />}
+          {page === 'calculator' && (
+            <Calculator state={state} setState={setState} constants={constants} overriddenKeys={overriddenKeys} overrides={Object.values(overrides)} onOpenTco={() => go('tco')} />
+          )}
         </EuiPageTemplate.Section>
       </EuiPageTemplate>
     </MathProvider>
   );
 }
 
-function Calculator({ constants, overriddenKeys, overrides }: { constants: ConstantSet; overriddenKeys: string[]; overrides: Parameters<typeof toJson>[3] }) {
-  const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
-  useEffect(() => saveCurrent(state), [state]);
+function Calculator({ state, setState, constants, overriddenKeys, overrides, onOpenTco }: {
+  state: AppState; setState: Setter; constants: ConstantSet; overriddenKeys: string[]; overrides: Parameters<typeof toJson>[3]; onOpenTco: () => void;
+}) {
+  const { defaults } = useCostDefaults();
   const outcome = useMemo(() => compute(state, constants, overriddenKeys), [state, constants, overriddenKeys]);
   const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
+  const rates = mergeRates(defaults, state.cost?.rates);
+  const setScenarioRates = (r: CostRates) => setState((s) => ({ ...s, cost: { ...s.cost, rates: r } }));
 
   const exportAs = (kind: 'md' | 'json') => {
     if ('error' in outcome) return;
     const at = new Date().toISOString();
-    if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at), 'text/markdown');
+    const cost = state.cost?.includeInExport ? costReport(state, constants, rates) : undefined;
+    if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at, cost), 'text/markdown');
     else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
   };
 
@@ -108,8 +124,8 @@ function Calculator({ constants, overriddenKeys, overrides }: { constants: Const
         canExport={!('error' in outcome)}
         onMode={(mode) => patch({ mode })}
         onRename={(name) => patch({ name })}
-        onLoad={(s) => setState(s)}
-        onReset={() => setState({ ...defaultState(), name: state.name, mode: state.mode })}
+        onLoad={(s) => setState(() => s)}
+        onReset={() => setState((s) => ({ ...defaultState(), name: s.name, mode: s.mode }))}
         onExportMd={() => exportAs('md')}
         onExportJson={() => exportAs('json')}
       />
@@ -124,7 +140,9 @@ function Calculator({ constants, overriddenKeys, overrides }: { constants: Const
         <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
           {'error' in outcome
             ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
-            : <ResultsPanel r={outcome.result} />}
+            : <ResultsPanel r={outcome.result} subscription={subscriptionCost(outcome.result, rates)}
+                subscriptionPrice={<CostRatesForm value={state.cost?.rates ?? {}} onChange={setScenarioRates} fallback={defaults} subscriptionOnly />}
+                onOpenTco={onOpenTco} />}
         </EuiFlexItem>
       </EuiFlexGroup>
     </>
@@ -133,36 +151,53 @@ function Calculator({ constants, overriddenKeys, overrides }: { constants: Const
 
 type Setter = (f: (s: AppState) => AppState) => void;
 
+/** Folded-step summary text for a CPU throughput override. */
+const cpuThroughputExtra = (ev: number | undefined) => (ev !== undefined ? `CPU ${ev.toLocaleString('en-US')} ev/s/vCPU` : '');
+
 function ForwardInputs({ state, setState, objectStorage }: { state: AppState; setState: Setter; objectStorage?: SizingResult['objectStorage'] }) {
   const f = state.forward;
   const setForward = (next: AppState['forward']) => setState((s) => ({ ...s, forward: next }));
   const tiers = tiersInUse(f);
+  const { set: c } = useConstants();
+  const deployment = deploymentOfForward(f.options);
+  const extras = [
+    f.options.coordinatingNodes ? `${f.options.coordinatingNodes} coordinating nodes` : '',
+    cpuThroughputExtra(f.options.eventsPerSecondPerVcpu),
+  ].filter(Boolean);
 
   return (
     <>
-      <Section step={1} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type.">
-        <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
-      </Section>
-      <Gap />
-      <Section step={2} title="Plan for growth" description="Size for where each workload will be, not only where it is today.">
-        <GrowthPlanner value={f} onChange={setForward} />
-      </Section>
-      <Gap />
-      <Section step={3} title="Where will it run?">
+      <Section step={1} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings
-          value={deploymentOfForward(f.options)} hasLogsdb={hasLogsdb(f.workloads)} moreCount={f.options.coordinatingNodes ? 1 : 0}
+          value={deployment} hasLogsdb={hasLogsdb(f.workloads)}
           onChange={(d) => setForward({ ...f, options: withForwardDeployment(f.options, d) })}
           more={
-            <EuiFlexItem>
-              <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
-                helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
-            </EuiFlexItem>
+            <>
+              <EuiFlexItem>
+                <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
+                  helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
+              </EuiFlexItem>
+              <EuiFlexItem>
+                <CpuThroughputField value={f.options.eventsPerSecondPerVcpu}
+                  onChange={(eventsPerSecondPerVcpu) => setForward({ ...f, options: { ...f.options, eventsPerSecondPerVcpu } })} />
+              </EuiFlexItem>
+            </>
           }
         />
       </Section>
       <Gap />
-      <Section step={4} title="Node sizes and ratios" description="Defaults suit most sizings. Change a tier's node size or mem:disk ratio for this scenario only; Configurations holds the defaults.">
+      <Section step={2} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type.">
+        <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
+      </Section>
+      <Gap />
+      <Section step={3} title="Node sizes and ratios"
+        description="Defaults suit most sizings. Change a tier's node size, mem:disk ratio or frozen cache for this scenario only; Configurations holds the defaults."
+        summary={nodeSizesSummary(c, tiers as Tier[], objectStorage)} startCollapsed={isDefaultNodeSizes(f.options)}>
         <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} objectStorage={objectStorage} />
+      </Section>
+      <Gap />
+      <Section step={4} title="Plan for growth" description="Size for where each workload will be, not only where it is today.">
+        <GrowthPlanner value={f} onChange={setForward} />
       </Section>
     </>
   );
@@ -177,9 +212,21 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   const withOthers = (o: WorkloadProfile[]) => setReverse({ ...r, fixed: target ? [target, ...o] : o });
   const targetTier = r.targetTier ?? (target ? (Object.keys(target.retentionDays).find((t) => (target.retentionDays[t as Tier] ?? 0) > 0) as Tier | undefined) : undefined) ?? 'hot';
 
+  const deployment = deploymentOfReverse(r);
+  const extras = [cpuThroughputExtra(r.eventsPerSecondPerVcpu)].filter(Boolean);
   let step = 1;
   return (
     <>
+      <Section step={step++} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
+        <DeploymentSettings value={deployment} hasLogsdb={hasLogsdb(r.fixed)} reverse
+          onChange={(d) => setReverse(withReverseDeployment(r, d))}
+          more={
+            <EuiFlexItem>
+              <CpuThroughputField value={r.eventsPerSecondPerVcpu} onChange={(eventsPerSecondPerVcpu) => setReverse({ ...r, eventsPerSecondPerVcpu })} />
+            </EuiFlexItem>
+          } />
+      </Section>
+      <Gap />
       <Section step={step++} title="What do you want to find out?">
         <SolvePicker value={r.solve} onChange={(solve) => setState((s) => ({ ...s, reverse: withSolve(s.reverse, solve) }))} />
       </Section>
@@ -190,6 +237,11 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
           onRatios={(memDiskRatio) => {
             const { memDiskRatio: _drop, ...hw } = r.hardware;
             setReverse({ ...r, hardware: Object.keys(memDiskRatio).length ? { ...hw, memDiskRatio } : hw });
+          }}
+          cacheFraction={r.frozenCacheFraction}
+          onCacheFraction={(v) => {
+            const { frozenCacheFraction: _drop, ...rest } = r;
+            setReverse(v === undefined ? rest : { ...rest, frozenCacheFraction: v });
           }} />
       </Section>
       <Gap />
@@ -209,13 +261,8 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
               ? <OthersEmpty add={(w) => withOthers([w])} taken={r.fixed.map((p) => p.id)} />
               : <WorkloadList workloads={others} onChange={withOthers} role={{ kind: 'reverse-other' }} addLabel="Add another workload" showGrowth={r.solve === 'years_to_capacity'} />}
           </Section>
-          <Gap />
         </>
       )}
-      <Section step={step++} title="Deployment">
-        <DeploymentSettings value={deploymentOfReverse(r)} hasLogsdb={hasLogsdb(r.fixed)} reverse
-          onChange={(d) => setReverse(withReverseDeployment(r, d))} />
-      </Section>
     </>
   );
 }

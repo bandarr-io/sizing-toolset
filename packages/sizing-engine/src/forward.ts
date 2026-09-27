@@ -5,7 +5,7 @@ import { computeDemand, estimateShards, type TierDemand } from './demand.ts';
 import { selfManagedEru, licenseFloor } from './license.ts';
 import { ceilEps, fmt, step } from './math.ts';
 import { computeOverhead, fleetRowFor } from './overhead.ts';
-import { describeOverrides, heapGb, memDiskKey, offheapBudgetGb, placementTier, replicasFor, retentionTiers, tierRatio, type RatioOverrides } from './profiles.ts';
+import { describeOverrides, frozenCacheFraction, growthFactor, heapGb, indexRatio, memDiskKey, offheapBudgetGb, placementTier, replicasFor, retentionTiers, tierRatio, type RatioOverrides } from './profiles.ts';
 import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import {
   TIERS, type Constraint, type ForwardOptions, type ForwardRequest, type NodeGroup, type NodeTemplate, type SizingResult, type Tier,
@@ -19,12 +19,14 @@ export interface ResolvedNode {
   vcpu: number;
   diskType: NodeGroup['diskType'];
   ratio: number;
-  /** Per-node storage capacity: min(RAM × ratio, disk). Frozen: RAM × 1500 of object-store data. */
+  /** Per-node storage capacity: min(RAM × ratio, disk). Frozen: disk / storage_overhead / cache_fraction (D27). */
   capacityGb: number;
   diskBound: boolean;
   /** Constant keys behind the ratio; empty when the scenario overrides it. */
   ratioKeys: string[];
   ratioOverridden: boolean;
+  /** Frozen only (D27): the cache fraction used to derive capacityGb. */
+  frozenCacheFraction?: number;
 }
 
 /** D8/D11/D20: fill a tier's node template from constants. */
@@ -33,11 +35,21 @@ export function resolveNode(c: ConstantSet, tier: Tier, opts: ForwardOptions): R
   const ramGb = t.ramGb ?? num(c, 'node_ram_default_gb');
   const r = tierRatio(c, tier, ratioOverrides(opts));
   const ratio = r.value;
-  // D20: frozen local disk is a shared cache; default it at the hot ratio.
-  const diskGb = t.diskGb ?? ramGb * (tier === 'frozen' ? num(c, 'mem_disk.hot') : ratio);
+  const diskGb = t.diskGb ?? ramGb * ratio;
   const vcpu = t.vcpu ?? ramGb * num(c, 'vcpu_per_ram_gb');
   if (tier === 'frozen') {
-    return { ramGb, diskGb, vcpu, diskType: t.diskType ?? 'ssd', ratio, capacityGb: ramGb * ratio, diskBound: false, ratioKeys: r.keys, ratioOverridden: r.overridden };
+    // D27: disk-cache model. Local disk = RAM × frozen_local_disk_ratio; effective data capacity = disk / overhead / cache_fraction.
+    const localDiskRatio = num(c, 'frozen_local_disk_ratio');
+    const cacheFraction = frozenCacheFraction(c, opts.frozenCacheFraction);
+    const overhead = num(c, 'storage_overhead');
+    const frozenDiskGb = t.diskGb ?? ramGb * localDiskRatio;
+    const capacityGb = frozenDiskGb / overhead / cacheFraction;
+    return {
+      ramGb, diskGb: frozenDiskGb, vcpu, diskType: t.diskType ?? 'ssd',
+      ratio: localDiskRatio, capacityGb, diskBound: false,
+      ratioKeys: ['frozen_local_disk_ratio'], ratioOverridden: false,
+      frozenCacheFraction: cacheFraction,
+    };
   }
   const byRam = ramGb * ratio;
   return {
@@ -61,10 +73,13 @@ function sizeTier(c: ConstantSet, d: TierDemand, node: ResolvedNode, constraints
   let storageNodes = 0;
 
   if (d.tier === 'frozen') {
-    const perNode = node.ramGb * node.ratio;
-    storageNodes = ceilEps(d.dataGb / perNode);
-    math.push(step('frozen data per node', `${fmt(node.ramGb)} GB RAM × ${node.ratio}${ratioNote}`, perNode, ratioKeys));
-    math.push(step('frozen nodes before failover', `ROUNDUP(${fmt(d.dataGb)} / ${fmt(perNode)})`, storageNodes, []));
+    // D27: capacity = local disk / storage_overhead / cache_fraction.
+    const cf = node.frozenCacheFraction!;
+    const overhead = num(c, 'storage_overhead');
+    storageNodes = ceilEps(d.dataGb / node.capacityGb);
+    math.push(step('frozen local disk per node', `${fmt(node.ramGb)} GB RAM × ${node.ratio}${ratioNote}`, node.diskGb, ratioKeys));
+    math.push(step('frozen capacity per node', `${fmt(node.diskGb)} GB disk / ${overhead} overhead / ${fmt(cf)} cache fraction`, node.capacityGb, ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage_overhead']));
+    math.push(step('frozen nodes before failover', `ROUNDUP(${fmt(d.dataGb)} / ${fmt(node.capacityGb)})`, storageNodes, []));
     constraints.push({
       name: 'frozen', tier: 'frozen', capacity: 0, demand: d.dataGb, unit: 'GB', confidence: CONFIDENCE.frozen, binding: false, math: [],
     });
@@ -103,7 +118,6 @@ function sizeTier(c: ConstantSet, d: TierDemand, node: ResolvedNode, constraints
   for (const k of constraints) {
     if (k.tier !== d.tier || k.capacity !== 0) continue;
     if (k.name === 'vector_offheap') k.capacity = base * offheapBudgetGb(c, node.ramGb);
-    else if (k.name === 'frozen') k.capacity = base * node.ramGb * node.ratio;
     else k.capacity = base * node.capacityGb;
     k.utilization = k.capacity > 0 ? k.demand! / k.capacity : 0;
     k.math = [step(`${k.name} utilization (${d.tier})`, `${fmt(k.demand!)} / ${fmt(k.capacity)} (${base} usable nodes)`, k.utilization, [])];
@@ -167,7 +181,8 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
   if (ingestTier) {
     const t = tiers.find((x) => x.tier === ingestTier)!;
     const usableVcpu = Math.max(0, t.nodes - failover) * t.vcpu;
-    const ev = num(c, 'ev_per_s_per_vcpu');
+    const usableNodes = Math.max(0, t.nodes - failover);
+    const ev = opts.eventsPerSecondPerVcpu ?? num(c, 'ev_per_s_per_vcpu');
     const capacity = usableVcpu * ev;
     const demandEv = profiles
       .filter((p) => retentionTiers(p).includes(ingestTier) || (p.rawGbPerDay && placementTier(p) === ingestTier))
@@ -180,6 +195,34 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
           step('usable vCPU', `(${t.nodes} − ${failover}) × ${fmt(t.vcpu)}`, usableVcpu, ['vcpu_per_ram_gb']),
           step('indexing capacity (events/s)', `${fmt(usableVcpu)} × ${ev}`, capacity, ['ev_per_s_per_vcpu']),
           step('indexing demand (events/s, incl. replicas and derates)', 'Σ GB/day × 1e6 / (KB × 86,400) × (replicas + 1) / derate', demandEv, ['ingest.default_avg_event_kb', 'ingest.derate.pipelines', 'ingest.derate.logsdb', 'ingest.derate.concurrent_search']),
+        ],
+      });
+    }
+  }
+
+  // Disk write throughput (D28): only when diskWriteMBps is set on the ingest-tier node template.
+  if (ingestTier) {
+    const mbps = opts.nodes?.[ingestTier]?.diskWriteMBps;
+    if (mbps !== undefined) {
+      const t = tiers.find((x) => x.tier === ingestTier)!;
+      const usableNodes = Math.max(0, t.nodes - failover);
+      const writeCapacity = usableNodes * mbps * 86_400 / 1_000;
+      const writeDemand = profiles
+        .filter((p) => retentionTiers(p).includes(ingestTier) || (p.rawGbPerDay && placementTier(p) === ingestTier))
+        .reduce((s, p) => {
+          const ir = indexRatio(c, p).value;
+          const ds = p.downsampleFactor?.[ingestTier] ?? 1;
+          const rep = replicasFor(p, ingestTier);
+          return s + (p.rawGbPerDay ?? 0) * growthFactor(p, growthYears) * ir * ds * (rep + 1);
+        }, 0) * ccrMultiplier;
+      constraints.push({
+        name: 'disk_write', tier: ingestTier, capacity: writeCapacity, demand: writeDemand,
+        utilization: writeCapacity > 0 ? writeDemand / writeCapacity : Infinity,
+        unit: 'GB/day', confidence: CONFIDENCE.disk_write, binding: false, rallyRequired: true,
+        math: [
+          step('usable nodes', `${t.nodes} − ${failover}`, usableNodes, ['failover_nodes_per_tier']),
+          step('disk write capacity', `${usableNodes} × ${fmt(mbps)} MB/s × 86,400 / 1,000`, writeCapacity, []),
+          step('disk write demand (GB/day, incl. replicas)', 'Σ GB/day × index_ratio × (replicas + 1)', writeDemand, []),
         ],
       });
     }

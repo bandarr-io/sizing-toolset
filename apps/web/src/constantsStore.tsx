@@ -23,7 +23,7 @@ const POSITIVE = new Set([
 /** Fractions that must stay below 1 (a derate of 1 would mean zero throughput). */
 const BELOW_ONE = new Set(['heap_fraction', 'ingest.derate.pipelines', 'ingest.derate.logsdb', 'ingest.derate.concurrent_search']);
 
-const LICENSE_TIERS = ['basic', 'platinum', 'enterprise'];
+const LICENSE_TIERS = ['basic', 'enterprise'];
 
 /** Tables the engine scans in order: key → column that must strictly increase (and the first row's required value). */
 const ORDERED_TABLES: Record<string, { column: string; first?: number }> = {
