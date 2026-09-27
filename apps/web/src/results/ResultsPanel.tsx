@@ -168,13 +168,13 @@ function Block({ title, action, children }: { title: string; action?: ReactNode;
   );
 }
 
-const PIN_TOP = 16;
+export const PIN_TOP = 16;
 
 /**
  * True while the element fits in the window below the pin offset. A pinned element taller than the
  * window would hide its own bottom forever (the page seems to stop scrolling), so it is only pinned when it fits.
  */
-function useFitsViewport<T extends HTMLElement>() {
+export function useFitsViewport<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [fits, setFits] = useState(true);
   useEffect(() => {

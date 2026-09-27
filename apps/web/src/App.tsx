@@ -1,6 +1,6 @@
 import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTemplate, EuiSpacer, EuiText, EuiTitle, EuiToolTip } from '@elastic/eui';
 import type { ConstantSet } from '@sizing/constants';
-import { defaultIndexMode, forward, reverse, ENGINE_VERSION, type SizingResult, type Tier, type WorkloadProfile } from '@sizing/engine';
+import { defaultIndexMode, forward, reverse, sizeTopology, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
@@ -16,12 +16,14 @@ import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
 import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
 import { useCostDefaults } from './costStore.tsx';
-import { download, slug, toJson, toMarkdown } from './export.ts';
+import { download, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
+import { MultiSiteInputs } from './calculator/MultiSiteInputs.tsx';
+import { TopologyPanel } from './results/TopologyPanel.tsx';
 import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultState, deploymentOfForward, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  defaultMultiSite, defaultState, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -117,6 +119,8 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
     else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
   };
 
+  if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
+
   return (
     <>
       <Toolbar
@@ -150,6 +154,60 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
 }
 
 type Setter = (f: (s: AppState) => AppState) => void;
+
+type TopologyOutcome = { result: TopologyResult; compare?: Partial<Record<SiteRelationship, TopologyResult>> } | { error: string };
+
+/** D32: several clusters on physical servers. Shares the toolbar; its own inputs and results. */
+function MultiSiteCalculator({ state, setState, constants }: { state: AppState; setState: Setter; constants: ConstantSet }) {
+  const ms = state.multisite ?? defaultMultiSite();
+  // Persist the defaults the first time the mode is opened.
+  useEffect(() => { if (!state.multisite) setState((s) => ({ ...s, multisite: s.multisite ?? defaultMultiSite() })); }, [state.multisite, setState]);
+  const outcome = useMemo((): TopologyOutcome => {
+    try {
+      const result = sizeTopology(topologyRequest(ms), constants);
+      if (!ms.compare) return { result };
+      const compare = Object.fromEntries(RELATIONSHIPS.map((r) => [r.value, r.value === ms.relationship ? result : sizeTopology(topologyRequest(ms, r.value), constants)]));
+      return { result, compare };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [ms, constants]);
+  const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
+
+  const exportAs = (kind: 'md' | 'json') => {
+    if ('error' in outcome) return;
+    const at = new Date().toISOString();
+    if (kind === 'md') download(`${slug(state.name)}.md`, topologyMarkdown(state.name, outcome.result, at), 'text/markdown');
+    else download(`${slug(state.name)}.json`, JSON.stringify({ exportedAt: at, engineVersion: ENGINE_VERSION, constantsHash: constants.hash, scenario: state, result: outcome.result }, null, 2), 'application/json');
+  };
+
+  return (
+    <>
+      <Toolbar
+        state={state}
+        canExport={!('error' in outcome)}
+        onMode={(mode) => patch({ mode })}
+        onRename={(name) => patch({ name })}
+        onLoad={(s) => setState(() => s)}
+        onReset={() => setState((s) => ({ ...s, multisite: defaultMultiSite() }))}
+        onExportMd={() => exportAs('md')}
+        onExportJson={() => exportAs('json')}
+      />
+      <EuiSpacer size="l" />
+      <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
+        <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
+          <MultiSiteInputs ms={ms} setState={setState} />
+        </EuiFlexItem>
+        <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
+          {'error' in outcome
+            ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
+            : <TopologyPanel result={outcome.result} {...(outcome.compare ? { compare: outcome.compare } : {})}
+                onPick={(relationship) => setState((s) => ({ ...s, multisite: { ...(s.multisite ?? defaultMultiSite()), relationship } }))} />}
+        </EuiFlexItem>
+      </EuiFlexGroup>
+    </>
+  );
+}
 
 /** Folded-step summary text for a CPU throughput override. */
 const cpuThroughputExtra = (ev: number | undefined) => (ev !== undefined ? `CPU ${ev.toLocaleString('en-US')} ev/s/vCPU` : '');

@@ -45,6 +45,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
           options={[
             { id: 'forward', label: 'Size a workload', iconType: 'logoElasticsearch' },
             { id: 'reverse', label: 'Test hardware limits', iconType: 'compute' },
+            { id: 'multisite', label: 'Multiple sites', iconType: 'globe' },
           ]}
         />
       </EuiFlexItem>

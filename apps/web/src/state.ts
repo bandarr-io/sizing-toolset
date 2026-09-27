@@ -1,10 +1,11 @@
 import { num, type ConstantSet } from '@sizing/constants';
 import type { CostSettings } from './cost.ts';
 import type {
+  ServerGroup, SiteInput, SiteRelationship, TopologyRequest,
   CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, IndexMode, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
 
-export type Mode = 'forward' | 'reverse';
+export type Mode = 'forward' | 'reverse' | 'multisite';
 
 /**
  * One input model per mode: the engine request itself. Simple and advanced inputs edit the same data;
@@ -19,6 +20,8 @@ export interface AppState {
   reverse: ReverseRequest;
   /** Prices, term and export choice for this scenario; blank prices fall back to the browser's cost defaults. */
   cost?: CostSettings;
+  /** D32: several clusters on physical servers. Absent until the mode is first used. */
+  multisite?: MultiSiteState;
 }
 
 export const MODELS: { value: DeploymentModel; text: string; disabled?: boolean }[] = [
@@ -222,4 +225,69 @@ export function tiersInUse(req: ForwardRequest): Tier[] {
     if (p.totalGb || p.vector) used.add(p.tier ?? 'content');
   }
   return (['hot', 'warm', 'cold', 'frozen', 'content'] as Tier[]).filter((t) => used.has(t));
+}
+
+// ---- Multiple sites (D32) --------------------------------------------------------------------------
+
+export interface MultiSiteState {
+  relationship: SiteRelationship;
+  /** Also compute the other two relationships side by side. */
+  compare: boolean;
+  /** One set of servers and workloads for every site. */
+  identical: boolean;
+  /** DR only: the site that ingests. */
+  leader: number;
+  /** When identical, sites[0] holds the servers and workloads used for every site; names still come from each entry. */
+  sites: SiteInput[];
+  options: ForwardOptions;
+}
+
+export const RELATIONSHIPS: { value: SiteRelationship; title: string; blurb: string }[] = [
+  { value: 'independent', title: 'Independent', blurb: 'Each site keeps only what it ingests' },
+  { value: 'dr', title: 'Disaster recovery', blurb: 'One site ingests; standbys hold a copy' },
+  { value: 'active_active', title: 'Active-active', blurb: 'Every site holds every site\'s data' },
+];
+
+export function siteName(i: number): string {
+  return `Site ${String.fromCharCode(65 + i)}`;
+}
+
+/** A 35-server site: 3 masters, 22 hot servers of 4 × 64 GB nodes, 8 frozen, 2 Kibana. Edit to the customer's layout. */
+export function defaultServers(): ServerGroup[] {
+  return [
+    { role: 'master', count: 3, ramGb: 32, diskGb: 500, diskType: 'ssd', vcpu: 8 },
+    { role: 'hot', count: 22, ramGb: 256, diskGb: 7680, diskType: 'nvme', vcpu: 64 },
+    { role: 'frozen', count: 8, ramGb: 128, diskGb: 7680, diskType: 'ssd', vcpu: 16 },
+    { role: 'kibana', count: 2, ramGb: 32, diskGb: 200, diskType: 'ssd', vcpu: 8 },
+  ];
+}
+
+export function defaultMultiSite(): MultiSiteState {
+  const workloads = [{ ...newWorkload('logs'), rawGbPerDay: 2000, retentionDays: { hot: 30, frozen: 335 } }];
+  return {
+    relationship: 'independent', compare: true, identical: true, leader: 0,
+    sites: [0, 1].map((i) => ({ name: siteName(i), workloads: i === 0 ? workloads : [], servers: i === 0 ? defaultServers() : [] })),
+    options: { model: 'self_managed' },
+  };
+}
+
+/**
+ * The engine request for one relationship. Identical sites copy site 0's servers to every site; its
+ * workloads go to every site, except in DR where only the primary ingests.
+ */
+export function topologyRequest(ms: MultiSiteState, relationship: SiteRelationship = ms.relationship): TopologyRequest {
+  const template = ms.sites[0] ?? { name: siteName(0), workloads: [], servers: [] };
+  const sites = ms.sites.map((s, i): SiteInput => {
+    if (!ms.identical) return s;
+    const ingests = relationship !== 'dr' || i === ms.leader;
+    return { name: s.name, servers: template.servers, workloads: ingests ? template.workloads : [] };
+  });
+  return { relationship, sites, options: ms.options, leader: ms.leader };
+}
+
+/** Add or remove sites, keeping existing ones. */
+export function withSiteCount(ms: MultiSiteState, n: number): MultiSiteState {
+  const count = Math.max(1, Math.min(8, Math.round(n)));
+  const sites = Array.from({ length: count }, (_, i) => ms.sites[i] ?? { name: siteName(i), workloads: [], servers: [] });
+  return { ...ms, sites, leader: Math.min(ms.leader, count - 1) };
 }

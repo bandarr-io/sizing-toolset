@@ -1,5 +1,5 @@
 import type { Constant } from '@sizing/constants';
-import type { SizingResult, WorkloadProfile } from '@sizing/engine';
+import type { SizingResult, TopologyResult, WorkloadProfile } from '@sizing/engine';
 import type { CostReport } from './cost.ts';
 import { fmtMoney } from './format.ts';
 import type { AppState } from './state.ts';
@@ -126,4 +126,29 @@ export function download(filename: string, content: string, type: string): void 
 
 export function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scenario';
+}
+
+/** D32: Markdown for a multi-site scenario: verdict, headroom, per-site server fit and assumptions. */
+export function topologyMarkdown(name: string, t: TopologyResult, exportedAt: string): string {
+  const L: string[] = [`# ${name}`, ''];
+  L.push('> **Estimate, not benchmark.** Storage math is reliable; CPU, query latency and ML are not. Validate with Rally before committing hardware.', '');
+  L.push('## Summary', '');
+  L.push(`- Relationship: **${t.relationship.replace('_', '-')}**, ${t.sites.length} sites`);
+  L.push(`- Verdict: **${t.fitsAll ? 'fits on these servers' : 'short of servers'}**`);
+  if (t.headroom) {
+    const s = t.headroom.scale;
+    L.push(`- Headroom: ${Number.isFinite(s) ? `${n(s, 2)}× today's data volume` : 'not limited by these servers'}${t.headroom.binding ? ` (${t.headroom.binding.site} ${t.headroom.binding.role} runs out first)` : ''}`);
+  }
+  L.push(`- Servers needed: ${t.totals.neededServers} of ${t.totals.availableServers}; RAM ${n(t.totals.ramGb)} GB; ${t.totals.eru} ERU (summed per cluster)`);
+  if (t.totals.objectStorageGb > 0) L.push(`- Object storage: ${n(t.totals.objectStorageGb, 0)} GB`);
+  L.push('');
+  for (const s of t.sites) {
+    L.push(`## ${s.name}`, '', `Holds: ${s.holds.join(', ') || 'no data'}`, '');
+    L.push('| Role | Servers needed | Available | Nodes per server | Status |', '|---|---:|---:|---:|---|');
+    for (const f of s.fit) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${f.status} |`);
+    L.push('');
+  }
+  L.push('## Assumptions', '', ...[...t.assumptions, ...(t.sites[0]?.result.assumptions ?? [])].map((a) => `- ${a}`), '');
+  L.push('---', `Engine ${t.sites[0]?.result.engineVersion ?? ''} · constants ${t.sites[0]?.result.constantsHash.slice(0, 12) ?? ''} · exported ${exportedAt}`);
+  return L.join('\n');
 }

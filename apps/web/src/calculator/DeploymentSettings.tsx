@@ -42,7 +42,7 @@ export function CpuThroughputField({ value, onChange }: { value: number | undefi
 }
 
 /** Deployment facts shared by forward and reverse. Shown once, in one place; the step itself folds, so nothing hides behind a toggle. */
-export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more }: {
+export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more, hideSites = false }: {
   value: Deployment;
   onChange: (d: Deployment) => void;
   /** Only offer the full-LogsDB licensing switch when a LogsDB workload exists. */
@@ -50,6 +50,8 @@ export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more }
   reverse?: boolean;
   /** Mode-specific inputs, shown after the shared switches. */
   more?: ReactNode;
+  /** Multi-site mode defines the sites and their relationship itself. */
+  hideSites?: boolean;
 }) {
   const set = (patch: Partial<Deployment>) => onChange({ ...value, ...patch });
   const ccrOptions = reverse ? CCR.slice(0, 2).map((o) => (o.value === 'unidirectional' ? { ...o, text: 'Cross-cluster replication in use' } : o)) : CCR;
@@ -57,11 +59,11 @@ export function DeploymentSettings({ value, onChange, hasLogsdb, reverse, more }
     <>
       <EuiFlexGrid columns={2} gutterSize="l">
         <EuiFlexItem><SelectField label="Deployment model" value={value.model} options={MODELS} onChange={(model) => set({ model })} /></EuiFlexItem>
-        <EuiFlexItem>
+        {!hideSites && <EuiFlexItem>
           <NumField label="Sites" value={value.sites} step={1} min={1} onChange={(sites) => set({ sites: Math.max(1, sites ?? 1) })}
             helpText={value.sites > 1 ? 'Node counts are per site; totals cover all sites.' : undefined} />
-        </EuiFlexItem>
-        {(value.sites > 1 || value.ccrMode !== 'none') && (
+        </EuiFlexItem>}
+        {!hideSites && (value.sites > 1 || value.ccrMode !== 'none') && (
           <EuiFlexItem><SelectField label="Replication between sites" value={value.ccrMode} options={ccrOptions} onChange={(ccrMode) => set({ ccrMode })} /></EuiFlexItem>
         )}
       </EuiFlexGrid>
