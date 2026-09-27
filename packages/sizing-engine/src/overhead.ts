@@ -30,7 +30,8 @@ function group(role: OverheadResult['role'], count: number, ramGb: number, vcpu:
 }
 
 /** SPEC §5.2 overhead nodes (per site). */
-export function computeOverhead(c: ConstantSet, input: OverheadInput): OverheadResult[] {
+/** `notes` carries math for decisions that add no node group (co-located masters). */
+export function computeOverhead(c: ConstantSet, input: OverheadInput, notes: MathStep[] = []): OverheadResult[] {
   const out: OverheadResult[] = [];
   const counted = val<Record<string, boolean>>(c, 'eru.counted_components');
   const vcpuPerGb = num(c, 'vcpu_per_ram_gb');
@@ -52,13 +53,16 @@ export function computeOverhead(c: ConstantSet, input: OverheadInput): OverheadR
     }
     const r = rows[i]!;
     out.push(group('master', r.count, r.ramGb, r.ramGb * vcpuPerGb, counted.elasticsearch ?? true, math));
+  } else {
+    // No dedicated masters: the decision still belongs in the math.
+    notes.push(...math, step('dedicated masters', `none: masters run on the data nodes below ${rows[i + 1]?.minDataNodes ?? '∞'} data nodes`, 0, ['masters.sizing']));
   }
 
   const kibanaHa = input.dataNodes >= num(c, 'kibana.ha_min_data_nodes');
   const kibanaCount = kibanaHa ? num(c, 'kibana.ha_count') : 1;
   const kibanaRam = num(c, 'kibana.node_ram_gb');
   out.push(group('kibana', kibanaCount, kibanaRam, kibanaRam * vcpuPerGb, counted.kibana ?? true, [
-    step('Kibana instances', `${input.dataNodes} data nodes ${kibanaHa ? '≥' : '<'} ${num(c, 'kibana.ha_min_data_nodes')} → ${kibanaCount}`, kibanaCount, ['kibana.ha_min_data_nodes', 'kibana.ha_count']),
+    step('Kibana instances', `${input.dataNodes} data nodes ${kibanaHa ? '≥' : '<'} ${num(c, 'kibana.ha_min_data_nodes')} → ${kibanaCount}`, kibanaCount, ['kibana.ha_min_data_nodes', ...(kibanaHa ? ['kibana.ha_count'] : [])]),
     step('Kibana RAM per instance', `${kibanaRam}`, kibanaRam, ['kibana.node_ram_gb']),
   ]));
 

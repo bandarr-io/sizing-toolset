@@ -109,7 +109,8 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
 
   if (meta.stream) {
     const solvingGb = solve === 'max_gb_day';
-    const needsVolume = solve !== 'max_shards';
+    const needsVolume = true;
+    const volumeOptional = solve === 'max_shards';
     const indexed = p.rawGbPerDay !== undefined ? p.rawGbPerDay * ratio : undefined;
     body = (
       <>
@@ -118,8 +119,11 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
             <EuiFlexItem style={{ flexBasis: 150, minWidth: 140 }}>
               {solvingGb
                 ? <EuiFormRow label="Daily ingest"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
-                : <NumField label="Daily ingest (raw)" append="GB/day" value={p.rawGbPerDay} onChange={(v) => set({ rawGbPerDay: v ?? 0 })}
-                    helpText={indexed !== undefined ? `≈ ${fmtNum(indexed)} GB/day indexed` : undefined} />}
+                : <NumField label={volumeOptional ? 'Daily ingest (optional)' : 'Daily ingest (raw)'} append="GB/day" value={p.rawGbPerDay}
+                    optional={volumeOptional} onChange={(v) => set({ rawGbPerDay: volumeOptional ? v : v ?? 0 })}
+                    helpText={volumeOptional
+                      ? 'Sets how often the stream rolls over. Blank assumes the 30-day max age.'
+                      : indexed !== undefined ? `≈ ${fmtNum(indexed)} GB/day indexed` : undefined} />}
             </EuiFlexItem>
           )}
           {needsVolume && (
@@ -141,7 +145,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
           )}
           {solve === 'max_shards' && (
             <EuiFlexItem style={{ flexBasis: 160, minWidth: 140 }}>
-              <NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="1" onChange={(v) => set({ rolloverDays: v })} />
+              <NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="auto" helpText="Blank rolls over at 50 GB per primary shard or 30 days, whichever comes first." onChange={(v) => set({ rolloverDays: v })} />
             </EuiFlexItem>
           )}
         </EuiFlexGroup>
@@ -165,7 +169,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
         <EuiFlexGrid columns={3} gutterSize="l">
           <EuiFlexItem><NumField label="Index ratio override" value={p.indexRatioOverride} optional placeholder={String(num(c, `index_ratio.${mode}`))} onChange={(v) => set({ indexRatioOverride: v })} /></EuiFlexItem>
           <EuiFlexItem><NumField label="Average event size" append="KB" value={p.avgEventKb} optional placeholder={String(num(c, 'ingest.default_avg_event_kb'))} onChange={(v) => set({ avgEventKb: v })} /></EuiFlexItem>
-          {solve !== 'max_shards' && <EuiFlexItem><NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="1" onChange={(v) => set({ rolloverDays: v })} /></EuiFlexItem>}
+          {solve !== 'max_shards' && <EuiFlexItem><NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="auto" helpText="Blank rolls over at 50 GB per primary shard or 30 days, whichever comes first." onChange={(v) => set({ rolloverDays: v })} /></EuiFlexItem>}
           <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="1" onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
           <EuiFlexItem><NumField label="Warm replicas" value={p.replicas.warm} optional step={1} placeholder={String(replicas)} onChange={(v) => set({ replicas: { ...p.replicas, warm: v } })} /></EuiFlexItem>
           {downsampleTiers.map((t) => (

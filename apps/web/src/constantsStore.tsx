@@ -15,7 +15,7 @@ const POSITIVE = new Set([
   'mem_disk.hot_min', 'mem_disk.hot_max', 'mem_disk.warm_min', 'mem_disk.warm_max',
   'heap_fraction', 'heap_cap_gb', 'node_ram_default_gb', 'node_ram_practical_max_gb', 'vcpu_per_ram_gb',
   'shard_size_gb_max', 'max_shards_per_nonfrozen_node', 'master_indices_per_gb_heap',
-  'datastream.default_rollover_days', 'datastream.default_primary_shards',
+  'datastream.rollover_max_primary_shard_gb', 'datastream.rollover_max_age_days', 'datastream.default_primary_shards',
   'kibana.node_ram_gb', 'coordinating.node_ram_gb', 'apm.node_ram_gb', 'ml.node_ram_gb', 'ml.jobs_per_node',
   'knn.hnsw_m', 'eru_gb', 'ev_per_s_per_vcpu', 'ingest.default_avg_event_kb',
 ]);

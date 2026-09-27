@@ -81,14 +81,25 @@
     "carried_forward": false
   },
   {
-    "key": "datastream.default_rollover_days",
-    "value": 1,
-    "unit": "days",
-    "source_url": "https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/size-shards",
-    "as_of_date": "2026-09-01",
+    "key": "datastream.rollover_max_primary_shard_gb",
+    "value": 50,
+    "unit": "GB per primary shard",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/index-lifecycle-actions/ilm-rollover",
+    "as_of_date": "2026-09-26",
     "stack_version": "9.4",
     "confidence": "medium",
-    "notes": "Decision (docs/DECISIONS.md); value is not stated by the source. Used by max_shards → data streams (R6).",
+    "notes": "D31: roll over when the largest primary shard reaches this size (max_primary_shard_size). The rollover docs show 50gb / 30d as the pattern that keeps shard sizes in range; the built-in logs and metrics policies were not re-verified.",
+    "carried_forward": true
+  },
+  {
+    "key": "datastream.rollover_max_age_days",
+    "value": 30,
+    "unit": "days",
+    "source_url": "https://www.elastic.co/docs/reference/elasticsearch/index-lifecycle-actions/ilm-rollover",
+    "as_of_date": "2026-09-26",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "D31: roll over when the write index reaches this age (max_age), whichever comes first with the size limit. Low-volume streams roll over on age.",
     "carried_forward": true
   },
   {

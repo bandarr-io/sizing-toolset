@@ -16,7 +16,7 @@ Current phase: MVP (§12). Build order a → e; stop for review after each step.
 - Pure functions only. No I/O, no `Date`, no `Math.random()`, no env reads, no module state.
 - Constants come in as a `ConstantSet` argument (default: `defaultConstants` from `@sizing/constants`). Never hardcode a number that exists in constants; add a constant instead.
 - No runtime dependencies other than `@sizing/constants`.
-- Every output number carries `MathStep[]` naming the constant keys it used.
+- Every output number carries `MathStep[]` naming the constant keys it used, and only those: cite a key only on the branch that read it (not when an override or other path was taken). `test/citations.test.ts` enforces both directions; add a scenario there for any new formula or override.
 - Units: GB are decimal (1e9 bytes). Put units in names (`ramGb`, `diskGb`, `bytesPerVector`).
 
 ## Test rules

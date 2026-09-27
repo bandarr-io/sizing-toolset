@@ -1,6 +1,6 @@
 import { defaultConstants, num, type ConstantSet } from '@sizing/constants';
 import { CONFIDENCE, markBindingForward, RALLY_REQUIRED } from './confidence.ts';
-import { ingestDemandEvents } from './cpu.ts';
+import { derateFactor, ingestDemandEvents } from './cpu.ts';
 import { computeDemand, estimateShards, type TierDemand } from './demand.ts';
 import { selfManagedEru, licenseFloor } from './license.ts';
 import { ceilEps, fmt, step } from './math.ts';
@@ -8,7 +8,7 @@ import { computeOverhead, fleetRowFor } from './overhead.ts';
 import { describeOverrides, frozenCacheFraction, growthFactor, heapGb, indexRatio, memDiskKey, offheapBudgetGb, placementTier, replicasFor, retentionTiers, tierRatio, type RatioOverrides } from './profiles.ts';
 import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import {
-  TIERS, type Constraint, type ForwardOptions, type ForwardRequest, type NodeGroup, type NodeTemplate, type SizingResult, type Tier,
+  TIERS, type Constraint, type ForwardOptions, type MathStep, type ForwardRequest, type NodeGroup, type NodeTemplate, type SizingResult, type Tier,
   type TierResult, type WorkloadProfile,
 } from './types.ts';
 import { validateHardware } from './validation.ts';
@@ -25,6 +25,8 @@ export interface ResolvedNode {
   /** Constant keys behind the ratio; empty when the scenario overrides it. */
   ratioKeys: string[];
   ratioOverridden: boolean;
+  /** Constants behind RAM and vCPU when the tier's template leaves them blank. */
+  sizeKeys: string[];
   /** Frozen only (D27): the cache fraction used to derive capacityGb. */
   frozenCacheFraction?: number;
 }
@@ -37,6 +39,7 @@ export function resolveNode(c: ConstantSet, tier: Tier, opts: ForwardOptions): R
   const ratio = r.value;
   const diskGb = t.diskGb ?? ramGb * ratio;
   const vcpu = t.vcpu ?? ramGb * num(c, 'vcpu_per_ram_gb');
+  const sizeKeys = [...(t.ramGb === undefined ? ['node_ram_default_gb'] : []), ...(t.vcpu === undefined ? ['vcpu_per_ram_gb'] : [])];
   if (tier === 'frozen') {
     // D27: disk-cache model. Local disk = RAM × frozen_local_disk_ratio; effective data capacity = disk / overhead / cache_fraction.
     const localDiskRatio = num(c, 'frozen_local_disk_ratio');
@@ -47,14 +50,14 @@ export function resolveNode(c: ConstantSet, tier: Tier, opts: ForwardOptions): R
     return {
       ramGb, diskGb: frozenDiskGb, vcpu, diskType: t.diskType ?? 'ssd',
       ratio: localDiskRatio, capacityGb, diskBound: false,
-      ratioKeys: ['frozen_local_disk_ratio'], ratioOverridden: false,
+      ratioKeys: ['frozen_local_disk_ratio'], ratioOverridden: false, sizeKeys,
       frozenCacheFraction: cacheFraction,
     };
   }
   const byRam = ramGb * ratio;
   return {
     ramGb, diskGb, vcpu, diskType: t.diskType ?? (tier === 'hot' || tier === 'content' ? 'nvme' : 'ssd'),
-    ratio, capacityGb: Math.min(byRam, diskGb), diskBound: diskGb < byRam, ratioKeys: r.keys, ratioOverridden: r.overridden,
+    ratio, capacityGb: Math.min(byRam, diskGb), diskBound: diskGb < byRam, ratioKeys: r.keys, ratioOverridden: r.overridden, sizeKeys,
   };
 }
 
@@ -68,6 +71,7 @@ export function ratioOverrides(opts: ForwardOptions): RatioOverrides {
 function sizeTier(c: ConstantSet, d: TierDemand, node: ResolvedNode, constraints: Constraint[]): TierResult {
   const failover = num(c, 'failover_nodes_per_tier');
   const math = [...d.math];
+  math.push(step('node size', `${fmt(node.ramGb)} GB RAM, ${fmt(node.vcpu)} vCPU per node${node.sizeKeys.length ? ' (defaults where blank)' : ''}`, node.ramGb, node.sizeKeys));
   const ratioKeys = node.ratioKeys;
   const ratioNote = node.ratioOverridden ? ' (scenario override)' : '';
   let storageNodes = 0;
@@ -134,7 +138,7 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
   const ccrMode = opts.ccrMode ?? 'none';
   const growthYears = opts.growthHorizonYears ?? num(c, 'growth.default_horizon_years');
   const ccrMultiplier = ccrMode === 'bidirectional' ? sites : 1;
-  const demand = computeDemand(c, profiles, { growthYears, ccrMultiplier });
+  const demand = computeDemand(c, profiles, { growthYears, ccrMultiplier, growthKeys: opts.growthHorizonYears === undefined ? ['growth.default_horizon_years'] : [] });
 
   const constraints: Constraint[] = [];
   const tiers: TierResult[] = [];
@@ -149,9 +153,10 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
 
   const dataNodes = tiers.reduce((s, t) => s + t.nodes, 0);
   const shards = estimateShards(c, profiles, growthYears);
+  const overheadNotes: MathStep[] = [];
   const overhead = computeOverhead(c, {
     dataNodes, indices: shards.indices, profiles, coordinatingNodes: opts.coordinatingNodes ?? 0,
-  });
+  }, overheadNotes);
 
   const failover = num(c, 'failover_nodes_per_tier');
   const nonFrozen = tiers.filter((t) => t.tier !== 'frozen').reduce((s, t) => s + t.nodes, 0);
@@ -160,7 +165,11 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
     constraints.push({
       name: 'heap_shards', capacity: shardCap, demand: shards.nonFrozenShards, utilization: shardCap > 0 ? shards.nonFrozenShards / shardCap : Infinity,
       unit: 'shards', confidence: CONFIDENCE.heap_shards, binding: false,
-      math: [step('non-frozen shard capacity', `(${nonFrozen} − ${failover}) × ${num(c, 'max_shards_per_nonfrozen_node')}`, shardCap, ['max_shards_per_nonfrozen_node'])],
+      math: [
+        ...shards.math,
+        step('non-frozen shards (all workloads)', 'Σ hot, warm, cold and content shards above', shards.nonFrozenShards, []),
+        step('non-frozen shard capacity', `(${nonFrozen} − ${failover}) × ${num(c, 'max_shards_per_nonfrozen_node')}`, shardCap, ['max_shards_per_nonfrozen_node']),
+      ],
     });
   }
 
@@ -184,17 +193,21 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
     const usableNodes = Math.max(0, t.nodes - failover);
     const ev = opts.eventsPerSecondPerVcpu ?? num(c, 'ev_per_s_per_vcpu');
     const capacity = usableVcpu * ev;
-    const demandEv = profiles
-      .filter((p) => retentionTiers(p).includes(ingestTier) || (p.rawGbPerDay && placementTier(p) === ingestTier))
-      .reduce((s, p) => s + ingestDemandEvents(c, p, ingestTier, growthYears, opts.concurrentSearch ?? false), 0) * ccrMultiplier;
+    const ingesting = profiles.filter((p) => retentionTiers(p).includes(ingestTier) || (p.rawGbPerDay && placementTier(p) === ingestTier));
+    const demandEv = ingesting.reduce((s, p) => s + ingestDemandEvents(c, p, ingestTier, growthYears, opts.concurrentSearch ?? false), 0) * ccrMultiplier;
+    // Cite only the derates that applied and the default event size only where a workload used it.
+    const demandKeys = [...new Set(ingesting.filter((p) => p.rawGbPerDay).flatMap((p) => [
+      ...derateFactor(c, p, opts.concurrentSearch ?? false).keys,
+      ...(p.avgEventKb === undefined ? ['ingest.default_avg_event_kb'] : []),
+    ]))];
     if (demandEv > 0) {
       constraints.push({
         name: 'cpu_ingest', tier: ingestTier, capacity, demand: demandEv, utilization: capacity > 0 ? demandEv / capacity : Infinity,
         unit: 'events/s', confidence: CONFIDENCE.cpu_ingest, binding: false, rallyRequired: true,
         math: [
-          step('usable vCPU', `(${t.nodes} − ${failover}) × ${fmt(t.vcpu)}`, usableVcpu, ['vcpu_per_ram_gb']),
-          step('indexing capacity (events/s)', `${fmt(usableVcpu)} × ${ev}`, capacity, ['ev_per_s_per_vcpu']),
-          step('indexing demand (events/s, incl. replicas and derates)', 'Σ GB/day × 1e6 / (KB × 86,400) × (replicas + 1) / derate', demandEv, ['ingest.default_avg_event_kb', 'ingest.derate.pipelines', 'ingest.derate.logsdb', 'ingest.derate.concurrent_search']),
+          step('usable vCPU', `(${t.nodes} − ${failover}) × ${fmt(t.vcpu)}`, usableVcpu, opts.nodes?.[ingestTier]?.vcpu === undefined ? ['vcpu_per_ram_gb'] : []),
+          step('indexing capacity (events/s)', `${fmt(usableVcpu)} × ${ev}${opts.eventsPerSecondPerVcpu !== undefined ? ' (scenario override)' : ''}`, capacity, opts.eventsPerSecondPerVcpu === undefined ? ['ev_per_s_per_vcpu'] : []),
+          step('indexing demand (events/s, incl. replicas and derates)', 'Σ GB/day × 1e6 / (KB × 86,400) × (replicas + 1) / derate', demandEv, demandKeys),
         ],
       });
     }
@@ -255,7 +268,9 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
   for (const k of constraints) if (RALLY_REQUIRED.has(k.name)) k.rallyRequired = true;
   markBindingForward(constraints);
 
-  const { totalRamGb, totalRamMath } = totalsFor(c, tiers, overhead);
+  const totals = totalsFor(c, tiers, overhead);
+  const totalRamGb = totals.totalRamGb;
+  const totalRamMath = [...overheadNotes, ...totals.totalRamMath];
   const eru = selfManagedEru(c, totalRamGb);
   const allRam = totalRamGb * sites;
   const floor = licenseFloor(c, {
@@ -305,7 +320,7 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
       total: shards.nonFrozenShards + shards.frozenShards,
       perNonFrozenNode: nonFrozen > 0 ? shards.nonFrozenShards / nonFrozen : 0,
       indices: shards.indices,
-      math: [step('non-frozen shards', 'Σ ROUNDUP(days / rollover) × primaries × (replicas + 1)', shards.nonFrozenShards, ['datastream.default_rollover_days', 'datastream.default_primary_shards'])],
+      math: [...shards.math, step('non-frozen shards', 'Σ hot, warm, cold and content shards', shards.nonFrozenShards, [])],
     },
     constraints,
     warnings,

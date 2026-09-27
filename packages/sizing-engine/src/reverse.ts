@@ -1,7 +1,7 @@
 import { defaultConstants, num, type ConstantSet } from '@sizing/constants';
 import { CONFIDENCE, RALLY_REQUIRED } from './confidence.ts';
 import { avgEventKb, derateFactor, ingestDemandEvents } from './cpu.ts';
-import { computeDemand, estimateShards } from './demand.ts';
+import { computeDemand, estimateShards, rolloverFor } from './demand.ts';
 import { licenseFloor, selfManagedEru } from './license.ts';
 import { fmt, floorEps, step } from './math.ts';
 import { fleetTable } from './overhead.ts';
@@ -185,20 +185,43 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
     ], { tier: ingestTier }));
   }
 
-  constraints.push(shardCeiling(c, req));
+  constraints.push(shardCeiling(c, req, target, growthYears));
   return { value: Math.min(...constraints.map((k) => k.maxValue!)), unit: 'GB/day', constraints, target };
 }
 
-/** Shard count does not scale with GB/day (fixed rollover); it either fits (∞) or blocks (0). */
-function shardCeiling(c: ConstantSet, req: ReverseRequest): Constraint {
+/**
+ * D31: with size-based rollover, more GB/day means more frequent rollovers and more shards, so the
+ * non-frozen shard limit caps GB/day. Largest target GB/day whose shards (plus the other workloads')
+ * fit, found by bisection because the count is a step function of GB/day.
+ */
+function shardCeiling(c: ConstantSet, req: ReverseRequest, target: WorkloadProfile, growthYears: number): Constraint {
   const nonFrozen = req.hardware.groups.filter((g) => DATA_TIERS.has(g.role) && g.role !== 'frozen').reduce((s, g) => s + g.count, 0);
-  const cap = Math.max(0, nonFrozen - 1) * num(c, 'max_shards_per_nonfrozen_node');
-  const shards = estimateShards(c, req.fixed, 0).nonFrozenShards;
-  const fits = shards <= cap;
-  return constraint('heap_shards', fits ? Infinity : 0, 'GB/day', [
-    step('shard capacity (N−1)', `(${nonFrozen} − 1) × ${num(c, 'max_shards_per_nonfrozen_node')}`, cap, ['max_shards_per_nonfrozen_node']),
-    step('shards needed (independent of GB/day)', fits ? `${fmt(shards, 0)} ≤ ${fmt(cap, 0)}: not limiting` : `${fmt(shards, 0)} > ${fmt(cap, 0)}: blocks all ingest`, shards, ['datastream.default_rollover_days', 'datastream.default_primary_shards']),
-  ], { capacity: cap, demand: shards });
+  const limit = num(c, 'max_shards_per_nonfrozen_node');
+  const cap = Math.max(0, nonFrozen - 1) * limit;
+  const others = req.fixed.filter((p) => p !== target);
+  const otherShards = estimateShards(c, others, growthYears).nonFrozenShards;
+  const at = (g: number) => estimateShards(c, [{ ...target, rawGbPerDay: g }], 0);
+  const fits = (g: number) => otherShards + at(g).nonFrozenShards <= cap;
+  const capStep = step('shard capacity (N−1)', `(${nonFrozen} − 1) × ${limit}${otherShards > 0 ? ` − ${fmt(otherShards, 0)} used by other workloads` : ''}`, cap - otherShards, ['max_shards_per_nonfrozen_node']);
+
+  const TINY = 1e-6;
+  if (!fits(TINY)) {
+    return constraint('heap_shards', 0, 'GB/day', [capStep, step('max GB/day (shards)', 'the shards needed at the lowest volume already exceed the limit', 0, [])], { capacity: cap, demand: otherShards + at(TINY).nonFrozenShards });
+  }
+  let lo = TINY;
+  let hi = 1;
+  while (fits(hi) && hi < 1e12) { lo = hi; hi *= 2; }
+  if (fits(hi)) return constraint('heap_shards', Infinity, 'GB/day', [capStep, step('max GB/day (shards)', 'not limiting', Infinity, [])], { capacity: cap });
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) lo = mid; else hi = mid;
+  }
+  const atMax = at(lo);
+  return constraint('heap_shards', lo, 'GB/day', [
+    capStep,
+    ...atMax.math,
+    step('max GB/day (shards)', 'largest GB/day whose rollovers still fit the shard capacity', lo, []),
+  ], { capacity: cap, demand: otherShards + atMax.nonFrozenShards });
 }
 
 // ---- max_retention ------------------------------------------------------------------------------
@@ -231,16 +254,17 @@ function solveMaxRetention(c: ConstantSet, req: ReverseRequest): Solved {
     math.push(step(`max retention (${tier})`, `floor(${fmt(free)} / (${fmt(gbDay)} × (${rep} + 1) × ${fmt(ratio.value)}${ds !== 1 ? ` × ${fmt(ds)}` : ''}))`, max, ratio.keys));
     constraints.push(constraint(cap.diskBound ? 'disk' : 'storage', max, 'days', math, { tier }));
 
-    // More retention means more backing indices and shards.
-    const rollover = target.rolloverDays ?? num(c, 'datastream.default_rollover_days');
+    // More retention means more backing indices and shards (D31: at the stream's own rollover).
+    const plan = rolloverFor(c, target, 0);
     const primaries = target.primaryShards ?? num(c, 'datastream.default_primary_shards');
     const nonFrozen = req.hardware.groups.filter((g) => DATA_TIERS.has(g.role) && g.role !== 'frozen').reduce((s, g) => s + g.count, 0);
     const shardCap = Math.max(0, nonFrozen - 1) * num(c, 'max_shards_per_nonfrozen_node');
     const otherShards = estimateShards(c, [...others, withoutTier], 0).nonFrozenShards;
-    const byShards = Math.max(0, floorEps(((shardCap - otherShards) / (primaries * (rep + 1))) * rollover));
+    const byShards = Math.max(0, floorEps(((shardCap - otherShards) / (primaries * (rep + 1))) * plan.days));
     constraints.push(constraint('heap_shards', byShards, 'days', [
       step('shard capacity (N−1)', `(${nonFrozen} − 1) × ${num(c, 'max_shards_per_nonfrozen_node')} − ${fmt(otherShards, 0)} other`, shardCap - otherShards, ['max_shards_per_nonfrozen_node']),
-      step('max retention (shards)', `floor(${fmt(shardCap - otherShards, 0)} / (${primaries} × (${rep} + 1)) × ${rollover} days rollover)`, byShards, ['datastream.default_rollover_days', 'datastream.default_primary_shards']),
+      step(`[${target.id}] rollover every (days)`, plan.expr, plan.days, plan.keys),
+      step('max retention (shards)', `floor(${fmt(shardCap - otherShards, 0)} / (${primaries} × (${rep} + 1)) × ${fmt(plan.days, 3)} days)`, byShards, target.primaryShards === undefined ? ['datastream.default_primary_shards'] : []),
     ]));
   }
   return { value: Math.min(...constraints.map((k) => k.maxValue!)), unit: 'days', constraints, target };
@@ -344,7 +368,7 @@ function solveMaxShards(c: ConstantSet, req: ReverseRequest): Solved {
     const byShards = one.nonFrozenShards > 0 ? floorEps(maxShards / one.nonFrozenShards) : Infinity;
     const byIndices = one.indices > 0 ? floorEps(maxIndices / one.indices) : Infinity;
     dataStreams = Math.min(byShards, byIndices);
-    constraints[0]!.math.push(step('data streams (shards)', `floor(${fmt(maxShards, 0)} / ${fmt(one.nonFrozenShards, 0)} shards per stream)`, byShards, ['datastream.default_rollover_days', 'datastream.default_primary_shards']));
+    constraints[0]!.math.push(...one.math, step('data streams (shards)', `floor(${fmt(maxShards, 0)} / ${fmt(one.nonFrozenShards, 0)} non-frozen shards per stream)`, byShards, []));
     constraints[1]!.math.push(step('data streams (indices)', `floor(${fmt(maxIndices, 0)} / ${fmt(one.indices, 0)} indices per stream)`, byIndices, []));
     // capacity carries the data-stream limit of each constraint; maxValue keeps shards / indices.
     constraints[0]!.capacity = byShards;

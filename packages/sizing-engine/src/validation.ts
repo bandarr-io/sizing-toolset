@@ -117,8 +117,9 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
       if (s.shardGb > hi) {
         const suggested = Math.ceil((s.shardGb * s.primaries) / hi);
         add('HV8', 'warn', `[${s.profileId}] ${s.tier} shards ≈ ${fmt(s.shardGb, 1)} GB (> ${hi} GB). Use ≥ ${suggested} primaries or roll over sooner.`);
-      } else if (s.shardGb < lo) {
-        add('HV8', 'info', `[${s.profileId}] ${s.tier} shards ≈ ${fmt(s.shardGb, 1)} GB (< ${lo} GB). Consider longer rollover.`);
+      } else if (s.shardGb < lo && !(s.basis === 'age' && s.primaries === 1)) {
+        const fix = s.primaries > 1 ? 'Use fewer primaries' : s.basis === 'fixed' ? 'Roll over less often' : 'Use fewer primaries or a longer max age';
+        add('HV8', 'info', `[${s.profileId}] ${s.tier} shards ≈ ${fmt(s.shardGb, 1)} GB (< ${lo} GB). ${fix}.`);
       }
     }
   }

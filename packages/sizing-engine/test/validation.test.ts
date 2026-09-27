@@ -74,9 +74,9 @@ describe('§5.7 hardware validation', () => {
   });
 
   it('HV8: too many shards per node, or shards outside 10–50 GB', () => {
-    const shards = { indices: 10, nonFrozenShards: 4000, frozenShards: 0, shardSizes: [] };
+    const shards = { indices: 10, nonFrozenShards: 4000, frozenShards: 0, shardSizes: [], math: [] };
     expect(ids(run({ shards }))).toContain('HV8/warn');
-    const big = { indices: 1, nonFrozenShards: 2, frozenShards: 0, shardSizes: [{ profileId: 'x', tier: 'hot' as const, shardGb: 300, primaries: 1 }] };
+    const big = { indices: 1, nonFrozenShards: 2, frozenShards: 0, shardSizes: [{ profileId: 'x', tier: 'hot' as const, shardGb: 300, primaries: 1, basis: 'fixed' as const }], math: [] };
     const w = run({ shards: big });
     expect(ids(w)).toContain('HV8/warn');
     expect(w.find((x) => x.id === 'HV8')!.message).toMatch(/≥ 6 primaries/);

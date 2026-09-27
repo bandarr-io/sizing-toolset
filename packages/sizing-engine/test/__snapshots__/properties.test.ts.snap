@@ -18,7 +18,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     "Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.",
     "Object storage (snapshot repository) for cold and frozen: 100,500 GB, one copy of the data. Not counted in RAM or ERU; excludes other snapshots and backups.",
   ],
-  "constantsHash": "3d87bc472c3431389a71e20e9099582cf51747bcf90a084b538eb275ca09bc3e",
+  "constantsHash": "9d57b62d6570c22f313912c66e0fc1e6b1d97b7fbcf662f683022eeedec27d37",
   "constraints": [
     {
       "binding": true,
@@ -60,8 +60,46 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
       "binding": false,
       "capacity": 12000,
       "confidence": "medium",
-      "demand": 60,
+      "demand": 360,
       "math": [
+        {
+          "constantKeys": [
+            "datastream.rollover_max_primary_shard_gb",
+            "datastream.rollover_max_age_days",
+            "datastream.default_primary_shards",
+          ],
+          "expr": "min(50 GB × 1 primary / 300 GB/day indexed, 30 days max age)",
+          "label": "[w] rollover every (days)",
+          "value": 0.16666666666666666,
+        },
+        {
+          "constantKeys": [
+            "datastream.default_primary_shards",
+          ],
+          "expr": "ROUNDUP(30 days / 0.167) = 180 indices × 1 primary × (1 replicas + 1)",
+          "label": "[w] hot shards",
+          "value": 360,
+        },
+        {
+          "constantKeys": [
+            "datastream.default_primary_shards",
+          ],
+          "expr": "ROUNDUP(335 days / 0.167) = 2010 indices × 1 primary × (0 replicas + 1)",
+          "label": "[w] frozen shards",
+          "value": 2010,
+        },
+        {
+          "constantKeys": [],
+          "expr": "2190 indices, 2370 shards",
+          "label": "[w] indices / shards",
+          "value": 2370,
+        },
+        {
+          "constantKeys": [],
+          "expr": "Σ hot, warm, cold and content shards above",
+          "label": "non-frozen shards (all workloads)",
+          "value": 360,
+        },
         {
           "constantKeys": [
             "max_shards_per_nonfrozen_node",
@@ -73,13 +111,13 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
       ],
       "name": "heap_shards",
       "unit": "shards",
-      "utilization": 0.005,
+      "utilization": 0.03,
     },
     {
       "binding": false,
       "capacity": 24000,
       "confidence": "medium",
-      "demand": 365,
+      "demand": 2190,
       "math": [
         {
           "constantKeys": [
@@ -94,7 +132,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
       ],
       "name": "masters",
       "unit": "indices",
-      "utilization": 0.015208333333333334,
+      "utilization": 0.09125,
     },
     {
       "binding": false,
@@ -120,10 +158,8 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
         },
         {
           "constantKeys": [
-            "ingest.default_avg_event_kb",
-            "ingest.derate.pipelines",
             "ingest.derate.logsdb",
-            "ingest.derate.concurrent_search",
+            "ingest.default_avg_event_kb",
           ],
           "expr": "Σ GB/day × 1e6 / (KB × 86,400) × (replicas + 1) / derate",
           "label": "indexing demand (events/s, incl. replicas and derates)",
@@ -224,9 +260,9 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
           "constantKeys": [
             "master_indices_per_gb_heap",
           ],
-          "expr": "365 indices / 3000",
+          "expr": "2,190 indices / 3000",
           "label": "master heap required",
-          "value": 0.12166666666666667,
+          "value": 0.73,
         },
       ],
       "ramGb": 16,
@@ -263,20 +299,49 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     },
   ],
   "shards": {
-    "indices": 365,
+    "indices": 2190,
     "math": [
       {
         "constantKeys": [
-          "datastream.default_rollover_days",
+          "datastream.rollover_max_primary_shard_gb",
+          "datastream.rollover_max_age_days",
           "datastream.default_primary_shards",
         ],
-        "expr": "Σ ROUNDUP(days / rollover) × primaries × (replicas + 1)",
+        "expr": "min(50 GB × 1 primary / 300 GB/day indexed, 30 days max age)",
+        "label": "[w] rollover every (days)",
+        "value": 0.16666666666666666,
+      },
+      {
+        "constantKeys": [
+          "datastream.default_primary_shards",
+        ],
+        "expr": "ROUNDUP(30 days / 0.167) = 180 indices × 1 primary × (1 replicas + 1)",
+        "label": "[w] hot shards",
+        "value": 360,
+      },
+      {
+        "constantKeys": [
+          "datastream.default_primary_shards",
+        ],
+        "expr": "ROUNDUP(335 days / 0.167) = 2010 indices × 1 primary × (0 replicas + 1)",
+        "label": "[w] frozen shards",
+        "value": 2010,
+      },
+      {
+        "constantKeys": [],
+        "expr": "2190 indices, 2370 shards",
+        "label": "[w] indices / shards",
+        "value": 2370,
+      },
+      {
+        "constantKeys": [],
+        "expr": "Σ hot, warm, cold and content shards",
         "label": "non-frozen shards",
-        "value": 60,
+        "value": 360,
       },
     ],
-    "perNonFrozenNode": 4.615384615384615,
-    "total": 395,
+    "perNonFrozenNode": 27.692307692307693,
+    "total": 2370,
   },
   "sites": 1,
   "tiers": [
@@ -294,6 +359,15 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
           "expr": "300 × 30 days × (1 replicas + 1)",
           "label": "[w] total data GB",
           "value": 18000,
+        },
+        {
+          "constantKeys": [
+            "node_ram_default_gb",
+            "vcpu_per_ram_gb",
+          ],
+          "expr": "64 GB RAM, 8 vCPU per node (defaults where blank)",
+          "label": "node size",
+          "value": 64,
         },
         {
           "constantKeys": [
@@ -348,6 +422,15 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
         },
         {
           "constantKeys": [
+            "node_ram_default_gb",
+            "vcpu_per_ram_gb",
+          ],
+          "expr": "64 GB RAM, 8 vCPU per node (defaults where blank)",
+          "label": "node size",
+          "value": 64,
+        },
+        {
+          "constantKeys": [
             "frozen_local_disk_ratio",
           ],
           "expr": "64 GB RAM × 750",
@@ -396,12 +479,6 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
       "value": 1024,
     },
   ],
-  "warnings": [
-    {
-      "id": "HV8",
-      "message": "[w] hot shards ≈ 300 GB (> 50 GB). Use ≥ 6 primaries or roll over sooner.",
-      "severity": "warn",
-    },
-  ],
+  "warnings": [],
 }
 `;

@@ -6,7 +6,8 @@ import { allConstants } from '../src/index.ts';
 import { writeOverrides } from '../scripts/write.ts';
 
 const DATA = join(import.meta.dirname, '..', 'data');
-const TODAY = '2026-09-24';
+// The newest shipped date, so the merged set never looks like it has future-dated constants.
+const TODAY = allConstants.map((c) => c.as_of_date).sort().at(-1)!;
 let dir: string;
 
 beforeEach(() => {
