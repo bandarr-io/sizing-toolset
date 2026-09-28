@@ -6,3 +6,7 @@ coverage/
 .env*
 .playwright-mcp/
 apps/web/dist/
+
+# ECH ballpark data: internal pricing, never committed (D40)
+*.local.json
+*.xlsx

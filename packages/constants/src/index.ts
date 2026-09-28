@@ -1,3 +1,4 @@
+import ech from '../data/ech.json' with { type: 'json' };
 import federal from '../data/federal.json' with { type: 'json' };
 import fleet from '../data/fleet.json' with { type: 'json' };
 import ingest from '../data/ingest.json' with { type: 'json' };
@@ -30,6 +31,7 @@ export const constantFiles: readonly { file: string; items: readonly Constant[] 
   { file: 'license.json', items: license as Constant[] },
   { file: 'ingest.json', items: ingest as Constant[] },
   { file: 'federal.json', items: federal as Constant[] },
+  { file: 'ech.json', items: ech as Constant[] },
 ];
 
 export const allConstants: readonly Constant[] = constantFiles.flatMap((f) => f.items);
