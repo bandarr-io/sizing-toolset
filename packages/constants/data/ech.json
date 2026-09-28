@@ -12,13 +12,13 @@
   },
   {
     "key": "ech.price_adjustment",
-    "value": 1.0815,
+    "value": 1,
     "unit": "multiplier",
     "source_url": "https://ela.st/ess-ballpark",
     "as_of_date": "2026-09-18",
     "stack_version": "ECH ballpark v4.6",
-    "confidence": "low",
-    "notes": "D40: Dan's choice, +5% (v3.9.2, 2025) × +3% (v4.4, from 2026-05-01) from the release notes. The v4.6 price table probably already includes both; set to 1 to use the table as-is.",
+    "confidence": "medium",
+    "notes": "D40: prices are used as the v4.6 table gives them (Dan, 2026-09-28). The release notes' +5% (v3.9.2) and +3% (v4.4) are already in the table. Change this to apply a later list-price change.",
     "carried_forward": true
   },
   {

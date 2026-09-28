@@ -63,8 +63,49 @@ export interface EchData {
   defaults: Partial<Record<EchProvider, Partial<Record<EchRole, string>>>>;
   /** Metrics!H321:K350: hot-tier ingest benchmark (datapoints/s for one node). */
   metricsBenchmark: { sku: string; eps: number; vcpu: number; ramGb: number }[];
+  /** Use-case specific tables from scripts/ech-import/<name>.mjs, typed by each use case's engine module. */
+  extras?: Partial<Record<'security' | 'apm' | 'search', unknown>>;
 }
 
 export type EchRole = 'hot' | 'warm' | 'cold' | 'frozen' | 'master' | 'coordinating' | 'ml' | 'kibana';
+
+export type EchUseCase = 'logs' | 'metrics' | 'siem' | 'endpoint' | 'apm' | 'search' | 'vector';
+
+export interface EchLine {
+  /** Data tier (hot, warm, cold, frozen), node role (master, coordinating, ml, kibana, apm, ...), 'transfer' or 'storage'. */
+  key: string;
+  label: string;
+  sku?: string;
+  /** Priced RAM across all zones. */
+  ramGb?: number;
+  nodesPerZone?: number;
+  nodeSizeGb?: number;
+  zones?: number;
+  diskGb?: number;
+  constraint?: 'disk' | 'cpu';
+  monthlyPerGb?: number;
+  annual: number;
+  annualRounded: number;
+  math: import('../types.ts').MathStep[];
+  /** The spreadsheet shows "#NA" for this line and leaves it out of the total. */
+  error?: string;
+}
+
+export interface EchResult {
+  kind: EchUseCase;
+  /** GB ingested per day, where the use case has one. */
+  dailyGb: number;
+  lines: EchLine[];
+  total: number;
+  /** Sum of the lines rounded up to $1,000 (the spreadsheet's J42). */
+  totalRounded: number;
+  y1Spend: number;
+  y1SpendRounded: number;
+  warnings: string[];
+  source: EchData['source'];
+  /** Extra figures a use case reports (for example SIEM events/s or vector counts), label → value. */
+  facts?: { label: string; value: number; unit: string }[];
+}
+
 
 export const priceKey = (sku: string, region: string, tier: string) => `${sku}|${region}|${tier}`;

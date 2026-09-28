@@ -72,8 +72,11 @@ describe('ECH logs (made-up prices)', () => {
   it('rejects a tier the channel does not sell', () => {
     expect(() => echObservability(c, data, { ...at, tier: 'Gold', kind: 'logs', gbPerDay: 1, retentionDays: { hot: 1 } })).toThrow(/does not sell Gold/);
   });
-  it('applies the default price adjustment (D40) to the hourly price before rounding to cents', () => {
-    const adjusted = echObservability(defaultConstants, data, { ...at, kind: 'logs', gbPerDay: 100, retentionDays: { hot: 1 } });
+  it('applies a price adjustment to the hourly price before rounding to cents; the default is 1 (D40)', () => {
+    const plain = echObservability(defaultConstants, data, { ...at, kind: 'logs', gbPerDay: 100, retentionDays: { hot: 1 } });
+    expect(plain.lines.find((l) => l.key === 'hot')!.monthlyPerGb).toBe(73);
+    const up = buildConstantSet([...defaultConstants.byKey.values()].map((x): Constant => (x.key === 'ech.price_adjustment' ? { ...x, value: 1.0815 } : x)));
+    const adjusted = echObservability(up, data, { ...at, kind: 'logs', gbPerDay: 100, retentionDays: { hot: 1 } });
     expect(adjusted.lines.find((l) => l.key === 'hot')!.monthlyPerGb).toBe(78.95); // ROUND(0.1 × 1.0815 × 730, 2)
   });
 });

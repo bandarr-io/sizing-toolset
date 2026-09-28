@@ -7,8 +7,9 @@
 // Default output: apps/web/public/ech-data.local.json (served to the web app in development).
 // The workbook is a Google Sheets export, so formulas cannot recalculate; this reads the saved values.
 import ExcelJS from 'exceljs';
-import { writeFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { existsSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const [file, out = 'apps/web/public/ech-data.local.json'] = process.argv.slice(2);
 if (!file) {
@@ -133,10 +134,21 @@ for (const [addr, role] of [['E24', 'hot'], ['E25', 'warm'], ['E26', 'cold'], ['
   if (id) defaults.aws[role] = id;
 }
 
+// Use-case extras: each scripts/ech-import/<name>.mjs exports extract({ wb, sheet, val, num, str }) and its result
+// lands in data.extras[<name>], typed by that use case's engine module.
+const extras = {};
+const here = dirname(fileURLToPath(import.meta.url));
+for (const name of ['security', 'apm', 'search']) {
+  const f = join(here, 'ech-import', `${name}.mjs`);
+  if (!existsSync(f)) continue;
+  const mod = await import(pathToFileURL(f).href);
+  extras[name] = await mod.extract({ wb, sheet, val, num, str });
+}
+
 const version = basename(file).match(/v(\d+(?:\.\d+)*)/i)?.[1] ?? 'unknown';
 const data = {
   source: { file: basename(file), version, extractedAt: new Date().toISOString() },
-  skus, prices, regions, channelTiers, dts, dtsOverrides, metricsBenchmark, defaults,
+  skus, prices, regions, channelTiers, dts, dtsOverrides, metricsBenchmark, defaults, extras,
 };
 writeFileSync(resolve(out), JSON.stringify(data));
 console.log(`ECH data v${version}: ${skus.length} instance types, ${Object.keys(prices).length} prices, ${regions.length} regions, ${dts.length} transfer prices (${dtsOverrides.length} region overrides), ${metricsBenchmark.length} benchmark rows → ${out}`);

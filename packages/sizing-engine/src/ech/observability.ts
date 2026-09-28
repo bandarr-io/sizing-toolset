@@ -6,7 +6,7 @@ import type { MathStep } from '../types.ts';
 import {
   channelSells, dtsPrice, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, roundLine, skuOf, type EchPlacement,
 } from './common.ts';
-import type { EchData, EchRole } from './types.ts';
+import type { EchData, EchLine, EchResult, EchRole } from './types.ts';
 
 type DataTier = 'hot' | 'warm' | 'cold' | 'frozen';
 type Fixed = 'master' | 'coordinating' | 'ml' | 'kibana';
@@ -34,38 +34,6 @@ export interface EchObservabilityRequest extends EchPlacement {
   frozenRamToBlob?: number;
   /** D51/D56:D58: price the rounded node RAM (true, the sheet's default) or the raw need. */
   useRoundedRam?: boolean;
-}
-
-export interface EchLine {
-  key: DataTier | Fixed | 'transfer' | 'storage';
-  label: string;
-  sku?: string;
-  /** Priced RAM across all zones. */
-  ramGb?: number;
-  nodesPerZone?: number;
-  nodeSizeGb?: number;
-  zones?: number;
-  diskGb?: number;
-  constraint?: 'disk' | 'cpu';
-  monthlyPerGb?: number;
-  annual: number;
-  annualRounded: number;
-  math: MathStep[];
-  /** The spreadsheet shows "#NA" for this line and leaves it out of the total. */
-  error?: string;
-}
-
-export interface EchResult {
-  kind: 'logs' | 'metrics';
-  dailyGb: number;
-  lines: EchLine[];
-  total: number;
-  /** Sum of the lines rounded up to $1,000 (the spreadsheet's J42). */
-  totalRounded: number;
-  y1Spend: number;
-  y1SpendRounded: number;
-  warnings: string[];
-  source: EchData['source'];
 }
 
 const TIER_LABEL: Record<DataTier | Fixed, string> = {
