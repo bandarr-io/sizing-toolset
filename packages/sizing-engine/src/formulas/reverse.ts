@@ -22,7 +22,7 @@ export const FORMULAS: Formula[] = [
     id: 'reverse.frozen_capacity', area: R, group: 'Capacity', title: 'Data the frozen tier can hold',
     formula: 'frozen data = sum over nodes except the largest of (local disk ÷ 1.25 ÷ share of data cached)\nlocal disk = the node disk, or node memory × local disk per GB of memory when blank',
     explanation: 'Frozen data lives in cheap object storage. Nodes keep only a cache of it on local disk, so each GB of local disk covers many GB of frozen data.',
-    constantKeys: ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage_overhead'], source: 'D27', code: 'reverse.ts',
+    constantKeys: ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage.watermark_headroom', 'storage.margin'], source: 'D27', code: 'reverse.ts',
   },
   {
     id: 'reverse.other_workloads', area: R, group: 'Capacity', title: 'Room left after other workloads',
@@ -36,7 +36,7 @@ export const FORMULAS: Formula[] = [
     id: 'reverse.max_gb_day_storage', area: R, group: 'Ceilings', title: 'Most data per day that storage allows',
     formula: 'max GB/day = (tier capacity ÷ 1.25 − other data) ÷ (days kept × (replicas + 1) × stored size ratio × downsampling)',
     explanation: 'Disk is never planned full: 1.25 leaves room below the point where Elasticsearch stops writing, plus a margin. Each day of data is stored once per copy and shrinks by the stored size ratio (for example 0.5 for LogsDB).',
-    constantKeys: ['storage_overhead', 'index_ratio.standard', 'index_ratio.logsdb', 'index_ratio.tsds'], source: 'SPEC §5.3', code: 'reverse.ts',
+    constantKeys: ['storage.watermark_headroom', 'storage.margin', 'index_ratio.standard', 'index_ratio.logsdb', 'index_ratio.tsds'], source: 'SPEC §5.3', code: 'reverse.ts',
   },
   {
     id: 'reverse.max_gb_day_frozen', area: R, group: 'Ceilings', title: 'Most data per day that frozen allows',
@@ -74,13 +74,13 @@ export const FORMULAS: Formula[] = [
     id: 'reverse.max_retention', area: R, group: 'Answers', title: 'Longest retention',
     formula: 'max days = floor((tier capacity ÷ 1.25 − other data) ÷ (GB/day × (replicas + 1) × stored size ratio × downsampling))\nshard limit: max days = floor(shard capacity ÷ (primary shards × (replicas + 1)) × days between rollovers)',
     explanation: 'The same storage math as data per day, solved for days. More days also means more indices kept, so the shard limit applies too. Frozen uses the frozen capacity and one copy.',
-    constantKeys: ['storage_overhead', 'max_shards_per_nonfrozen_node', 'datastream.default_primary_shards', 'datastream.rollover_max_primary_shard_gb', 'datastream.rollover_max_age_days'], source: 'SPEC §5.3, D31', code: 'reverse.ts',
+    constantKeys: ['storage.watermark_headroom', 'storage.margin', 'max_shards_per_nonfrozen_node', 'datastream.default_primary_shards', 'datastream.rollover_max_primary_shard_gb', 'datastream.rollover_max_age_days'], source: 'SPEC §5.3, D31', code: 'reverse.ts',
   },
   {
     id: 'reverse.max_vectors', area: R, group: 'Answers', title: 'Most vectors',
     formula: 'vector memory = sum over nodes except the largest of (node memory − heap − reserve)\nmax vectors = vector memory ÷ (bytes per vector × (replicas + 1))\ndisk limit: max vectors = (tier capacity ÷ 1.25 − other data) ÷ (disk bytes per vector × (replicas + 1))',
     explanation: 'Vectors (numeric fingerprints for AI search) must sit in memory outside the heap to be searched fast. The compression type and number of dimensions set the bytes per vector. The lower of the memory and disk limits is the answer.',
-    constantKeys: ['heap_fraction', 'heap_cap_gb', 'offheap_reserve_gb', 'storage_overhead', 'knn.bytes.float32', 'knn.bytes.bfloat16', 'knn.bytes.int8', 'knn.bytes.int4', 'knn.bytes.bbq', 'knn.bbq_disk', 'knn.hnsw_m', 'knn.hnsw_bytes_per_link', 'knn.raw_disk_overhead.int8', 'knn.raw_disk_overhead.int4', 'knn.raw_disk_overhead.bbq'], source: 'SPEC §5.3, D19', code: 'reverse.ts',
+    constantKeys: ['heap_fraction', 'heap_cap_gb', 'offheap_reserve_gb', 'storage.watermark_headroom', 'storage.margin', 'knn.bytes.float32', 'knn.bytes.bfloat16', 'knn.bytes.int8', 'knn.bytes.int4', 'knn.bytes.bbq', 'knn.bbq_disk', 'knn.hnsw_m', 'knn.hnsw_bytes_per_link', 'knn.raw_disk_overhead.int8', 'knn.raw_disk_overhead.int4', 'knn.raw_disk_overhead.bbq'], source: 'SPEC §5.3, D19', code: 'reverse.ts',
   },
   {
     id: 'reverse.max_shards', area: R, group: 'Answers', title: 'Most shards and data streams',

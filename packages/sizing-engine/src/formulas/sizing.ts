@@ -51,7 +51,7 @@ export const FORMULAS: Formula[] = [
     id: 'forward.storage_needed', area: A, group: 'Storage', title: 'Disk needed for a tier',
     formula: 'storage needed GB = tier data GB × storage overhead',
     explanation: 'Disks are never planned full. The overhead leaves room below the level where Elasticsearch stops placing data on a node (15%) plus a safety margin (10%), giving 1.25.',
-    constantKeys: ['storage_overhead'], source: 'SPEC §5.1', code: 'forward.ts (sizeTier)',
+    constantKeys: ['storage.watermark_headroom', 'storage.margin'], source: 'SPEC §5.1', code: 'forward.ts (sizeTier)',
   },
   {
     id: 'forward.node_size', area: A, group: 'Storage', title: 'Size of one data node',
@@ -70,7 +70,7 @@ export const FORMULAS: Formula[] = [
     id: 'forward.frozen_capacity', area: A, group: 'Storage', title: 'Data one frozen node can cover',
     formula: 'frozen local disk = node memory × frozen local disk ratio (unless disk is set)\nfrozen data per node = local disk ÷ storage overhead ÷ share of frozen data cached locally',
     explanation: 'Frozen nodes keep only a cache of the data on local disk; the rest stays in object storage. With 10% cached, each GB of usable local disk covers 10 GB of frozen data.',
-    constantKeys: ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage_overhead'], source: 'D27', code: 'forward.ts (resolveNode, sizeTier)',
+    constantKeys: ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage.watermark_headroom', 'storage.margin'], source: 'D27', code: 'forward.ts (resolveNode, sizeTier)',
   },
   {
     id: 'forward.object_storage', area: A, group: 'Storage', title: 'Object storage for cold and frozen',

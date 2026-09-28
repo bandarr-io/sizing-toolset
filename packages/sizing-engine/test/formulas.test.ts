@@ -7,8 +7,6 @@ import { ENGINE_FORMULAS } from '../src/index.ts';
 /** Settings that feed no calculation (only warnings, labels or reference values), so no formula lists them. */
 const NOT_IN_A_FORMULA = new Set<string>([
   'eck.operator_ram_gb', // named in the ECK requirements text only
-  'mem_disk.frozen', // reference only since D27; sizing uses the frozen cache model
-  'storage.margin', // part of storage_overhead, which is its own setting (constants test keeps them equal)
   'watermark.high', 'watermark.flood_stage', // reference; HV7 uses the low watermark
   'ev_per_s_per_vcpu.band_min', 'ev_per_s_per_vcpu.band_max', // the documented range around the default
   'downsample.default_factor', // reference; workloads carry their own downsample factors

@@ -1,3 +1,4 @@
+import { storageOverhead } from './profiles.ts';
 import { num, val, type ConstantSet } from '@sizing/constants';
 import { fmt, step } from './math.ts';
 import type { TierDemand } from './demand.ts';
@@ -39,7 +40,7 @@ export function commonWarnings(model: DeploymentModel): Warning[] {
 export function buildAssumptions(c: ConstantSet, s: { sites: number; ccrMode: CcrMode; growthYears: number; airGapped: boolean; growthUsed?: boolean }): string[] {
   const a = [
     'Estimate, not benchmark. Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer\'s hardware.',
-    `Storage = data × ${num(c, 'storage_overhead')} (15% watermark headroom + 10% margin), plus 1 failover node per tier.`,
+    `Storage = data × ${storageOverhead(c)} (15% watermark headroom + 10% margin), plus 1 failover node per tier.`,
     `Default data node: ${num(c, 'node_ram_default_gb')} GB RAM; mem:disk hot 1:${num(c, 'mem_disk.hot')}, warm 1:${num(c, 'mem_disk.warm')}, cold 1:${num(c, 'mem_disk.cold')}, frozen disk-cache (1:${num(c, 'frozen_local_disk_ratio')} local disk, ${num(c, 'frozen_cache_fraction') * 100}% cache fraction, D27).`,
     `Heap = min(50% RAM, ${num(c, 'heap_cap_gb')} GB); vector off-heap = RAM − heap − ${num(c, 'offheap_reserve_gb')} GB.`,
     `Index ratios: standard ${num(c, 'index_ratio.standard')}, LogsDB ${num(c, 'index_ratio.logsdb')}, TSDS ${num(c, 'index_ratio.tsds')} (±30%).`,
