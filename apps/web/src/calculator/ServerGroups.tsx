@@ -3,12 +3,13 @@ import {
 } from '@elastic/eui';
 import { nodesPerServer, type DiskType, type NodeGroup, type ServerGroup } from '@sizing/engine';
 import { useState } from 'react';
-import { num } from '@sizing/constants';
+import { num, val, type MasterSizingRow } from '@sizing/constants';
 import { useConstants } from '../constantsStore.tsx';
 import { fmtNum } from '../format.ts';
-import { GROUP_DEFAULTS } from '../state.ts';
+import { dataNodesOfServers, GROUP_DEFAULTS, masterServers, withAutoMasters } from '../state.ts';
 import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, roleColor } from '../ui/tiers.ts';
 import { DISK_TYPES, DISK_TYPES_HELP } from './NodeSizes.tsx';
+import { AutoMastersNote, masterThreshold } from './AutoMastersNote.tsx';
 
 const ROLES = ROLE_ORDER;
 const cell = { padding: '6px 4px', verticalAlign: 'middle' as const };
@@ -26,8 +27,14 @@ function newServer(role: NodeGroup['role']): ServerGroup {
 /** Physical servers at one site, one row per group of identical servers doing one role. */
 export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; onChange: (s: ServerGroup[]) => void }) {
   const { set: c } = useConstants();
+  const [autoMasters, setAutoMasters] = useState<MasterSizingRow | undefined>();
+  const change = (next: typeof servers) => {
+    const r = withAutoMasters(c, servers, next, (gs) => dataNodesOfServers(c, gs), (row) => masterServers(c, row));
+    if (r.added) setAutoMasters(r.added);
+    onChange(r.groups);
+  };
   const [adding, setAdding] = useState(false);
-  const set = (i: number, patch: Partial<ServerGroup>) => onChange(servers.map((g, j) => {
+  const set = (i: number, patch: Partial<ServerGroup>) => change(servers.map((g, j) => {
     if (j !== i) return g;
     const next = { ...g, ...patch } as ServerGroup & Record<string, unknown>;
     if (next.nodesPerServer === undefined) delete next.nodesPerServer;
@@ -40,6 +47,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
 
   return (
     <>
+      <AutoMastersNote row={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 590, tableLayout: 'fixed' }}>
           <colgroup>
@@ -77,7 +85,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
                       onChange={(e) => set(i, { nodesPerServer: e.target.value === '' ? undefined : Number(e.target.value) })} />
                   </td>
                   <td style={cell}>
-                    <EuiButtonIcon iconType="trash" color="danger" aria-label={`Remove ${g.role} servers`} onClick={() => onChange(servers.filter((_, j) => j !== i))} />
+                    <EuiButtonIcon iconType="trash" color="danger" aria-label={`Remove ${g.role} servers`} onClick={() => change(servers.filter((_, j) => j !== i))} />
                   </td>
                 </tr>
               );
@@ -104,7 +112,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
         <EuiPopover isOpen={adding} closePopover={() => setAdding(false)} panelPaddingSize="none" anchorPosition="downLeft"
           button={<EuiButton size="s" color="text" iconType="plusCircle" onClick={() => setAdding(!adding)}>Add servers</EuiButton>}>
           <EuiContextMenuPanel items={ROLES.map((r) => (
-            <EuiContextMenuItem key={r} onClick={() => { onChange([...servers, newServer(r)]); setAdding(false); }}
+            <EuiContextMenuItem key={r} onClick={() => { change([...servers, newServer(r)]); setAdding(false); }}
               icon={<span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: roleColor(r) }} />}>
               {ROLE_LABEL[r]}
             </EuiContextMenuItem>

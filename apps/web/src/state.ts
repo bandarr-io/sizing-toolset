@@ -1,4 +1,5 @@
-import { num, type ConstantSet } from '@sizing/constants';
+import { num, val, type ConstantSet, type MasterSizingRow } from '@sizing/constants';
+import { nodesPerServer } from '@sizing/engine';
 import type { CostSettings } from './cost.ts';
 import type {
   HostModel, ServerGroup, SiteInput, SiteRelationship, TopologyRequest,
@@ -208,6 +209,52 @@ export function newGroup(role: NodeGroup['role'], c?: ConstantSet): NodeGroup {
   const g: NodeGroup = { role, ...GROUP_DEFAULTS[role] };
   if (role === 'frozen' && c) g.diskGb = g.ramGb * num(c, 'frozen_local_disk_ratio');
   return g;
+}
+
+// ---- Automatic dedicated masters -------------------------------------------------------------------
+
+const DATA_ROLES = new Set<string>(['hot', 'warm', 'cold', 'frozen', 'content']);
+
+/** The `masters.sizing` row for this many data nodes (count 0 means masters run on the data nodes). */
+export function masterRowFor(c: ConstantSet, dataNodes: number): MasterSizingRow {
+  const rows = val<MasterSizingRow[]>(c, 'masters.sizing');
+  return rows.reduce((acc, r) => (r.minDataNodes <= dataNodes ? r : acc), rows[0]!);
+}
+
+/**
+ * When an edit takes the data nodes from below the dedicated-master threshold to at or above it, and no
+ * master group is left, add one sized from `masters.sizing` (the same table forward mode uses).
+ * Only the crossing adds masters, so deleting them afterwards sticks.
+ */
+export function withAutoMasters<T extends { role: string; count: number }>(
+  c: ConstantSet, prev: readonly T[], next: T[], dataNodes: (gs: readonly T[]) => number, make: (row: MasterSizingRow) => T,
+): { groups: T[]; added?: MasterSizingRow } {
+  const before = dataNodes(prev);
+  const after = dataNodes(next);
+  const row = masterRowFor(c, after);
+  const crossed = row.count > 0 && masterRowFor(c, before).count === 0;
+  if (!crossed || next.some((g) => g.role === 'master' && g.count > 0)) return { groups: next };
+  return { groups: [...next.filter((g) => g.role !== 'master'), make(row)], added: row };
+}
+
+/** Data nodes in a hardware table (Test hardware limits): one node per row count. */
+export const dataNodesOfGroups = (gs: readonly NodeGroup[]) => gs.filter((g) => DATA_ROLES.has(g.role)).reduce((s, g) => s + g.count, 0);
+
+/** Data nodes on physical servers: servers × nodes per server; an invalid typed layout counts one node. */
+export function dataNodesOfServers(c: ConstantSet, gs: readonly ServerGroup[]): number {
+  return gs.filter((g) => DATA_ROLES.has(g.role)).reduce((s, g) => {
+    let per = 1;
+    try { per = nodesPerServer(c, g); } catch { /* shown as an error on the row */ }
+    return s + g.count * per;
+  }, 0);
+}
+
+export function masterGroup(c: ConstantSet, row: MasterSizingRow): NodeGroup {
+  return { ...GROUP_DEFAULTS.master, role: 'master', count: row.count, ramGb: row.ramGb, vcpu: row.ramGb * num(c, 'vcpu_per_ram_gb') };
+}
+
+export function masterServers(c: ConstantSet, row: MasterSizingRow): ServerGroup {
+  return { role: 'master', count: row.count, ramGb: row.ramGb, diskGb: GROUP_DEFAULTS.master.diskGb, diskType: GROUP_DEFAULTS.master.diskType, vcpu: row.ramGb * num(c, 'vcpu_per_ram_gb') };
 }
 
 /** Keep the solved workload first, of a kind the question can use, and name it as the target. */

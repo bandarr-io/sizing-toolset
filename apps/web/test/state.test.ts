@@ -1,10 +1,10 @@
-import { forward, reverse } from '@sizing/engine';
+import { forward, reverse, type NodeGroup, type ServerGroup } from '@sizing/engine';
 import { describe, expect, it } from 'vitest';
 import { toJson, toMarkdown } from '../src/export.ts';
 import { fastForwardV1ToRequest, migrate } from '../src/migrate.ts';
 import {
   withIndexMode,
-  defaultState, deploymentOfForward, deploymentOfReverse, newWorkload, normalizeReverse, tiersInUse, uniqueName,
+  defaultState, deploymentOfForward, deploymentOfReverse, newGroup, newWorkload, normalizeReverse, tiersInUse, uniqueName,
   withForwardDeployment, withReverseDeployment, withSolve,
 } from '../src/state.ts';
 
@@ -165,5 +165,34 @@ describe('role order (node sizes, hardware and server tables)', () => {
     const sorted = inRoleOrder(rows);
     expect(sorted.map((x) => x.g.role)).toEqual(['content', 'hot', 'hot', 'warm', 'cold', 'frozen', 'kibana', 'master', 'ml', 'coordinating', 'fleet', 'apm']);
     expect(sorted.filter((x) => x.g.role === 'hot').map((x) => x.i)).toEqual([1, 6]);
+  });
+});
+
+describe('automatic dedicated masters when data nodes cross the threshold', () => {
+  it('adds 3 × 16 GB masters at 6 data nodes, sized from masters.sizing', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfGroups, masterGroup } = await import('../src/state.ts');
+    const prev = [newGroup('hot')]; // 3 hot
+    const next = [{ ...newGroup('hot'), count: 4 }, newGroup('frozen')]; // 6 data nodes, frozen counts (D4)
+    const r = withAutoMasters(c, prev, next, dataNodesOfGroups, (row) => masterGroup(c, row));
+    expect(r.added).toMatchObject({ count: 3, ramGb: 16 });
+    expect(r.groups.find((g) => g.role === 'master')).toMatchObject({ count: 3, ramGb: 16, vcpu: 2 });
+  });
+  it('does nothing below the threshold, when masters exist, or when already above it (so deleting them sticks)', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfGroups, masterGroup } = await import('../src/state.ts');
+    const make = (row: Parameters<typeof masterGroup>[1]) => masterGroup(c, row);
+    const hotGroups = (n: number): NodeGroup[] => [{ ...newGroup('hot'), count: n }];
+        expect(withAutoMasters(c, hotGroups(3), hotGroups(5), dataNodesOfGroups, make).added).toBeUndefined();
+    expect(withAutoMasters(c, hotGroups(3), [...hotGroups(8), newGroup('master')], dataNodesOfGroups, make).added).toBeUndefined();
+    expect(withAutoMasters(c, [...hotGroups(8), newGroup('master')], hotGroups(8), dataNodesOfGroups, make).added).toBeUndefined();
+  });
+  it('counts nodes per server on physical servers: 2 × 256 GB hot servers hold 8 nodes', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfServers, masterServers } = await import('../src/state.ts');
+    const hot = (n: number): ServerGroup[] => [{ role: 'hot', count: n, ramGb: 256, diskGb: 7680, diskType: 'nvme', vcpu: 64 }];
+    expect(dataNodesOfServers(c, hot(2))).toBe(8);
+    const r = withAutoMasters(c, hot(1), hot(2), (gs) => dataNodesOfServers(c, gs), (row) => masterServers(c, row));
+    expect(r.groups.find((g) => g.role === 'master')).toMatchObject({ count: 3, ramGb: 16 });
   });
 });

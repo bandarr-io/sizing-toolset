@@ -2,14 +2,15 @@ import {
   EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiCallOut, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldNumber, EuiFlexGroup, EuiFlexItem,
   EuiIcon, EuiPopover, EuiSelect, EuiSpacer, EuiText, EuiToolTip,
 } from '@elastic/eui';
-import { num } from '@sizing/constants';
+import { num, val, type MasterSizingRow } from '@sizing/constants';
 import type { DiskType, NodeGroup, Solve, Tier } from '@sizing/engine';
 import { useConstants } from '../constantsStore.tsx';
 import { useState } from 'react';
 import { fmtNum } from '../format.ts';
-import { newGroup } from '../state.ts';
+import { dataNodesOfGroups, masterGroup, newGroup, withAutoMasters } from '../state.ts';
 import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, TIER_LABEL, roleColor } from '../ui/tiers.ts';
 import { CacheFractionField, DISK_TYPES, DISK_TYPES_HELP, DISK_WRITE_HELP, DiskWriteField, ingestTierOf } from './NodeSizes.tsx';
+import { AutoMastersNote, masterThreshold } from './AutoMastersNote.tsx';
 
 const ROLES = ROLE_ORDER;
 const DATA = new Set(['hot', 'warm', 'cold', 'frozen', 'content']);
@@ -30,16 +31,22 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
   onCacheFraction: (v: number | undefined) => void;
 }) {
   const { set: c } = useConstants();
+  const [autoMasters, setAutoMasters] = useState<MasterSizingRow | undefined>();
+  const change = (next: typeof groups) => {
+    const r = withAutoMasters(c, groups, next, dataNodesOfGroups, (row) => masterGroup(c, row));
+    if (r.added) setAutoMasters(r.added);
+    onChange(r.groups);
+  };
   const [adding, setAdding] = useState(false);
   const [showHeap, setShowHeap] = useState(() => groups.some((g) => g.heapGbOverride !== undefined));
-  const set = (i: number, patch: Partial<NodeGroup>) => onChange(groups.map((g, j) => {
+  const set = (i: number, patch: Partial<NodeGroup>) => change(groups.map((g, j) => {
     if (j !== i) return g;
     const next = { ...g, ...patch } as NodeGroup & Record<string, unknown>;
     if (next.heapGbOverride === undefined) delete next.heapGbOverride;
     if (next.diskWriteMBps === undefined) delete next.diskWriteMBps;
     return next;
   }));
-  const add = (role: NodeGroup['role']) => { onChange([...groups, newGroup(role, c)]); setAdding(false); };
+  const add = (role: NodeGroup['role']) => { change([...groups, newGroup(role, c)]); setAdding(false); };
   const n = (s: string) => (s === '' ? 0 : Number(s));
 
   const dataNodes = groups.filter((g) => DATA.has(g.role)).reduce((s, g) => s + g.count, 0);
@@ -52,6 +59,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
 
   return (
     <>
+      <AutoMastersNote row={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
       {solve === 'max_agents' && !has('fleet') && (
         <><EuiCallOut size="s" iconType="info" title="This question needs Fleet Servers, which manage Elastic Agents."><EuiButton size="s" onClick={() => add('fleet')}>Add Fleet Servers</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
       )}
@@ -96,7 +104,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
                   </td>
                 )}
                 <td style={{ ...cell, width: 32 }}>
-                  <EuiButtonIcon iconType="trash" color="danger" aria-label={`Remove ${g.role} group`} onClick={() => onChange(groups.filter((_, j) => j !== i))} />
+                  <EuiButtonIcon iconType="trash" color="danger" aria-label={`Remove ${g.role} group`} onClick={() => change(groups.filter((_, j) => j !== i))} />
                 </td>
               </tr>
             ))}
