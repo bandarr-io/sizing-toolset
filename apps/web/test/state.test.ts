@@ -49,6 +49,16 @@ describe('Plan for growth folding', () => {
   });
 });
 
+describe('folded card summaries', () => {
+  it('lists workloads and server groups in a line', async () => {
+    const { groupsSummary, workloadsSummary, defaultServers } = await import('../src/state.ts');
+    expect(workloadsSummary([])).toBe('No workloads yet');
+    expect(workloadsSummary([{ ...newWorkload('logs'), rawGbPerDay: 500 }])).toBe('1 workload: Logs 500 GB/day');
+    expect(groupsSummary(defaultServers())).toMatch(/^35 servers: 3 master × 32 GB, 22 hot × 256 GB/);
+    expect(groupsSummary([], 'nodes')).toBe('No nodes yet');
+  });
+});
+
 describe('reverse question handling', () => {
   const base = defaultState().reverse;
   it('keeps a compatible target first and names it', () => {

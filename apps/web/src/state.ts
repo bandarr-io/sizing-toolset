@@ -7,6 +7,31 @@ import type {
 
 export type Mode = 'forward' | 'reverse' | 'multisite' | 'models';
 
+const fmt1 = (x: number) => x.toLocaleString('en-US', { maximumFractionDigits: 1 });
+
+/** One workload in a few words: "Logs 500 GB/day", "Search 500 GB", "Vectors 10M". */
+export function workloadBrief(w: WorkloadProfile): string {
+  if (w.rawGbPerDay !== undefined) return `${w.id} ${fmt1(w.rawGbPerDay)} GB/day`;
+  if (w.totalGb !== undefined) return `${w.id} ${fmt1(w.totalGb)} GB`;
+  if (w.vector) return `${w.id} ${w.vector.count >= 1e6 ? `${fmt1(w.vector.count / 1e6)}M` : fmt1(w.vector.count)} vectors`;
+  if (w.ml) return `${w.id} ${w.ml.anomalyJobs} ML jobs`;
+  if (w.fleet) return `${w.id} ${fmt1(w.fleet.agents)} agents`;
+  return w.id;
+}
+
+/** Folded workload step: "2 workloads: Logs 500 GB/day, Metrics 50 GB/day". */
+export function workloadsSummary(ws: readonly WorkloadProfile[]): string {
+  if (ws.length === 0) return 'No workloads yet';
+  return `${ws.length} workload${ws.length === 1 ? '' : 's'}: ${ws.map(workloadBrief).join(', ')}`;
+}
+
+/** Folded server or hardware step: "35 servers: 3 master, 22 hot × 256 GB, 8 frozen × 128 GB". */
+export function groupsSummary(groups: readonly { role: string; count: number; ramGb: number }[], noun = 'servers'): string {
+  const total = groups.reduce((s, g) => s + g.count, 0);
+  if (total === 0) return `No ${noun} yet`;
+  return `${total} ${noun}: ${groups.filter((g) => g.count > 0).map((g) => `${g.count} ${g.role} × ${fmt1(g.ramGb)} GB`).join(', ')}`;
+}
+
 /** True when no workload has a growth rate, so the Plan for growth step can start folded. */
 export function isDefaultGrowth(f: ForwardRequest): boolean {
   return !f.workloads.some((w) => (w.growthPctPerYear ?? 0) > 0);

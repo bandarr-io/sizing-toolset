@@ -2,7 +2,7 @@ import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTempla
 import type { ConstantSet } from '@sizing/constants';
 import { compareModels, forward, reverse, sizeTopology, type ModelRow, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
-import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment } from './calculator/DeploymentSettings.tsx';
+import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment, requirementsSummary } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
 import { HardwareGroups } from './calculator/HardwareGroups.tsx';
 import { isDefaultNodeSizes, NodeSizes, nodeSizesSummary } from './calculator/NodeSizes.tsx';
@@ -25,7 +25,7 @@ import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultModels, defaultMultiSite, defaultState, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -190,15 +190,15 @@ function ModelsCalculator({ state, setState, constants }: { state: AppState; set
       <EuiSpacer size="l" />
       <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
         <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
-          <Section step={1} title="What will the cluster hold?" description="The same workloads are sized under every model.">
+          <Section step={1} title="What will the cluster hold?" description="The same workloads are sized under every model." summary={workloadsSummary(m.workloads)}>
             <WorkloadList workloads={m.workloads} onChange={(workloads) => setModels({ ...m, workloads })} />
           </Section>
           <Gap />
-          <Section step={2} title="What servers do they have?" description="One row per group of identical servers. Each model carves them up differently; master servers become the ECE control plane.">
+          <Section step={2} title="What servers do they have?" description="One row per group of identical servers. Each model carves them up differently; master servers become the ECE control plane." summary={groupsSummary(m.servers)}>
             <ServerGroups servers={m.servers} onChange={(servers) => setModels({ ...m, servers })} />
           </Section>
           <Gap />
-          <Section step={3} title="Deployment" description="Requirements shared by every model.">
+          <Section step={3} title="Deployment" description="Requirements shared by every model." summary={requirementsSummary(deploymentOfForward(m.options))}>
             <DeploymentSettings hideSites hideModel value={deploymentOfForward(m.options)}
               onChange={(d) => setModels({ ...m, options: withForwardDeployment(m.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
           </Section>
@@ -305,7 +305,7 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
         />
       </Section>
       <Gap />
-      <Section step={2} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type.">
+      <Section step={2} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type." summary={workloadsSummary(f.workloads)}>
         <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
       </Section>
       <Gap />
@@ -349,11 +349,11 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
           } />
       </Section>
       <Gap />
-      <Section step={step++} title="What do you want to find out?">
+      <Section step={step++} title="What do you want to find out?" summary={SOLVES.find((x) => x.value === r.solve)?.title}>
         <SolvePicker value={r.solve} onChange={(solve) => setState((s) => ({ ...s, reverse: withSolve(s.reverse, solve) }))} />
       </Section>
       <Gap />
-      <Section step={step++} title="What hardware do they have?" description="One row per group of identical nodes.">
+      <Section step={step++} title="What hardware do they have?" description="One row per group of identical nodes." summary={groupsSummary(r.hardware.groups, 'nodes')}>
         <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
           ratios={r.hardware.memDiskRatio ?? {}}
           onRatios={(memDiskRatio) => {
@@ -369,7 +369,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
       <Gap />
       {target && (
         <>
-          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "Today's volume and how fast it grows." : 'Fixed parameters for the workload being solved.'}>
+          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "Today's volume and how fast it grows." : 'Fixed parameters for the workload being solved.'} summary={workloadsSummary(r.fixed)}>
             <WorkloadCard
               p={target} kindChoices={kinds} showGrowth={r.solve === 'years_to_capacity'}
               role={{ kind: 'reverse-target', solve: r.solve, targetTier, onTargetTier: (t) => setReverse({ ...r, targetTier: t }) }}

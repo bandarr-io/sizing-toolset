@@ -21,12 +21,18 @@ export function isDefaultDeployment(d: Deployment, extras: readonly string[] = [
 
 /** One line for the folded step: "Self-managed · 1 site · FIPS 140-3". */
 export function deploymentSummary(d: Deployment, extras: readonly string[] = []): string {
-  const model = MODELS.find((m) => m.value === d.model)?.text ?? d.model;
+  return [modelName(d), `${d.sites} site${d.sites === 1 ? '' : 's'}`, requirementsSummary(d, extras)].join(' · ');
+}
+
+const modelName = (d: Deployment) => MODELS.find((m) => m.value === d.model)?.text ?? d.model;
+
+/** Just the requirement flags, for steps where the model or site count is set elsewhere. */
+export function requirementsSummary(d: Deployment, extras: readonly string[] = [], withModel = false): string {
   const flags = [
     d.airGapped && 'air-gapped', d.autoOps && 'AutoOps', d.fips && 'FIPS 140-3',
     d.concurrentSearch && 'heavy concurrent search', d.ccrMode !== 'none' && 'cross-cluster replication', ...extras,
   ].filter(Boolean);
-  return [model, `${d.sites} site${d.sites === 1 ? '' : 's'}`, ...(flags.length ? flags : ['no special requirements'])].join(' · ');
+  return [...(withModel ? [modelName(d)] : []), ...(flags.length ? flags : ['no special requirements'])].join(' · ');
 }
 
 /** D28: events/s per vCPU for the CPU ingest constraint. Blank uses `ev_per_s_per_vcpu`. */

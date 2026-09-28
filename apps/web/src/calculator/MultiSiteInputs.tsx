@@ -5,10 +5,10 @@ import type { SiteInput } from '@sizing/engine';
 import { useState, type ReactNode } from 'react';
 import { NumField, SelectField } from '../components/Fields.tsx';
 import {
-  deploymentOfForward, modelOptionsFor, RELATIONSHIPS, withForwardDeployment, withSiteCount, type AppState, type MultiSiteState,
+  deploymentOfForward, groupsSummary, modelOptionsFor, RELATIONSHIPS, withForwardDeployment, withSiteCount, workloadsSummary, type AppState, type MultiSiteState,
 } from '../state.ts';
 import { Gap, Section } from '../ui/Section.tsx';
-import { DeploymentSettings } from './DeploymentSettings.tsx';
+import { DeploymentSettings, requirementsSummary } from './DeploymentSettings.tsx';
 import { ServerGroups } from './ServerGroups.tsx';
 import { WorkloadList } from './WorkloadList.tsx';
 
@@ -25,6 +25,17 @@ function splitSites(ms: MultiSiteState): MultiSiteState {
       workloads: s.workloads.length || (ms.relationship === 'dr' && i !== ms.leader) ? s.workloads : first.workloads,
     })),
   };
+}
+
+/** Folded setup step: "Disaster recovery · 2 sites, identical". */
+function setupSummary(ms: MultiSiteState): string {
+  const rel = RELATIONSHIPS.find((r) => r.value === ms.relationship)?.title ?? ms.relationship;
+  return `${rel} · ${ms.sites.length} site${ms.sites.length === 1 ? '' : 's'}, ${ms.identical ? 'identical' : 'each different'}`;
+}
+
+/** One summary for identical sites, otherwise one per site: "DC1: … · DC2: …". */
+function perSite(ms: MultiSiteState, f: (site: SiteInput) => string): string {
+  return ms.identical ? f(ms.sites[0]!) : ms.sites.map((s) => `${s.name}: ${f(s)}`).join(' · ');
 }
 
 /** Tabs over sites, or a single form when every site is the same. */
@@ -76,7 +87,7 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
 
   return (
     <>
-      <Section step={1} title="How are the sites set up?" description="Pick how the clusters relate. Turn on Compare to see all three side by side.">
+      <Section step={1} title="How are the sites set up?" description="Pick how the clusters relate. Turn on Compare to see all three side by side." summary={setupSummary(ms)}>
         <RelationshipCards value={ms.relationship} onChange={(relationship) => set({ ...ms, relationship })} />
         <EuiSpacer size="m" />
         <EuiFlexGroup gutterSize="l" alignItems="flexEnd" wrap>
@@ -113,7 +124,7 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
       </Section>
       <Gap />
 
-      <Section step={2} title="What do the sites ingest?" description={ingestNote}>
+      <Section step={2} title="What do the sites ingest?" description={ingestNote} summary={perSite(ms, (site) => workloadsSummary(site.workloads))}>
         {ms.identical
           ? <WorkloadList workloads={ms.sites[0]!.workloads} onChange={(workloads) => setSite(0, { workloads })} />
           : (
@@ -129,14 +140,14 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
       </Section>
       <Gap />
 
-      <Section step={3} title="What servers does each site have?" description="One row per group of identical physical servers. The calculator works out the Elasticsearch nodes on each.">
+      <Section step={3} title="What servers does each site have?" description="One row per group of identical physical servers. The calculator works out the Elasticsearch nodes on each." summary={perSite(ms, (site) => groupsSummary(site.servers))}>
         {ms.identical
           ? <ServerGroups servers={ms.sites[0]!.servers} onChange={(servers) => setSite(0, { servers })} />
           : <PerSite ms={ms} render={(site, i) => <ServerGroups key={i} servers={site.servers} onChange={(servers) => setSite(i, { servers })} />} />}
       </Section>
       <Gap />
 
-      <Section step={4} title="Deployment" description="Shared by every site. Self-managed, ECK and ECE each carve the servers differently.">
+      <Section step={4} title="Deployment" description="Shared by every site. Self-managed, ECK and ECE each carve the servers differently." summary={requirementsSummary(deploymentOfForward(ms.options), [], true)}>
         <DeploymentSettings hideSites modelOptions={modelOptionsFor('multisite')} value={deploymentOfForward(ms.options)}
           onChange={(d) => set({ ...ms, options: withForwardDeployment(ms.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
       </Section>
