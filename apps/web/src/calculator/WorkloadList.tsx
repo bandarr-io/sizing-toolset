@@ -3,6 +3,7 @@ import {
 } from '@elastic/eui';
 import type { WorkloadKind, WorkloadProfile } from '@sizing/engine';
 import { useState } from 'react';
+import { useConstants } from '../constantsStore.tsx';
 import { KIND_ORDER, KINDS, newWorkload } from '../state.ts';
 import { RetentionStrip } from './RetentionTimeline.tsx';
 import { summarize, WorkloadCard, type CardRole } from './WorkloadCard.tsx';
@@ -50,10 +51,11 @@ export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, 
   addLabel?: string;
   showGrowth?: boolean;
 }) {
+  const { set: c } = useConstants();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(workloads.length - 1);
   const add = (k: WorkloadKind) => {
-    onChange([...workloads, newWorkload(k, workloads.map((w) => w.id))]);
+    onChange([...workloads, newWorkload(k, workloads.map((w) => w.id), c)]);
     setEditing(workloads.length);
     setOpen(false);
   };

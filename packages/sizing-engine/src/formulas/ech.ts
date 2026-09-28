@@ -242,4 +242,10 @@ export const FORMULAS: Formula[] = [
     explanation: 'Snapshots are backups in object storage. Prices come from the price table; FedRAMP High regions use their own data-out and storage prices.',
     constantKeys: ['ech.data_out_share', 'ech.storage_api_calls_per_hour', 'ech.hours_per_month', 'ech.index_factor'], source: 'ECH Logs!I95:L96, M92, I73:I74', code: 'ech/observability.ts',
   },
+  {
+    id: 'ech.federal_regions', area, group: 'Pricing', title: 'US government regions',
+    formula: 'note when the region is FedRAMP High or Moderate: authorized or not, and when High is used without Enterprise',
+    explanation: 'FedRAMP is the US government cloud security program. Elastic Cloud offers FedRAMP Moderate and High on AWS GovCloud; the ballpark spreadsheet prices High with the Enterprise subscription only.',
+    constantKeys: ['fedramp.ech'], source: 'SPEC C6, ECH v4.3 notes', code: 'ech/common.ts (placementNotes)',
+  },
 ];

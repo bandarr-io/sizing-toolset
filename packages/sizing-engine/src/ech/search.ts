@@ -5,7 +5,7 @@ import { num, val, type ConstantSet } from '@sizing/constants';
 import { ceilEps, fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
 import {
-  availableIn, channelSells, checkPlacement, type EchPlacement, EchUnavailable, monthlyPerGb, pricedLine, roundLine, skuOf,
+  availableIn, channelSells, checkPlacement, type EchPlacement, EchUnavailable, monthlyPerGb, placementNotes, pricedLine, roundLine, skuOf,
 } from './common.ts';
 import type { EchData, EchLine, EchResult, EchSku } from './types.ts';
 
@@ -62,7 +62,7 @@ export interface EchSearchRequest extends EchPlacement {
 
 export function echSearch(c: ConstantSet, data: EchData, req: EchSearchRequest): EchResult {
   checkPlacement(data, req);
-  const warnings: string[] = [];
+  const warnings: string[] = placementNotes(c, req);
   const useCase = req.useCase ?? 'Custom Search';
   const uc = val<Record<EchSearchUseCase, { ops: number; storage: number; enterpriseSearchRatio: number }>>(c, 'ech.search.use_cases')[useCase];
   const zones = req.zones ?? num(c, 'ech.search.zones');
@@ -217,7 +217,7 @@ const bbqSelectable = (s: EchSku) => isVectorProfile(s) || ((s.status ?? '').toL
 
 export function echVector(c: ConstantSet, data: EchData, req: EchVectorRequest): EchResult {
   checkPlacement(data, req);
-  const warnings: string[] = [];
+  const warnings: string[] = placementNotes(c, req);
   const method = req.method;
   const key = method === 'float32' || method === 'int8' ? 'hnsw' : method;
   const zones = req.zones ?? val<Record<'hnsw' | 'bbq' | 'disk_bbq', number>>(c, 'ech.vector.zones')[key];

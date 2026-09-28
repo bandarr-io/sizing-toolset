@@ -1,5 +1,5 @@
 // Shared ECH pricing and packaging rules, as the ECH Ballpark Estimator v4.6 applies them in every use-case sheet.
-import { num, type ConstantSet } from '@sizing/constants';
+import { num, val, type ConstantSet } from '@sizing/constants';
 import { ceilEps, fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
 import { priceKey, type EchChannel, type EchLine, type EchRole, type EchData, type EchDtsItem, type EchPrice, type EchProvider, type EchSku, type EchTier } from './types.ts';
@@ -124,4 +124,14 @@ export function pricedLine(
     warnings.push(`${label}: ${e.message} The spreadsheet shows #NA and leaves this line out of the total.`);
     return { key, label, sku: skuId, ramGb, annual: 0, annualRounded: 0, math, error: e.message, ...extra };
   }
+}
+
+/** Notes about the region itself: US government (FedRAMP) regions, from the `fedramp.ech` facts. */
+export function placementNotes(c: ConstantSet, p: EchPlacement): string[] {
+  const m = p.region.match(/FedRAMP (High|Moderate)/);
+  if (!m) return [];
+  const f = val<{ moderate: boolean; high: boolean; region: string; highAuthorizedOn: string }>(c, 'fedramp.ech');
+  const level = m[1] as 'High' | 'Moderate';
+  if (level === 'High' ? !f.high : !f.moderate) return [`${p.region}: FedRAMP ${level} is not listed as authorized for Elastic Cloud.`];
+  return [`${p.region} is a US government region (FedRAMP ${level}, ${f.region}${level === 'High' ? `, authorized ${f.highAuthorizedOn}` : ''}).${level === 'High' && p.tier !== 'Enterprise' ? ' The ballpark spreadsheet offers it with Enterprise only.' : ''}`];
 }

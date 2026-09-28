@@ -161,6 +161,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
     constraints.push(constraint('cpu_ingest', max, 'GB/day', [
       step('usable vCPU (N−1)', `Σ_{${ingestNodes.length - 1} nodes} vCPU`, usableVcpu, []),
       step('max GB/day (CPU)', `${fmt(usableVcpu)} × ${ev} × ${fmt(kb)} KB × 86,400 / 1e6 / (${rep} + 1)${derate.factor !== 1 ? ` × ${fmt(derate.factor)} (${derate.notes.join(', ')})` : ''}${othersEv > 0 ? ' after other workloads' : ''}`, max, ['ev_per_s_per_vcpu', 'ingest.default_avg_event_kb', ...derate.keys]),
+      ...cpuBand(c, req.eventsPerSecondPerVcpu, ev, max),
     ], { tier: ingestTier }));
   }
 
@@ -503,6 +504,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
     ...validateHardware(c, {
       groups, airGapped, autoOps: req.hardware.autoOps ?? false, replicasByTier, agents,
       shards: estimateShards(c, atMax, 0), dataGbByTier, ratioOverrides: req.hardware.memDiskRatio ?? {},
+      profiles: atMax, fips: req.fips ?? false, ...(req.eventsPerSecondPerVcpu !== undefined ? { eventsPerSecondPerVcpu: req.eventsPerSecondPerVcpu } : {}),
     }),
     ...commonWarnings(req.hardware.model),
     ...tiersWithoutNodes(req.fixed, groups, dataGbByTier),
@@ -586,4 +588,18 @@ function tiersWithoutNodes(fixed: readonly WorkloadProfile[], groups: readonly N
     }
   }
   return out;
+}
+
+/**
+ * The processor ceiling at the ends of the usual processing-speed range (1,000 to 3,000 events/s per core),
+ * shown only when the default speed is used: the ceiling scales in proportion to the speed.
+ */
+function cpuBand(c: ConstantSet, override: number | undefined, ev: number, max: number): MathStep[] {
+  if (override !== undefined || !(ev > 0)) return [];
+  const lo = num(c, 'ev_per_s_per_vcpu.band_min');
+  const hi = num(c, 'ev_per_s_per_vcpu.band_max');
+  return [
+    step('max GB/day (CPU) at the low end of the usual range', `${fmt(max)} × ${fmt(lo, 0)} / ${fmt(ev, 0)}`, (max * lo) / ev, ['ev_per_s_per_vcpu.band_min']),
+    step('max GB/day (CPU) at the high end of the usual range', `${fmt(max)} × ${fmt(hi, 0)} / ${fmt(ev, 0)}`, (max * hi) / ev, ['ev_per_s_per_vcpu.band_max']),
+  ];
 }

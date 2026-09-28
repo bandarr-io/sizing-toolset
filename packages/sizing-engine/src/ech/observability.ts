@@ -4,7 +4,7 @@ import { num, val, type ConstantSet } from '@sizing/constants';
 import { fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
 import {
-  checkPlacement, defaultSku, dtsPrice, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, roundLine, skuOf,
+  checkPlacement, defaultSku, dtsPrice, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, placementNotes, roundLine, skuOf,
 } from './common.ts';
 import type { EchData, EchLine, EchResult, EchRole } from './types.ts';
 
@@ -43,7 +43,7 @@ const TIER_LABEL: Record<DataTier | Fixed, string> = {
 export function echObservability(c: ConstantSet, data: EchData, req: EchObservabilityRequest): EchResult {
   checkPlacement(data, req);
   const logs = req.kind === 'logs';
-  const warnings: string[] = [];
+  const warnings: string[] = placementNotes(c, req);
   const zonesDefault = val<Record<DataTier, number>>(c, 'ech.zones');
   const replicasDefault = val<Record<'hot' | 'warm' | 'cold', number>>(c, 'ech.replicas');
   const fixedDefault = val<Record<Fixed, number>>(c, 'ech.fixed_ram_gb');

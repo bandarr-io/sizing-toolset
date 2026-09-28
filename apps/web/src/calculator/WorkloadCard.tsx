@@ -91,7 +91,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
       {kindChoices && kindChoices.length > 1 && (
         <EuiFlexItem grow={false}>
           <SelectField label={null} value={p.kind} options={kindChoices.map((k) => ({ value: k, text: KINDS[k].label }))}
-            onChange={(k) => onChange({ ...newWorkload(k), id: p.id, retentionDays: p.retentionDays, replicas: p.replicas, ...(p.rawGbPerDay !== undefined ? { rawGbPerDay: p.rawGbPerDay } : {}) })} compressed />
+            onChange={(k) => onChange({ ...newWorkload(k, [], c), id: p.id, retentionDays: p.retentionDays, replicas: p.replicas, ...(p.rawGbPerDay !== undefined ? { rawGbPerDay: p.rawGbPerDay } : {}) })} compressed />
         </EuiFlexItem>
       )}
       {onRemove && (
@@ -260,6 +260,9 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
         <EuiFlexGrid columns={2} gutterSize="l">
           <EuiFlexItem><NumField label="Elastic Agents" value={f.agents} step={1} helpText="Machines running Elastic Agent, which collects their data." onChange={(n) => set({ fleet: { ...f, agents: n ?? 0 } })} /></EuiFlexItem>
           <EuiFlexItem><SwitchField label="Elastic Defend" checked={f.defend} onChange={(defend) => set({ fleet: { ...f, defend } })} helpText="Elastic's endpoint security. Noted for the record; it does not change the sizing." /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Agent policies" value={f.policies} optional step={1} placeholder="optional"
+            helpText={`Sets of agent settings. One Fleet Server handles up to ${fmtNum(num(c, 'fleet.max_policies_per_instance'), 0)}.`}
+            onChange={(n) => { const { policies: _drop, ...rest } = f; set({ fleet: n === undefined ? rest : { ...rest, policies: n } }); }} /></EuiFlexItem>
         </EuiFlexGrid>
         <Hint>Fleet Server, which manages the agents, needs {row.fleetMemGb} GB of memory for up to {fmtNum(row.agents, 0)} agents. The hot tier needs at least {row.hotRamGb} GB of memory and {row.hotVcpu} processor cores.</Hint>
       </>

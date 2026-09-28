@@ -5,7 +5,7 @@ import { num, val, type ConstantSet } from '@sizing/constants';
 import { fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
 import {
-  checkPlacement, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, roundLine, skuOf,
+  checkPlacement, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, placementNotes, roundLine, skuOf,
 } from './common.ts';
 import type { EchData, EchLine, EchResult } from './types.ts';
 
@@ -90,7 +90,7 @@ export function apmServerGb(eventsPerSec: number, ladder: readonly number[], per
 export function echApm(c: ConstantSet, data: EchData, req: EchApmRequest): EchResult {
   checkPlacement(data, req);
   const x = extrasOf(data);
-  const warnings: string[] = [];
+  const warnings: string[] = placementNotes(c, req);
   const zonesDefault = val<Record<DataTier, number>>(c, 'ech.zones');
   const replicasDefault = val<Record<'hot' | 'warm' | 'cold', number>>(c, 'ech.replicas');
   const fixedDefault = val<Record<Fixed, number>>(c, 'ech.fixed_ram_gb');

@@ -47,8 +47,8 @@ export const FORMULAS: Formula[] = [
   {
     id: 'reverse.max_gb_day_cpu', area: R, group: 'Ceilings', title: 'Most data per day that processors allow',
     formula: 'max GB/day = (hot cores except the largest node × events per second per core − other workloads\' events) × event size KB × 86,400 ÷ 1,000,000 ÷ (replicas + 1) × slowdowns',
-    explanation: 'Every copy of each event is processed on the hot tier. Ingest pipelines, LogsDB and heavy concurrent search each slow processing down. This estimate is rough: confirm it with Rally.',
-    constantKeys: ['ev_per_s_per_vcpu', 'ingest.default_avg_event_kb', 'ingest.derate.pipelines', 'ingest.derate.logsdb', 'ingest.derate.concurrent_search'], source: 'SPEC §5.3, D28', code: 'reverse.ts',
+    explanation: 'Every copy of each event is processed on the hot tier. Ingest pipelines, LogsDB and heavy concurrent search each slow processing down. This estimate is rough: with the default speed, the math also shows the result at both ends of the usual 1,000 to 3,000 events per second per core. Confirm it with Rally.',
+    constantKeys: ['ev_per_s_per_vcpu', 'ev_per_s_per_vcpu.band_min', 'ev_per_s_per_vcpu.band_max', 'ingest.default_avg_event_kb', 'ingest.derate.pipelines', 'ingest.derate.logsdb', 'ingest.derate.concurrent_search'], source: 'SPEC §5.3, D28', code: 'reverse.ts',
   },
   {
     id: 'reverse.max_gb_day_disk_write', area: R, group: 'Ceilings', title: 'Most data per day that disk write speed allows',
@@ -160,9 +160,9 @@ export const FORMULAS: Formula[] = [
   },
   {
     id: 'check.hv7_watermark', area: H, group: 'Disk', title: 'Disk too full if a node fails (HV7)',
-    formula: 'fill = tier data ÷ (tier disk − the largest node\'s disk)\nwarn when fill > low watermark, or when 1 − fill < the headroom to keep free\nwarn when a tier has data but no nodes',
-    explanation: 'The low watermark is the disk-full level at which Elasticsearch stops placing new data on a node. The check assumes one node has failed.',
-    constantKeys: ['watermark.low', 'storage.watermark_headroom'], source: 'SPEC §5.7 HV7', code: 'validation.ts',
+    formula: 'fill = tier data ÷ (tier disk − the largest node\'s disk)\nerror when fill > flood-stage watermark; warn when fill > high watermark, or > low watermark, or when 1 − fill < the headroom to keep free\nwarn when a tier has data but no nodes',
+    explanation: 'Elasticsearch reacts to full disks in three steps: above the low watermark it stops placing new data on a node, above the high one it moves shards away, and above the flood stage it makes indices read-only. The check assumes one node has failed.',
+    constantKeys: ['watermark.low', 'watermark.high', 'watermark.flood_stage', 'storage.watermark_headroom'], source: 'SPEC §5.7 HV7', code: 'validation.ts',
   },
   {
     id: 'check.hv9_replicas', area: H, group: 'Disk', title: 'Spare copies with only one node (HV9)',
@@ -178,20 +178,38 @@ export const FORMULAS: Formula[] = [
   },
   {
     id: 'check.hv8_shards', area: H, group: 'Shards', title: 'Shard count and shard size (HV8)',
-    formula: 'warn when shards per node outside frozen > shards allowed per node\nwarn when a shard > maximum shard size (suggests more primary shards or earlier rollover)\nnote when a shard < minimum shard size',
-    explanation: 'Shards are slices of the data. Too many per node costs memory; very large ones are slow to move and recover; very small ones waste overhead.',
-    constantKeys: ['max_shards_per_nonfrozen_node', 'shard_size_gb_max', 'shard_size_gb_min'], source: 'SPEC §5.7 HV8, D31', code: 'validation.ts',
+    formula: 'warn when shards per node outside frozen > shards allowed per node\nwarn when a shard > maximum shard size (suggests more primary shards or earlier rollover)\ndocuments per shard = shard GB ÷ index ratio × 1,000,000 ÷ average event KB; warn when > the documents limit\nnote when a shard < minimum shard size',
+    explanation: 'Shards are slices of the data. Too many per node costs memory; very large ones, by size or by number of documents, are slow to move and recover; very small ones waste overhead.',
+    constantKeys: ['max_shards_per_nonfrozen_node', 'shard_size_gb_max', 'shard_size_gb_min', 'shard_docs_max', 'ingest.default_avg_event_kb', 'index_ratio.standard', 'index_ratio.logsdb', 'index_ratio.tsds'], source: 'SPEC §5.7 HV8, D31', code: 'validation.ts',
   },
   {
     id: 'check.hv10_airgap', area: H, group: 'Security', title: 'AutoOps without internet (HV10)',
     formula: 'error when the site is air-gapped and AutoOps is selected',
     explanation: 'AutoOps is Elastic\'s monitoring service and needs an internet connection.',
-    constantKeys: [], source: 'SPEC §5.7 HV10', code: 'validation.ts',
+    constantKeys: ['autoops.requires_internet'], source: 'SPEC §5.7 HV10', code: 'validation.ts',
   },
   {
     id: 'check.hv12_fleet', area: H, group: 'Fleet', title: 'Fleet Server and hot tier for the agents (HV12)',
-    formula: 'warn when agents > what the Fleet Server memory supports (Fleet table)\nwarn when hot memory or cores < the Fleet table floor for the agent count\nnote when agents ≥ the key cache threshold: set the cache to agents × multiplier',
-    explanation: 'Fleet Server manages the agents. Many agents need more Fleet Server memory, a bigger hot tier, and a larger cache for the agents\' sign-in keys.',
-    constantKeys: ['fleet.table', 'fleet.api_key_cache_threshold_agents', 'fleet.api_key_cache_multiplier'], source: 'SPEC §5.7 HV12', code: 'validation.ts',
+    formula: 'warn when agents > what the Fleet Server memory supports (Fleet table)\nwarn when hot memory or cores < the Fleet table floor for the agent count\nwarn when agent policies > the policies one Fleet Server handles\nnote when agents > the Serverless limit per project: projects = ROUNDUP(agents ÷ limit)\nnote when agents ≥ the key cache threshold: set the cache to agents × multiplier',
+    explanation: 'Fleet Server manages the agents. Many agents need more Fleet Server memory, a bigger hot tier, and a larger cache for the agents\' sign-in keys. Agent policies are sets of agent settings; one Fleet Server handles a limited number.',
+    constantKeys: ['fleet.table', 'fleet.max_policies_per_instance', 'fleet.serverless_max_agents', 'fleet.api_key_cache_threshold_agents', 'fleet.api_key_cache_multiplier'], source: 'SPEC §5.7 HV12', code: 'validation.ts',
+  },
+  {
+    id: 'check.hv13_bbq', area: H, group: 'Memory', title: 'Vector compression other than the default (HV13)',
+    formula: 'note when a vector workload has dimensions ≥ the BBQ default threshold and uses int8 or float32',
+    explanation: 'Elasticsearch compresses vectors with BBQ by default from this many dimensions up. Other choices keep more of each vector in memory. New vector workloads start with BBQ for the same reason.',
+    constantKeys: ['knn.bbq_default_min_dims'], source: 'SPEC §5.5', code: 'validation.ts, web state.ts (newWorkload)',
+  },
+  {
+    id: 'check.hv14_speed_range', area: H, group: 'Processing', title: 'Processing speed outside the usual range (HV14)',
+    formula: 'note when a custom events per second per core < the low end or > the high end of the usual range',
+    explanation: 'Processing speed varies a lot with the data and the hardware. A value outside the usual range may be right, but it should come from a Rally test on the customer\'s data.',
+    constantKeys: ['ev_per_s_per_vcpu.band_min', 'ev_per_s_per_vcpu.band_max'], source: 'SPEC §5.3', code: 'validation.ts',
+  },
+  {
+    id: 'check.hv15_federal_retention', area: H, group: 'Security', title: 'US federal log retention (HV15)',
+    formula: 'when FIPS 140-3 is selected: note when a workload keeps data for fewer than the retrievable months × 30 days',
+    explanation: 'FIPS 140-3 is a US government encryption standard, so its use suggests a federal system. OMB memo M-26-14 asks federal agencies to keep logs searchable for 6 months and retrievable for 12.',
+    constantKeys: ['omb_m2614'], source: 'SPEC C6, OMB M-26-14', code: 'validation.ts',
   },
 ];

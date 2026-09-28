@@ -124,16 +124,22 @@ export function uniqueName(base: string, taken: readonly string[]): string {
   return `${base} ${i}`;
 }
 
-/** A new workload with defaults that produce a sensible first result. */
-export function newWorkload(kind: WorkloadKind, taken: readonly string[] = []): WorkloadProfile {
+/**
+ * A new workload with defaults that produce a sensible first result. Metrics downsample to
+ * `downsample.default_factor`; vectors use BBQ from `knn.bbq_default_min_dims` dimensions up, as Elasticsearch does.
+ */
+export function newWorkload(kind: WorkloadKind, taken: readonly string[] = [], c: ConstantSet = defaultConstants): WorkloadProfile {
   const id = uniqueName(KINDS[kind].label, taken);
   switch (kind) {
     case 'logs': return { id, kind, rawGbPerDay: 100, indexMode: 'logsdb', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 } };
     case 'siem': return { id, kind, rawGbPerDay: 100, indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 }, replicas: { hot: 1, warm: 1 } };
-    case 'metrics': return { id, kind, rawGbPerDay: 50, indexMode: 'tsds', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 }, downsampleFactor: { frozen: 0.1 } };
+    case 'metrics': return { id, kind, rawGbPerDay: 50, indexMode: 'tsds', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 }, downsampleFactor: { frozen: num(c, 'downsample.default_factor') } };
     case 'apm': return { id, kind, rawGbPerDay: 50, indexMode: 'standard', retentionDays: { hot: 7, frozen: 83 }, replicas: { hot: 1, warm: 1 } };
     case 'search': return { id, kind, totalGb: 500, retentionDays: {}, replicas: { content: 1 } };
-    case 'vector': return { id, kind, vector: { count: 10_000_000, dims: 1024, quant: 'bbq' }, retentionDays: {}, replicas: { content: 1 } };
+    case 'vector': {
+      const dims = 1024;
+      return { id, kind, vector: { count: 10_000_000, dims, quant: dims >= num(c, 'knn.bbq_default_min_dims') ? 'bbq' : 'int8' }, retentionDays: {}, replicas: { content: 1 } };
+    }
     case 'ml': return { id, kind, ml: { anomalyJobs: 10 }, retentionDays: {}, replicas: {} };
     case 'fleet': return { id, kind, fleet: { agents: 5000, defend: false }, retentionDays: {}, replicas: {} };
   }

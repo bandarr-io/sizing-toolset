@@ -23,9 +23,9 @@ export const FORMULAS: Formula[] = [
   },
   {
     id: 'forward.downsample', area: A, group: 'Data volume', title: 'Share kept after downsampling',
-    formula: 'share kept on a tier = downsample factor set on the workload (1 = keep everything)',
+    formula: 'share kept on a tier = downsample factor set on the workload (1 = keep everything)\nnew metrics workloads start with the default factor on frozen',
     explanation: 'Downsampling keeps metrics at a coarser time step on older tiers, for example 0.1 keeps a tenth of the data. It only applies to TSDS (time series) workloads; any other storage mode must keep 1.',
-    constantKeys: [], source: 'D22', code: 'profiles.ts (downsampleFor)',
+    constantKeys: ['downsample.default_factor'], source: 'D22', code: 'profiles.ts (downsampleFor)',
   },
   {
     id: 'forward.tier_data', area: A, group: 'Data volume', title: 'Data held on hot, warm or cold',

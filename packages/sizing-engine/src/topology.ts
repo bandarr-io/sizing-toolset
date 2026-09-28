@@ -74,7 +74,8 @@ export interface TopologyResult {
   relationship: SiteRelationship;
   sites: SiteResult[];
   fitsAll: boolean;
-  totals: { ramGb: number; eru: number; objectStorageGb: number; neededServers: number; availableServers: number };
+  /** ramGb includes platformRamGb: memory the platform itself needs (the ECK manager, once per site), not licensed. */
+  totals: { ramGb: number; eru: number; objectStorageGb: number; neededServers: number; availableServers: number; platformRamGb: number };
   /** Largest multiple of today's data volume that still fits every site, and where it runs out. */
   headroom?: { scale: number; binding?: { site: string; role: string }; math: MathStep[] };
   assumptions: string[];
@@ -383,8 +384,11 @@ export function sizeTopology(req: TopologyRequest, c: ConstantSet = defaultConst
   }
 
   const dataFits = (s: SiteResult) => s.fit.filter((f) => f.status !== 'unplaced' && f.status !== 'idle');
+  // The ECK manager (operator) runs once per Kubernetes cluster, here one per site; it is not licensed.
+  const platformRamGb = req.hostModel === 'eck' ? num(c, 'eck.operator_ram_gb') * req.sites.length : 0;
   const totals = {
-    ramGb: sites.reduce((s, x) => s + x.result.totalRamGb, 0),
+    ramGb: sites.reduce((s, x) => s + x.result.totalRamGb, 0) + platformRamGb,
+    platformRamGb,
     eru: sites.reduce((s, x) => s + x.license.eru, 0),
     objectStorageGb: sites.reduce((s, x) => s + (x.result.objectStorage?.gb ?? 0), 0),
     neededServers: sites.reduce((s, x) => s + dataFits(x).reduce((a, f) => a + f.neededServers, 0), 0),

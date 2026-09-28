@@ -85,7 +85,7 @@ export function ModelsPanel({ rows }: { rows: ModelRow[] }) {
               ? `${roleText(row)} cannot fit at any data volume · `
               : `${roleText(row)} runs out first · `
             : ''}
-          {fmtNum(site.result.totalRamGb)} GB memory needed
+          {fmtNum(site.result.totalRamGb)} GB memory needed{row.topology.totals.platformRamGb > 0 ? `, plus ${fmtNum(row.topology.totals.platformRamGb)} GB for the ECK manager` : ''}
         </EuiText>
         <EuiSpacer size="s" />
         {byRoleOrder(site.fit).map((f) => <FitRow key={f.role} f={f} />)}
