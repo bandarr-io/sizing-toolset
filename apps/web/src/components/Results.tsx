@@ -5,16 +5,17 @@ import {
 import type { Constraint, MathStep, SizingResult, Warning } from '@sizing/engine';
 import { constraintLabel } from '../export.ts';
 import { fmtCompact, fmtNum, fmtStorage } from '../format.ts';
+import { byRoleOrder } from '../ui/tiers.ts';
 import { ConfidenceBadge } from './ConfidenceBadge.tsx';
 import { MathButton } from './MathFlyout.tsx';
 
 interface Row { role: string; nodes: number; ramGb: number; diskGb: number; vcpu: number; counted: boolean; math: MathStep[]; data: boolean }
 
 export function NodeTable({ r }: { r: SizingResult }) {
-  const rows: Row[] = [
+  const rows: Row[] = byRoleOrder([
     ...r.tiers.map((t) => ({ role: t.tier, nodes: t.nodes, ramGb: t.ramGb, diskGb: t.diskGb, vcpu: t.vcpu, counted: true, math: t.math, data: true })),
     ...r.overhead.map((o) => ({ role: o.role, nodes: o.count, ramGb: o.ramGb, diskGb: o.diskGb, vcpu: o.vcpu, counted: o.countsTowardLicense, math: o.math, data: false })),
-  ];
+  ]);
   const objectRow = r.objectStorage
     ? <EuiText size="s" style={{ marginTop: 12 }}>Object storage (cheap bulk storage such as S3, holding the cold and frozen data): <strong>{fmtStorage(r.objectStorage.gb)}</strong>{r.objectStorage.overridden ? ' (set by hand for this scenario)' : ''}. Not counted in memory or license units.</EuiText>
     : null;

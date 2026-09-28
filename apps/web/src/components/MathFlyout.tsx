@@ -2,6 +2,7 @@ import {
   EuiBadge, EuiButtonIcon, EuiCode, EuiFlexGroup, EuiFlexItem, EuiFlyout, EuiFlyoutBody, EuiFlyoutHeader, EuiHorizontalRule,
   EuiLink, EuiPanel, EuiSpacer, EuiText, EuiTitle, EuiToolTip,
 } from '@elastic/eui';
+import { UNCONFIRMED, UNCONFIRMED_HELP } from './constantFormat.ts';
 import type { MathStep } from '@sizing/engine';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useConstants } from '../constantsStore.tsx';
@@ -50,7 +51,7 @@ function ConstantChip({ k }: { k: string }) {
         <EuiFlexItem grow={false}>
           <ConfidenceBadge c={c.confidence} short />
         </EuiFlexItem>
-        {c.carried_forward && <EuiFlexItem grow={false}><EuiBadge color="hollow">not re-checked against source</EuiBadge></EuiFlexItem>}
+        {c.carried_forward && <EuiFlexItem grow={false}><EuiToolTip content={UNCONFIRMED_HELP}><EuiBadge color="hollow">{UNCONFIRMED}</EuiBadge></EuiToolTip></EuiFlexItem>}
         {isOverridden(k) && <EuiFlexItem grow={false}><EuiBadge color="primary">changed in this browser</EuiBadge></EuiFlexItem>}
       </EuiFlexGroup>
       <EuiText size="xs" color="subdued">

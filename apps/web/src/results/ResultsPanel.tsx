@@ -11,7 +11,7 @@ import { MathButton } from '../components/MathFlyout.tsx';
 import { constraintWithTier, solveLabel } from '../export.ts';
 import { SOLVES } from '../state.ts';
 import { fmtCompact, fmtMoney, fmtNum, fmtStorage } from '../format.ts';
-import { ROLE_LABEL } from '../ui/tiers.ts';
+import { byRoleOrder, ROLE_LABEL } from '../ui/tiers.ts';
 import { ClusterMap } from './ClusterMap.tsx';
 
 const ANSWER_COLOR = '#0B64DD';
@@ -71,10 +71,10 @@ function nodeCounts(r: SizingResult) {
 /** Why each tier has its node count, then the sum that gives the headline number. */
 function nodeMath(r: SizingResult): MathStep[] {
   const { allNodes } = nodeCounts(r);
-  const parts = [
-    ...r.tiers.map((t) => `${t.nodes} ${t.tier}`),
-    ...r.overhead.filter((o) => o.count > 0).map((o) => `${o.count} ${(ROLE_LABEL[o.role] ?? o.role).toLowerCase()}`),
-  ];
+  const parts = byRoleOrder([
+    ...r.tiers.map((t) => ({ role: t.tier as string, text: `${t.nodes} ${t.tier}` })),
+    ...r.overhead.filter((o) => o.count > 0).map((o) => ({ role: o.role as string, text: `${o.count} ${(ROLE_LABEL[o.role] ?? o.role).toLowerCase()}` })),
+  ]).map((x) => x.text);
   return [
     ...r.tiers.flatMap((t) => t.math),
     ...r.overhead.filter((o) => o.count > 0).flatMap((o) => o.math),

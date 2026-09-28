@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { MathButton } from '../components/MathFlyout.tsx';
 import { fmtNum } from '../format.ts';
 import { MODEL_NAMES } from '../state.ts';
+import { byRoleOrder } from '../ui/tiers.ts';
 import { PIN_TOP, useFitsViewport } from './ResultsPanel.tsx';
 import { FitRow } from './TopologyPanel.tsx';
 
@@ -87,7 +88,7 @@ export function ModelsPanel({ rows }: { rows: ModelRow[] }) {
           {fmtNum(site.result.totalRamGb)} GB memory needed
         </EuiText>
         <EuiSpacer size="s" />
-        {site.fit.map((f) => <FitRow key={f.role} f={f} />)}
+        {byRoleOrder(site.fit).map((f) => <FitRow key={f.role} f={f} />)}
         <EuiHorizontalRule margin="s" />
         <EuiFlexGroup gutterSize="xs" alignItems="center" responsive={false}>
           <EuiFlexItem grow={false}><EuiText size="s">License units: <strong>{row.eru} ERU</strong></EuiText></EuiFlexItem>

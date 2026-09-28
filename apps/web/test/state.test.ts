@@ -144,6 +144,13 @@ describe('export', () => {
     expect(md).toContain('## Assumptions');
     expect(md).toContain('elastic/logs');
   });
+  it('node table lists roles in display order: data tiers, then Kibana before master', () => {
+    const md = toMarkdown(state, result, state.forward.workloads, '2026-09-24T00:00:00Z');
+    const at = (row: string) => md.indexOf(`| ${row}`);
+    expect(at('hot')).toBeLessThan(at('frozen'));
+    expect(at('frozen')).toBeLessThan(at('kibana'));
+    expect(at('kibana')).toBeLessThan(at('master'));
+  });
   it('JSON reproduces the result from the exported scenario (FR-E2)', () => {
     const j = JSON.parse(toJson(state, result, '2026-09-24T00:00:00Z'));
     expect(j.constantsHash).toBe(result.constantsHash);

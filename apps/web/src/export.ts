@@ -2,6 +2,7 @@ import type { Constant } from '@sizing/constants';
 import type { ModelRow, SizingResult, TopologyResult, WorkloadProfile } from '@sizing/engine';
 import type { CostReport } from './cost.ts';
 import { fmtMoney } from './format.ts';
+import { byRoleOrder } from './ui/tiers.ts';
 import type { AppState } from './state.ts';
 
 const n = (x: number, d = 2) =>
@@ -91,8 +92,11 @@ export function toMarkdown(state: AppState, result: SizingResult, workloads: rea
   L.push('');
 
   L.push(`## Nodes${perSite}`, '', 'A node is one running copy of Elasticsearch on a server.', '', '| Role | Nodes | Memory each (GB) | Disk each (GB) | Cores each |', '|---|---:|---:|---:|---:|');
-  for (const t of result.tiers) L.push(`| ${t.tier} | ${t.nodes} | ${n(t.ramGb)} | ${n(t.diskGb)} | ${n(t.vcpu)} |`);
-  for (const o of result.overhead) L.push(`| ${o.role}${o.countsTowardLicense ? '' : ' (no license needed)'} | ${o.count} | ${n(o.ramGb)} | ${o.diskGb ? n(o.diskGb) : '–'} | ${n(o.vcpu)} |`);
+  const nodeRows = byRoleOrder([
+    ...result.tiers.map((t) => ({ role: t.tier as string, line: `| ${t.tier} | ${t.nodes} | ${n(t.ramGb)} | ${n(t.diskGb)} | ${n(t.vcpu)} |` })),
+    ...result.overhead.map((o) => ({ role: o.role as string, line: `| ${o.role}${o.countsTowardLicense ? '' : ' (no license needed)'} | ${o.count} | ${n(o.ramGb)} | ${o.diskGb ? n(o.diskGb) : '–'} | ${n(o.vcpu)} |` })),
+  ]);
+  for (const x of nodeRows) L.push(x.line);
   L.push('');
 
   L.push('## Limits', '', 'How full each resource is. The one marked "runs out first" sets the size.', '', '| Resource | Tier | Value | How full | Confidence | Runs out first |', '|---|---|---:|---:|---|---|');
@@ -150,7 +154,7 @@ export function topologyMarkdown(name: string, t: TopologyResult, exportedAt: st
   for (const s of t.sites) {
     L.push(`## ${s.name}`, '', `Holds: ${s.holds.join(', ') || 'no data'}`, '');
     L.push('| Role | Servers needed | Available | Nodes per server | Status |', '|---|---:|---:|---:|---|');
-    for (const f of s.fit) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${STATUS_WORD[f.status] ?? f.status} |`);
+    for (const f of byRoleOrder(s.fit)) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${STATUS_WORD[f.status] ?? f.status} |`);
     L.push('');
   }
   L.push('## Assumptions', '', ...[...t.assumptions, ...(t.sites[0]?.result.assumptions ?? [])].map((a) => `- ${a}`), '');
@@ -176,7 +180,7 @@ export function modelsMarkdown(name: string, rows: readonly ModelRow[], exported
   for (const r of rows) {
     L.push(`## ${MODEL_LABEL[r.model]}`, '', ...r.requirements.map((q) => `- ${q}`), '');
     L.push('| Role | Servers needed | Available | Nodes per server | Status |', '|---|---:|---:|---:|---|');
-    for (const f of r.topology.sites[0]!.fit) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${STATUS_WORD[f.status] ?? f.status} |`);
+    for (const f of byRoleOrder(r.topology.sites[0]!.fit)) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${STATUS_WORD[f.status] ?? f.status} |`);
     L.push('');
   }
   L.push('---', `Engine ${rows[0]?.topology.sites[0]?.result.engineVersion ?? ''} · constants ${rows[0]?.topology.sites[0]?.result.constantsHash.slice(0, 12) ?? ''} · exported ${exportedAt}`);

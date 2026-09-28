@@ -29,7 +29,17 @@ export const ROLE_ORDER: NodeGroup['role'][] = ['content', 'hot', 'warm', 'cold'
 
 /** Rows in ROLE_ORDER, each with its index in the original list so edits still land on the right row. Same-role rows keep their order. */
 export function inRoleOrder<T extends { role: NodeGroup['role'] }>(rows: readonly T[]): { g: T; i: number }[] {
-  return rows.map((g, i) => ({ g, i })).sort((a, b) => ROLE_ORDER.indexOf(a.g.role) - ROLE_ORDER.indexOf(b.g.role));
+  return rows.map((g, i) => ({ g, i })).sort((a, b) => roleRank(a.g.role) - roleRank(b.g.role));
+}
+
+/** Result rows (cluster map, node table, fit rows, exports) in ROLE_ORDER; unknown roles go last. */
+export function byRoleOrder<T extends { role: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => roleRank(a.role) - roleRank(b.role));
+}
+
+function roleRank(role: string): number {
+  const i = ROLE_ORDER.indexOf(role as NodeGroup['role']);
+  return i < 0 ? ROLE_ORDER.length : i;
 }
 
 export function roleColor(role: string): string {

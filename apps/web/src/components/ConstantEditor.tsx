@@ -6,7 +6,7 @@ import {
 import type { Confidence, Constant } from '@sizing/constants';
 import { useMemo, useState } from 'react';
 import { localToday, sameValue, validateDraft } from '../constantsStore.tsx';
-import { formatValue } from './constantFormat.ts';
+import { formatValue, UNCONFIRMED_HELP } from './constantFormat.ts';
 
 type Scalar = number | string | boolean;
 
@@ -158,8 +158,8 @@ export function ConstantEditor({ shipped, current, onSave, onClose }: {
             </EuiFormRow>
           </EuiFlexItem>
         </EuiFlexGroup>
-        <EuiFormRow hasEmptyLabelSpace={false}>
-          <EuiSwitch label="Not re-checked against the source (carried forward)" checked={draft.carried_forward ?? false}
+        <EuiFormRow hasEmptyLabelSpace={false} helpText={UNCONFIRMED_HELP}>
+          <EuiSwitch label="Unconfirmed: not yet checked against the source" checked={draft.carried_forward ?? false}
             onChange={(e) => set({ carried_forward: e.target.checked })} />
         </EuiFormRow>
         <EuiFormRow label="Notes" fullWidth>

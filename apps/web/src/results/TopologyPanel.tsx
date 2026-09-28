@@ -8,7 +8,7 @@ import { MathButton } from '../components/MathFlyout.tsx';
 import { ConstraintPanel, NodeTable, WarningsPanel } from '../components/Results.tsx';
 import { fmtNum, fmtStorage } from '../format.ts';
 import { RELATIONSHIPS } from '../state.ts';
-import { ROLE_LABEL, roleColor } from '../ui/tiers.ts';
+import { byRoleOrder, ROLE_LABEL, roleColor } from '../ui/tiers.ts';
 import { PIN_TOP, useFitsViewport } from './ResultsPanel.tsx';
 
 const STATUS: Record<RoleFit['status'], { color: string; text: string }> = {
@@ -66,7 +66,7 @@ function SiteCard({ s, onDetails }: { s: SiteResult; onDetails: () => void }) {
         Holds {s.holds.length ? s.holds.join(', ') : 'no data'}{followed.length ? ` (${followed.length} copied from another site)` : ''} · {fmtNum(s.result.totalRamGb)} GB memory needed · {s.license.eru} license units
       </EuiText>
       <EuiSpacer size="s" />
-      {s.fit.map((f) => <FitRow key={f.role} f={f} />)}
+      {byRoleOrder(s.fit).map((f) => <FitRow key={f.role} f={f} />)}
     </EuiPanel>
   );
 }

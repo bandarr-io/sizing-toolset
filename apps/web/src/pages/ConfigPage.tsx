@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConstantEditor } from '../components/ConstantEditor.tsx';
 import { CostRatesForm } from '../components/CostRatesForm.tsx';
 import { useCostDefaults } from '../costStore.tsx';
-import { daysBetween, expiryDate, formatValue } from '../components/constantFormat.ts';
+import { daysBetween, expiryDate, formatValue, UNCONFIRMED, UNCONFIRMED_HELP } from '../components/constantFormat.ts';
 import { localToday, useConstants, type Overrides } from '../constantsStore.tsx';
 import { download } from '../export.ts';
 
@@ -174,7 +174,7 @@ export function ConfigPage() {
       render: (r: Row) => (
         <EuiFlexGroup gutterSize="xs" wrap responsive={false}>
           {r.overridden && <EuiFlexItem grow={false}><EuiBadge color="primary">changed here</EuiBadge></EuiFlexItem>}
-          {r.current.carried_forward && <EuiFlexItem grow={false}><EuiBadge color="hollow">not re-checked</EuiBadge></EuiFlexItem>}
+          {r.current.carried_forward && <EuiFlexItem grow={false}><EuiToolTip content={UNCONFIRMED_HELP}><EuiBadge color="hollow">{UNCONFIRMED}</EuiBadge></EuiToolTip></EuiFlexItem>}
         </EuiFlexGroup>
       ),
     },
@@ -203,6 +203,7 @@ export function ConfigPage() {
           <li><strong>Apply</strong> uses a new value in this browser straight away. The page header then shows a "changed settings" badge. Results list every changed value in their assumptions and exports.</li>
           <li><strong>Write to repo</strong> saves the applied changes into the project's shared files. It first runs the same checks as the automated build. Commit the files to share them.</li>
           <li>Every change needs a web link (https) to its source and a date within the last 12 months.</li>
+          <li><strong>Unconfirmed</strong> values have not been checked against their source since they were carried over from the spec or an earlier version. Most are rules of thumb with no published figure. Confirm them before relying on an estimate that depends on them. Use the Unconfirmed filter below to list them.</li>
         </ul>
       </EuiCallOut>
       <EuiSpacer size="m" />
@@ -218,7 +219,7 @@ export function ConfigPage() {
             options={[
               { id: 'all', label: 'All' },
               { id: 'overridden', label: `Changed here (${overrideCount})` },
-              { id: 'carried', label: 'Not re-checked' },
+              { id: 'carried', label: 'Unconfirmed' },
               { id: 'expiring', label: 'Due for re-check' },
             ]} />
         </EuiFlexItem>

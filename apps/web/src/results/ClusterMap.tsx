@@ -1,7 +1,7 @@
 import { EuiFlexGroup, EuiFlexItem, EuiText, EuiToolTip } from '@elastic/eui';
 import type { SizingResult } from '@sizing/engine';
 import { fmtNum } from '../format.ts';
-import { ROLE_LABEL, roleColor } from '../ui/tiers.ts';
+import { byRoleOrder, ROLE_LABEL, roleColor } from '../ui/tiers.ts';
 
 const MAX_TILES = 72;
 
@@ -30,10 +30,10 @@ function Tiles({ count, color, failover }: { count: number; color: string; failo
 
 /** The cluster at a glance: one tile per node, colored by tier; the failover node in each data tier is outlined. */
 export function ClusterMap({ r }: { r: SizingResult }) {
-  const rows: Row[] = [
+  const rows: Row[] = byRoleOrder([
     ...r.tiers.map((t, i) => ({ key: `t${i}`, role: t.tier, count: t.nodes, ramGb: t.ramGb, diskGb: t.diskGb, vcpu: t.vcpu, data: true, counted: true })),
     ...r.overhead.map((o, i) => ({ key: `o${i}`, role: o.role, count: o.count, ramGb: o.ramGb, diskGb: o.diskGb, vcpu: o.vcpu, data: false, counted: o.countsTowardLicense })),
-  ].filter((x) => x.count > 0);
+  ]).filter((x) => x.count > 0);
 
   return (
     <div>
