@@ -1,11 +1,11 @@
 // SPEC §11.2 reverse-mode suite. R5 re-baselined by D19 (heap cap 30 → 33 GB off-heap per 64 GB node).
-// D38 (hot 1:50): a 64 GB hot node may use up to 3,200 GB, so hardware with less disk than that is disk-bound.
-// The hardware in these cases keeps the disk the spec gives it (2 TB for R1, 1,920 GB otherwise).
+// D38 (hot 1:50): a 64 GB hot node holds up to 3,200 GB. Cases that state a disk keep it (R1: 2 TB, R9: 1,000 GB)
+// and are disk-bound; the others use the common-assumption node, now 64 × 50 = 3,200 GB (§11.1 said 1:30, 1,920 GB).
 import { describe, expect, it } from 'vitest';
 import { reverse, type NodeGroup, type ReverseRequest, type WorkloadProfile } from '../src/index.ts';
 
 const hot = (count: number, extra: Partial<NodeGroup> = {}): NodeGroup => ({
-  role: 'hot', count, ramGb: 64, diskGb: 1920, diskType: 'nvme', vcpu: 8, ...extra,
+  role: 'hot', count, ramGb: 64, diskGb: 3200, diskType: 'nvme', vcpu: 8, ...extra,
 });
 const logs = (p: Partial<WorkloadProfile> = {}): WorkloadProfile => ({
   id: 'w', kind: 'logs', retentionDays: { hot: 30 }, replicas: { hot: 1 }, ...p,
@@ -28,16 +28,17 @@ describe('§11.2 reverse regression', () => {
     expect(r.answer!.confidence).toBe('high');
   });
 
-  // D38: same 2,048 GB/day, but the 1,920 GB disk now binds before the 3,200 GB ratio cap.
-  it('R2: 41×64 GB hot, 1,920 GB disk, LogsDB, 30d, 1 replica → 2,048 GB/day, disk-bound', () => {
+  // D38: 40 × 3,200 = 128,000; / 1.25 = 102,400; / 30 = 3,413.33. Was 40 × 1,920 / 1.25 / 30 = 2,048.
+  it('R2: 41×64 GB hot, LogsDB, 30d, 1 replica → 3,413.33 GB/day', () => {
     const r = reverse(req([hot(41, { vcpu: 64 })], [logs({ indexMode: 'logsdb' })], 'max_gb_day'));
-    expect(r.answer!.value).toBeCloseTo(2048, 9);
-    expect(r.answer!.binding).toBe('disk');
+    expect(r.answer!.value).toBeCloseTo(102400 / 30, 9);
+    expect(r.answer!.binding).toBe('storage');
   });
 
-  it('R3: 11 hot, 500 GB/day LogsDB, solve retention → 30 days', () => {
+  // D38: 10 × 3,200 = 32,000; / 1.25 = 25,600; / (500 × 0.5 × 2 = 500 GB a day) = 51.2 → 51 days. Was 30.
+  it('R3: 11 hot, 500 GB/day LogsDB, solve retention → 51 days', () => {
     const r = reverse(req([hot(11)], [logs({ indexMode: 'logsdb', rawGbPerDay: 500 })], 'max_retention'));
-    expect(r.answer!.value).toBe(30);
+    expect(r.answer!.value).toBe(51);
     expect(r.answer!.unit).toBe('days');
   });
 
@@ -122,7 +123,7 @@ describe('§5.3 reverse details', () => {
   it('solves frozen jointly with hot', () => {
     const frozen: NodeGroup = { role: 'frozen', count: 2, ramGb: 64, diskGb: 1920, diskType: 'ssd', vcpu: 8 };
     const r = reverse(req([hot(41, { vcpu: 64 }), frozen], [logs({ indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 } })], 'max_gb_day'));
-    // D27: frozen capacity (N−1) = 1 × 1,920 GB disk / 1.25 overhead / 0.10 cache fraction = 15,360 GB → 15,360 / (335 × 0.5) = 91.64 GB/day, below hot's 2,048.
+    // D27: frozen capacity (N−1) = 1 × 1,920 GB disk / 1.25 overhead / 0.10 cache fraction = 15,360 GB → 15,360 / (335 × 0.5) = 91.64 GB/day, below hot's 3,413 (D38).
     expect(r.answer!.value).toBeCloseTo(15360 / (335 * 0.5), 9);
     expect(r.answer!.binding).toBe('frozen');
   });
