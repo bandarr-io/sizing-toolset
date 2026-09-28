@@ -2,7 +2,7 @@
 import { num, type ConstantSet } from '@sizing/constants';
 import { ceilEps, fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
-import { priceKey, type EchChannel, type EchData, type EchDtsItem, type EchPrice, type EchProvider, type EchSku, type EchTier } from './types.ts';
+import { priceKey, type EchChannel, type EchLine, type EchRole, type EchData, type EchDtsItem, type EchPrice, type EchProvider, type EchSku, type EchTier } from './types.ts';
 
 export interface EchPlacement {
   provider: EchProvider;
@@ -88,4 +88,40 @@ export function dtsPrice(data: EchData, p: EchPlacement, item: EchDtsItem, withO
   const row = data.dts.find((x) => x.provider === p.provider && x.item === item && x.channel.toUpperCase() === p.channel.toUpperCase());
   if (!row) throw new EchUnavailable(`No ${item} price for ${p.provider} (${p.channel}).`);
   return row.price;
+}
+
+/** The region belongs to the provider and the channel sells this tier there (C229:C232). */
+export function checkPlacement(data: EchData, p: EchPlacement): void {
+  if (!p.region.toUpperCase().startsWith(p.provider.toUpperCase())) throw new EchUnavailable(`${p.region} is not a ${p.provider.toUpperCase()} region.`);
+  if (!channelSells(data, p)) throw new EchUnavailable(`${p.channel} does not sell ${p.tier} on ${p.provider.toUpperCase()}.`);
+}
+
+/** The spreadsheet's default instance for a role: its own selection, else the first offered for the role (Specs col Q). */
+export function defaultSku(data: EchData, p: EchPlacement, role: EchRole): string {
+  const d = data.defaults[p.provider]?.[role];
+  if (d) return d;
+  const sel = `${role === 'ml' ? 'ML' : role[0]!.toUpperCase() + role.slice(1)}_in_Production`;
+  const s = data.skus.find((x) => x.provider === p.provider && x.selection === sel);
+  if (!s) throw new EchUnavailable(`No ${role} instance type for ${p.provider}.`);
+  return s.id;
+}
+
+/** An annual line priced at $/GB-month × RAM × 12, or an error line with a warning where the sheet shows #NA. */
+export function pricedLine(
+  c: ConstantSet, data: EchData, p: EchPlacement, warnings: string[],
+  key: string, label: string, skuId: string, ramGb: number, extra: Partial<EchLine>, math: MathStep[],
+): EchLine {
+  try {
+    const sku = skuOf(data, skuId);
+    const price = monthlyPerGb(c, data, sku, p);
+    const annual = price.value * ramGb * 12;
+    return {
+      key, label, sku: sku.id, ramGb, monthlyPerGb: price.value, annual, annualRounded: roundLine(c, annual), ...extra,
+      math: [...math, price.math, step(`${label} per year`, `$${fmt(price.value)} × ${fmt(ramGb)} GB × 12`, annual, [])],
+    };
+  } catch (e) {
+    if (!(e instanceof EchUnavailable)) throw e;
+    warnings.push(`${label}: ${e.message} The spreadsheet shows #NA and leaves this line out of the total.`);
+    return { key, label, sku: skuId, ramGb, annual: 0, annualRounded: 0, math, error: e.message, ...extra };
+  }
 }

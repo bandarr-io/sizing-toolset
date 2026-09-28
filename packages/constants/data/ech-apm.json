@@ -1,1 +1,126 @@
-[]
+[
+  {
+    "key": "ech.apm.transactions_per_trace",
+    "value": 4,
+    "unit": "transactions",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "APM!K132 (average app); the chatty app reuses it (K139).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.spans_per_transaction",
+    "value": 5,
+    "unit": "spans",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "APM!K133: average application.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.chatty_spans_per_transaction",
+    "value": 500,
+    "unit": "spans",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "APM!K140: chatty application.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.metrics_errors_bytes_per_trace",
+    "value": 300,
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "APM!K134: metrics and errors per trace (K141 reuses it).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.transaction_doc_bytes",
+    "value": 650,
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input APM!E106.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.span_doc_bytes",
+    "value": 500,
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input APM!E107.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.chatty_share",
+    "value": 0.01,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input APM!E108: share of chatty applications (500 spans per transaction).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.sampling_rate",
+    "value": 0.07,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Input APM!E15: trace sampling rate.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.logsdb_reduction",
+    "value": {
+      "enterprise": 0.15,
+      "other": 0
+    },
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "APM!K152: LogsDB storage reduction, 15% on Enterprise, none otherwise.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.index_factor",
+    "value": 1.2,
+    "unit": "multiplier",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input APM!E100: stored size per GB ingested, before LogsDB.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.apm.dts_share",
+    "value": 0.1,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "low",
+    "notes": "Advanced input APM!E110: data transfer and storage as a share of the data tiers plus APM (J18); the DTS model for APM is still under development (H98).",
+    "carried_forward": false
+  }
+]

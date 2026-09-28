@@ -1,1 +1,271 @@
-[]
+[
+  {
+    "key": "ech.search.zones",
+    "value": 2,
+    "unit": "availability zones",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!E13: zones for the data tier and Enterprise Search nodes.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.replicas",
+    "value": 1,
+    "unit": "replicas",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!E69.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.reserved_storage",
+    "value": 0.2,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!E70: sizing divides by (1 − 0.2) (K108); the displayed disk E71 multiplies by 1.2 instead.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.query_ms",
+    "value": 100,
+    "unit": "ms",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!E75: average query processing time; busy threads = ms × ops/s / 1000 (K101).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.threadpool",
+    "value": {
+      "factor": 1.5,
+      "extra": 1
+    },
+    "unit": "threads per vCPU",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Specs col K: search threadpool = ROUNDDOWN(vCPU × 1.5) + 1; threads per vCPU = that / vCPU (col L, Search!K102).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.use_cases",
+    "value": {
+      "Custom Search": {
+        "ops": 1,
+        "storage": 1,
+        "enterpriseSearchRatio": 0
+      },
+      "Ingest": {
+        "ops": 1,
+        "storage": 1,
+        "enterpriseSearchRatio": 0.25
+      }
+    },
+    "unit": "multipliers",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!H168:K169: ops modifier, storage modifier and Enterprise Search to Elasticsearch RAM ratio per use case.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.enterprise_search_ram_gb",
+    "value": {
+      "min": 2,
+      "max": 8
+    },
+    "unit": "GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!K153: Ingest clamps Enterprise Search RAM to 2 to 8 GB.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.search.dts_share",
+    "value": 0.15,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Search!E84: data transfer and storage as a share of the data and Enterprise Search lines (J8).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.zones",
+    "value": {
+      "hnsw": 1,
+      "bbq": 2,
+      "disk_bbq": 2
+    },
+    "unit": "availability zones",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet D15, K14, R14.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.replicas",
+    "value": 1,
+    "unit": "replicas",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet D16, K15, R15.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.hnsw_bytes",
+    "value": {
+      "float32": {
+        "perDim": 4,
+        "extraDims": 12
+      },
+      "int8": {
+        "perDim": 1,
+        "extraDims": 48
+      }
+    },
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet D48:E49: bytes per vector = perDim × (dims + extraDims); the extra dims fold in the HNSW graph.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.small_node_heap_gb",
+    "value": [
+      0.5,
+      0.5,
+      1,
+      2,
+      3,
+      7,
+      15
+    ],
+    "unit": "GB heap",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet D105:D111 and O131:O137: heap for the first seven node sizes (1 to 60 GB) of vector-profile instances, by position.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.small_node_offheap_gb",
+    "value": [
+      0.5,
+      1.5,
+      3,
+      6,
+      12,
+      23,
+      45
+    ],
+    "unit": "GB off-heap",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet P131:P137: off-heap for the first seven node sizes of vector-profile instances in the BBQ tables (typed values).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.offheap_per_60gb",
+    "value": {
+      "vector": 45,
+      "generic": 30,
+      "base": 60
+    },
+    "unit": "GB off-heap per 60 GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet K127:L128 (labels swapped: \"Int 8\" holds the vector-profile 45, \"BBQ\" the generic 30).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.ram_table",
+    "value": {
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60
+      ],
+      "gcpSteps": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64
+      ],
+      "rows": 575
+    },
+    "unit": "GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet J131:J705, S151:S725 and W151:W725: deployment RAM steps, then multiples of the last step (60, or 64 on GCP) up to 575 rows.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.bbq_bytes",
+    "value": {
+      "bitsPerDim": 1,
+      "overhead": 14,
+      "hnswLinkBytes": 4,
+      "hnswM": 16
+    },
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet K35:K36: BBQ = dims/8 + 14 bytes; HNSW graph = 4 × 16 bytes per vector.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.vector.disk_bbq",
+    "value": {
+      "vectorsPerCentroid": 384,
+      "centroidExtraDims": 16,
+      "quantizedCopies": 2,
+      "quantizedExtraBytes": 16,
+      "offheapMinShare": 0.05,
+      "offheapMaxShare": 0.5
+    },
+    "unit": "model",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Vector sheet R32:R41: centroids = vectors/384 × (dims + 16); quantized = vectors × 2 × (dims/8 + 16); off-heap min = centroids + 5% of quantized, max = 50% of both.",
+    "carried_forward": false
+  }
+]

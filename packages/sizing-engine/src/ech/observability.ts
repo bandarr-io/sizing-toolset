@@ -4,7 +4,7 @@ import { num, val, type ConstantSet } from '@sizing/constants';
 import { fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
 import {
-  channelSells, dtsPrice, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, roundLine, skuOf, type EchPlacement,
+  checkPlacement, defaultSku, dtsPrice, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, roundLine, skuOf,
 } from './common.ts';
 import type { EchData, EchLine, EchResult, EchRole } from './types.ts';
 
@@ -40,18 +40,8 @@ const TIER_LABEL: Record<DataTier | Fixed, string> = {
   hot: 'Hot', warm: 'Warm', cold: 'Cold', frozen: 'Frozen', master: 'Master', coordinating: 'Coordinating', ml: 'Machine learning', kibana: 'Kibana',
 };
 
-function defaultSku(data: EchData, req: EchPlacement, role: EchRole): string {
-  const d = data.defaults[req.provider]?.[role];
-  if (d) return d;
-  const sel = `${role === 'ml' ? 'ML' : role[0]!.toUpperCase() + role.slice(1)}_in_Production`;
-  const s = data.skus.find((x) => x.provider === req.provider && x.selection === sel);
-  if (!s) throw new EchUnavailable(`No ${role} instance type for ${req.provider}.`);
-  return s.id;
-}
-
 export function echObservability(c: ConstantSet, data: EchData, req: EchObservabilityRequest): EchResult {
-  if (!req.region.toUpperCase().startsWith(req.provider.toUpperCase())) throw new EchUnavailable(`${req.region} is not a ${req.provider.toUpperCase()} region.`);
-  if (!channelSells(data, req)) throw new EchUnavailable(`${req.channel} does not sell ${req.tier} on ${req.provider.toUpperCase()}.`);
+  checkPlacement(data, req);
   const logs = req.kind === 'logs';
   const warnings: string[] = [];
   const zonesDefault = val<Record<DataTier, number>>(c, 'ech.zones');
