@@ -82,7 +82,11 @@ function withoutFullLogsdb(s: AppState): AppState {
 /** Any saved or exported scenario → current format, or undefined if it is not a scenario. */
 export function migrate(x: unknown): AppState | undefined {
   if (!x || typeof x !== 'object') return undefined;
-  if (isV2(x as Partial<AppState>)) return withoutFullLogsdb(localDisksOnly(x as AppState));
+  if (isV2(x as Partial<AppState>)) {
+    const s = withoutFullLogsdb(localDisksOnly(x as AppState));
+    // "Already running on this cluster" was removed: drop saved extra workloads so they cannot use capacity unseen.
+    return { ...s, reverse: normalizeReverse(s.reverse) };
+  }
   const v1 = x as Partial<AppStateV1>;
   if (!isV1(v1)) return undefined;
   const fast = v1.inputMode === 'fast';

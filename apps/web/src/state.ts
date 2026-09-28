@@ -231,8 +231,8 @@ export function normalizeReverse(r: ReverseRequest): ReverseRequest {
   if ((r.solve === 'max_retention' || r.solve === 'years_to_capacity') && !target.rawGbPerDay) target.rawGbPerDay = 100;
   // A starting rate so the first answer is a date, not "never"; the card shows it for editing.
   if (r.solve === 'years_to_capacity' && target.growthPctPerYear === undefined) target.growthPctPerYear = 20;
-  fixed[0] = target;
-  return { ...r, fixed, targetProfileId: target.id };
+  // Only the solved workload: capacity used by anything else is not an input any more.
+  return { ...r, fixed: [target], targetProfileId: target.id };
 }
 
 export function withSolve(r: ReverseRequest, solve: Solve): ReverseRequest {

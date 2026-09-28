@@ -1,4 +1,4 @@
-import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTemplate, EuiSpacer, EuiText, EuiTitle, EuiToolTip } from '@elastic/eui';
+import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiPageTemplate, EuiSpacer, EuiToolTip } from '@elastic/eui';
 import type { ConstantSet } from '@sizing/constants';
 import { compareModels, forward, reverse, sizeTopology, type ModelRow, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
@@ -328,8 +328,6 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   const setReverse = (next: AppState['reverse']) => setState((s) => ({ ...s, reverse: normalizeReverse(next) }));
   const kinds = SOLVE_KINDS[r.solve];
   const target = kinds.length ? r.fixed[0] : undefined;
-  const others = kinds.length ? r.fixed.slice(1) : r.fixed;
-  const withOthers = (o: WorkloadProfile[]) => setReverse({ ...r, fixed: target ? [target, ...o] : o });
   const targetTier = r.targetTier ?? (target ? (Object.keys(target.retentionDays).find((t) => (target.retentionDays[t as Tier] ?? 0) > 0) as Tier | undefined) : undefined) ?? 'hot';
 
   const deployment = deploymentOfReverse(r);
@@ -373,15 +371,8 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
             <WorkloadCard
               p={target} kindChoices={kinds} showGrowth={r.solve === 'years_to_capacity'}
               role={{ kind: 'reverse-target', solve: r.solve, targetTier, onTargetTier: (t) => setReverse({ ...r, targetTier: t }) }}
-              onChange={(p) => setReverse({ ...r, fixed: [p, ...others], targetProfileId: p.id })}
+              onChange={(p) => setReverse({ ...r, fixed: [p], targetProfileId: p.id })}
             />
-            <EuiSpacer size="l" />
-            <EuiTitle size="xxs"><h3>Already running on this cluster</h3></EuiTitle>
-            <EuiText size="xs" color="subdued"><p>Other workloads use capacity before the answer is calculated.</p></EuiText>
-            <EuiSpacer size="s" />
-            {others.length === 0
-              ? <OthersEmpty add={(w) => withOthers([w])} taken={r.fixed.map((p) => p.id)} />
-              : <WorkloadList workloads={others} onChange={withOthers} role={{ kind: 'reverse-other' }} addLabel="Add another workload" showGrowth={r.solve === 'years_to_capacity'} />}
           </Section>
         </>
       )}
@@ -389,11 +380,3 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   );
 }
 
-/** Collapsed entry point for "other workloads" so the common case (nothing else on the cluster) stays quiet. */
-function OthersEmpty({ add, taken }: { add: (w: WorkloadProfile) => void; taken: string[] }) {
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return <EuiText size="s"><EuiLink onClick={() => setOpen(true)}>Add a workload that already runs here</EuiLink></EuiText>;
-  }
-  return <WorkloadList workloads={[]} onChange={(w) => { if (w[0]) add({ ...w[0], id: taken.includes(w[0].id) ? `${w[0].id} (existing)` : w[0].id }); }} role={{ kind: 'reverse-other' }} />;
-}

@@ -66,10 +66,9 @@ describe('reverse question handling', () => {
     expect(n.fixed[0]!.kind).toBe('logs');
     expect(n.targetProfileId).toBe(n.fixed[0]!.id);
   });
-  it('switching to max vectors creates a vector target and keeps the other workloads', () => {
+  it('switching to max vectors creates a vector target and keeps only the solved workload', () => {
     const n = withSolve(base, 'max_vectors');
-    expect(n.fixed[0]!.kind).toBe('vector');
-    expect(n.fixed.some((p) => p.kind === 'logs')).toBe(true);
+    expect(n.fixed.map((p) => p.kind)).toEqual(['vector']);
     expect(reverse(n).answer!.unit).toBe('vectors');
   });
   it('hardware-only questions add the node group they need', () => {

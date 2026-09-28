@@ -24,7 +24,7 @@ const QUANTS: { value: Quant; text: string }[] = [
 ];
 
 /** What the card is being used for. Reverse targets hide the quantity that is the answer. */
-export type CardRole = { kind: 'forward' } | { kind: 'reverse-target'; solve: Solve; targetTier: Tier; onTargetTier: (t: Tier) => void } | { kind: 'reverse-other' };
+export type CardRole = { kind: 'forward' } | { kind: 'reverse-target'; solve: Solve; targetTier: Tier; onTargetTier: (t: Tier) => void };
 
 function Hint({ children }: { children: ReactNode }) {
   return <EuiText size="xs" color="subdued" style={{ marginTop: 4 }}><p>{children}</p></EuiText>;
