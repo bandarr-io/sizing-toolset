@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { CostRatesForm } from '../components/CostRatesForm.tsx';
 import { NumField, SwitchField } from '../components/Fields.tsx';
 import { MathButton } from '../components/MathFlyout.tsx';
-import { costReport, DEFAULT_TERM_YEARS, mergeRates, type CostReport, type CostSettings } from '../cost.ts';
+import { costReport, DEFAULT_TERM_YEARS, mergeRates, validDiscount, type CostReport, type CostSettings } from '../cost.ts';
 import { useCostDefaults } from '../costStore.tsx';
 import { fmtMoney } from '../format.ts';
 import type { AppState } from '../state.ts';
@@ -78,6 +78,12 @@ export function TcoPage({ state, setState, constants }: { state: AppState; setSt
               <EuiFlexItem style={{ maxWidth: 200 }}>
                 <NumField label="Term" append="years" value={settings.termYears} optional step={1} min={1} placeholder={String(DEFAULT_TERM_YEARS)}
                   onChange={(termYears) => patch({ termYears })} />
+              </EuiFlexItem>
+              <EuiFlexItem style={{ maxWidth: 240 }}>
+                <NumField label="Discount on Elastic subscription" append="%" value={settings.discountPct} optional step="any" min={0} placeholder="0"
+                  helpText="Off the ERU list price. Hardware and running costs are not discounted."
+                  error={settings.discountPct !== undefined && validDiscount(settings.discountPct) === undefined ? 'Enter a percentage from 0 to 100' : undefined}
+                  onChange={(discountPct) => patch({ discountPct })} />
               </EuiFlexItem>
               <EuiFlexItem>
                 <SwitchField label="Include cost in the Markdown export" checked={settings.includeInExport ?? false}

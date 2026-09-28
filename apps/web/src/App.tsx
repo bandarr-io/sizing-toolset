@@ -147,7 +147,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
         <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
           {'error' in outcome
             ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
-            : <ResultsPanel r={outcome.result} subscription={subscriptionCost(outcome.result, rates)}
+            : <ResultsPanel r={outcome.result} subscription={subscriptionCost(outcome.result, rates, state.cost?.discountPct)}
                 subscriptionPrice={<CostRatesForm value={state.cost?.rates ?? {}} onChange={setScenarioRates} fallback={defaults} subscriptionOnly />}
                 onOpenTco={onOpenTco} />}
         </EuiFlexItem>

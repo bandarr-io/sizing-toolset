@@ -29,6 +29,13 @@ export interface CostSettings {
   rates?: CostRates;
   termYears?: number;
   includeInExport?: boolean;
+  /** Discount off the Elastic subscription list price, in percent (0 to 100). Hardware and running costs are not discounted. */
+  discountPct?: number;
+}
+
+/** A usable discount, or undefined when blank or outside 0 to 100 (the field shows the error; nothing is applied). */
+export function validDiscount(pct: number | undefined): number | undefined {
+  return pct !== undefined && Number.isFinite(pct) && pct >= 0 && pct <= 100 ? pct : undefined;
 }
 
 export const DEFAULT_TERM_YEARS = 3;
@@ -73,13 +80,23 @@ export function nodeInventory(state: AppState, r: SizingResult): NodeLine[] {
   ].filter((n) => n.count > 0);
 }
 
-export function subscriptionCost(r: SizingResult, rates: CostRates): CostLine {
-  const label = 'Elastic subscription';
+/** Elastic subscription per year: ERU × list price, less the scenario's discount. */
+export function subscriptionCost(r: SizingResult, rates: CostRates, discountPct?: number): CostLine {
+  const pct = validDiscount(discountPct);
+  const label = pct ? `Elastic subscription (${fmtNum(pct, 2)}% discount)` : 'Elastic subscription';
   if (r.licenseFloor === 'basic') return { part: 'subscription', label, annual: 0, math: [step('subscription (Basic)', 'no licensed features, no ERUs to buy', 0)] };
   if (rates.eruPerYear === undefined) return { part: 'subscription', label, math: [], missing: 'price per ERU per year' };
   const eru = r.allSites.licenseUnits;
-  const annual = eru * rates.eruPerYear;
-  return { part: 'subscription', label, annual, math: [step('subscription per year (Enterprise)', `${fmtNum(eru, 0)} ERU × ${fmtMoney(rates.eruPerYear)}`, annual)] };
+  const list = eru * rates.eruPerYear;
+  const math = [step('subscription per year at list (Enterprise)', `${fmtNum(eru, 0)} ERU × ${fmtMoney(rates.eruPerYear)}`, list)];
+  if (!pct) return { part: 'subscription', label, annual: list, math };
+  const discount = (list * pct) / 100;
+  const annual = list - discount;
+  math.push(
+    step('discount', `${fmtMoney(list)} × ${fmtNum(pct, 2)}%`, discount),
+    step('subscription per year after discount', `${fmtMoney(list)} − ${fmtMoney(discount)}`, annual),
+  );
+  return { part: 'subscription', label, annual, math };
 }
 
 function hardwareCost(nodes: NodeLine[], sites: number, rates: CostRates): CostLine {
@@ -135,7 +152,7 @@ function opsCost(rates: CostRates): CostLine {
 /** One year of platform cost for a sized cluster. */
 export function annualCosts(state: AppState, r: SizingResult, rates: CostRates): CostLine[] {
   const nodes = nodeInventory(state, r);
-  return [subscriptionCost(r, rates), hardwareCost(nodes, r.sites, rates), objectCost(r, rates), hostingCost(nodes, r.sites, rates), opsCost(rates)];
+  return [subscriptionCost(r, rates, state.cost?.discountPct), hardwareCost(nodes, r.sites, rates), objectCost(r, rates), hostingCost(nodes, r.sites, rates), opsCost(rates)];
 }
 
 export const sumLines = (lines: readonly CostLine[]) => lines.reduce((s, l) => s + (l.annual ?? 0), 0);
