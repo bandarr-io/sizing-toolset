@@ -9,7 +9,7 @@ import { fmtNum } from '../format.ts';
 import { dataNodesOfServers, GROUP_DEFAULTS, masterServers, withAutoMasters } from '../state.ts';
 import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, roleColor } from '../ui/tiers.ts';
 import { DISK_TYPES, DISK_TYPES_HELP } from './NodeSizes.tsx';
-import { AutoMastersNote, masterThreshold } from './AutoMastersNote.tsx';
+import { AutoMastersNote, masterThreshold, type AutoMastersChange } from './AutoMastersNote.tsx';
 
 const ROLES = ROLE_ORDER;
 const cell = { padding: '6px 4px', verticalAlign: 'middle' as const };
@@ -25,12 +25,17 @@ function newServer(role: NodeGroup['role']): ServerGroup {
 }
 
 /** Physical servers at one site, one row per group of identical servers doing one role. */
-export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; onChange: (s: ServerGroup[]) => void }) {
+export function ServerGroups({ servers, onChange, keepMasters = false }: {
+  servers: ServerGroup[]; onChange: (s: ServerGroup[]) => void;
+  /** Master servers are also the ECE control plane here, so never remove them automatically. */
+  keepMasters?: boolean;
+}) {
   const { set: c } = useConstants();
-  const [autoMasters, setAutoMasters] = useState<MasterSizingRow | undefined>();
+  const [autoMasters, setAutoMasters] = useState<AutoMastersChange | undefined>();
   const change = (next: typeof servers) => {
-    const r = withAutoMasters(c, servers, next, (gs) => dataNodesOfServers(c, gs), (row) => masterServers(c, row));
-    if (r.added) setAutoMasters(r.added);
+    const r = withAutoMasters(c, servers, next, (gs) => dataNodesOfServers(c, gs), (row) => masterServers(c, row), !keepMasters);
+    if (r.added) setAutoMasters({ added: r.added });
+    else if (r.removed) setAutoMasters({ removed: r.removed });
     onChange(r.groups);
   };
   const [adding, setAdding] = useState(false);
@@ -47,7 +52,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
 
   return (
     <>
-      <AutoMastersNote row={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
+      <AutoMastersNote change={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 590, tableLayout: 'fixed' }}>
           <colgroup>

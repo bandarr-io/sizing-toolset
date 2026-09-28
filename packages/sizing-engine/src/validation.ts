@@ -122,10 +122,10 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
       if (s.tier === 'frozen') continue;
       if (s.shardGb > hi) {
         const suggested = Math.ceil((s.shardGb * s.primaries) / hi);
-        add('HV8', 'warn', `${s.profileId}: ${s.tier} shards (slices of the data) are about ${fmt(s.shardGb, 1)} GB each, more than ${hi} GB. Use at least ${suggested} primary shards, or start a fresh index sooner (roll over).`);
+        add('HV8', 'warn', `${s.profileId}: ${s.tier} shards (slices of the data) are ${fmt(s.shardGb, 1) === fmt(hi, 1) ? 'just over' : `about ${fmt(s.shardGb, 1)} GB each, more than`} ${hi} GB. Use at least ${suggested} primary shards, or start a fresh index sooner (roll over).`);
       } else if (s.shardGb < lo && !(s.basis === 'age' && s.primaries === 1)) {
         const fix = s.primaries > 1 ? 'Use fewer primary shards' : s.basis === 'fixed' ? 'Start a fresh index less often' : 'Use fewer primary shards or a longer maximum age';
-        add('HV8', 'info', `${s.profileId}: ${s.tier} shards (slices of the data) are about ${fmt(s.shardGb, 1)} GB each, less than ${lo} GB. ${fix}.`);
+        add('HV8', 'info', `${s.profileId}: ${s.tier} shards (slices of the data) are ${fmt(s.shardGb, 1) === fmt(lo, 1) ? 'just under' : `about ${fmt(s.shardGb, 1)} GB each, less than`} ${lo} GB. ${fix}.`);
       }
     }
   }

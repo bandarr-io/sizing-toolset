@@ -10,7 +10,7 @@ import { fmtNum } from '../format.ts';
 import { dataNodesOfGroups, masterGroup, newGroup, withAutoMasters } from '../state.ts';
 import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, TIER_LABEL, roleColor } from '../ui/tiers.ts';
 import { CacheFractionField, DISK_TYPES, DISK_TYPES_HELP, DISK_WRITE_HELP, DiskWriteField, ingestTierOf } from './NodeSizes.tsx';
-import { AutoMastersNote, masterThreshold } from './AutoMastersNote.tsx';
+import { AutoMastersNote, masterThreshold, type AutoMastersChange } from './AutoMastersNote.tsx';
 
 const ROLES = ROLE_ORDER;
 const DATA = new Set(['hot', 'warm', 'cold', 'frozen', 'content']);
@@ -31,10 +31,11 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
   onCacheFraction: (v: number | undefined) => void;
 }) {
   const { set: c } = useConstants();
-  const [autoMasters, setAutoMasters] = useState<MasterSizingRow | undefined>();
+  const [autoMasters, setAutoMasters] = useState<AutoMastersChange | undefined>();
   const change = (next: typeof groups) => {
     const r = withAutoMasters(c, groups, next, dataNodesOfGroups, (row) => masterGroup(c, row));
-    if (r.added) setAutoMasters(r.added);
+    if (r.added) setAutoMasters({ added: r.added });
+    else if (r.removed) setAutoMasters({ removed: r.removed });
     onChange(r.groups);
   };
   const [adding, setAdding] = useState(false);
@@ -59,7 +60,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
 
   return (
     <>
-      <AutoMastersNote row={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
+      <AutoMastersNote change={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
       {solve === 'max_agents' && !has('fleet') && (
         <><EuiCallOut size="s" iconType="info" title="This question needs Fleet Servers, which manage Elastic Agents."><EuiButton size="s" onClick={() => add('fleet')}>Add Fleet Servers</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
       )}

@@ -115,15 +115,13 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     body = (
       <>
         <EuiFlexGroup gutterSize="m" wrap>
-          {needsVolume && (
+          {needsVolume && !solvingGb && (
             <EuiFlexItem style={{ flexBasis: 150, minWidth: 140 }}>
-              {solvingGb
-                ? <EuiFormRow label="Data per day"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>This is the answer</strong></EuiText></EuiPanel></EuiFormRow>
-                : <NumField label={volumeOptional ? 'Data per day (optional)' : 'Data per day'} append="GB/day" value={p.rawGbPerDay}
-                    optional={volumeOptional} onChange={(v) => set({ rawGbPerDay: volumeOptional ? v : v ?? 0 })}
-                    helpText={volumeOptional
-                      ? 'Used to decide when a fresh index starts. Leave blank to start one every 30 days.'
-                      : indexed !== undefined ? `About ${fmtNum(indexed)} GB/day once stored` : undefined} />}
+              <NumField label={volumeOptional ? 'Data per day (optional)' : 'Data per day'} append="GB/day" value={p.rawGbPerDay}
+                optional={volumeOptional} onChange={(v) => set({ rawGbPerDay: volumeOptional ? v : v ?? 0 })}
+                helpText={volumeOptional
+                  ? 'Used to decide when a fresh index starts. Leave blank to start one every 30 days.'
+                  : indexed !== undefined ? `About ${fmtNum(indexed)} GB/day once stored` : undefined} />
             </EuiFlexItem>
           )}
           {needsVolume && (
@@ -212,11 +210,9 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     body = (
       <>
         <EuiFlexGrid columns={2} gutterSize="l">
-          <EuiFlexItem>
-            {solvingCount
-              ? <EuiFormRow label="Vectors"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>This is the answer</strong></EuiText></EuiPanel></EuiFormRow>
-              : <NumField label="Vectors" value={v.count} step={1} onChange={(n) => set({ vector: { ...v, count: n ?? 0 } })} helpText={fmtCompact(v.count)} />}
-          </EuiFlexItem>
+          {!solvingCount && (
+            <EuiFlexItem><NumField label="Vectors" value={v.count} step={1} onChange={(n) => set({ vector: { ...v, count: n ?? 0 } })} helpText={fmtCompact(v.count)} /></EuiFlexItem>
+          )}
           <EuiFlexItem><NumField label="Dimensions" value={v.dims} step={1} helpText="Numbers in each vector, set by the AI model." onChange={(n) => set({ vector: { ...v, dims: n ?? 0 } })} /></EuiFlexItem>
           <EuiFlexItem><SelectField label="Quantization" value={v.quant} options={QUANTS} helpText="Compression that saves memory." onChange={(quant) => set({ vector: { ...v, quant } })} /></EuiFlexItem>
           <EuiFlexItem><NumField label="Replicas" value={replicas} step={1} helpText="Spare copies, so nothing is lost if a node fails." onChange={(n) => setReplicas(n ?? 0)} /></EuiFlexItem>

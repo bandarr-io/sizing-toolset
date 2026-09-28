@@ -187,6 +187,19 @@ describe('automatic dedicated masters when data nodes cross the threshold', () =
     expect(withAutoMasters(c, hotGroups(3), [...hotGroups(8), newGroup('master')], dataNodesOfGroups, make).added).toBeUndefined();
     expect(withAutoMasters(c, [...hotGroups(8), newGroup('master')], hotGroups(8), dataNodesOfGroups, make).added).toBeUndefined();
   });
+  it('removes masters when data nodes drop below 6, unless they are the ECE control plane', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfGroups, masterGroup } = await import('../src/state.ts');
+    const make = (row: Parameters<typeof masterGroup>[1]) => masterGroup(c, row);
+    const withMasters = [{ ...newGroup('hot'), count: 6 }, newGroup('master')];
+    const shrunk = [{ ...newGroup('hot'), count: 5 }, newGroup('master')];
+    const r = withAutoMasters(c, withMasters, shrunk, dataNodesOfGroups, make);
+    expect(r.removed).toBe(3);
+    expect(r.groups.map((g) => g.role)).toEqual(['hot']);
+    expect(withAutoMasters(c, withMasters, shrunk, dataNodesOfGroups, make, false).groups).toEqual(shrunk);
+    // masters added by hand below the threshold stay
+    expect(withAutoMasters(c, [{ ...newGroup('hot'), count: 3 }], [{ ...newGroup('hot'), count: 3 }, newGroup('master')], dataNodesOfGroups, make).removed).toBeUndefined();
+  });
   it('counts nodes per server on physical servers: 2 × 256 GB hot servers hold 8 nodes', async () => {
     const { defaultConstants: c } = await import('@sizing/constants');
     const { withAutoMasters, dataNodesOfServers, masterServers } = await import('../src/state.ts');

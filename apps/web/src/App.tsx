@@ -195,7 +195,7 @@ function ModelsCalculator({ state, setState, constants }: { state: AppState; set
           </Section>
           <Gap />
           <Section step={2} title="What servers do they have?" description="Add one row for each group of identical servers. Each option splits them up differently. With ECE, the master servers run the platform itself." summary={groupsSummary(m.servers)}>
-            <ServerGroups servers={m.servers} onChange={(servers) => setModels({ ...m, servers })} />
+            <ServerGroups keepMasters servers={m.servers} onChange={(servers) => setModels({ ...m, servers })} />
           </Section>
           <Gap />
           <Section step={3} title="Requirements" description="These apply to every option." summary={requirementsSummary(deploymentOfForward(m.options))}>

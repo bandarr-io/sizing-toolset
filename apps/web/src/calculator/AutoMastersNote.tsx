@@ -1,16 +1,20 @@
 import { EuiCallOut, EuiSpacer } from '@elastic/eui';
 import type { MasterSizingRow } from '@sizing/constants';
 
-/** Says why master nodes just appeared, so an automatic change is never a surprise. */
-export function AutoMastersNote({ row, threshold, onDismiss }: { row: MasterSizingRow | undefined; threshold: number; onDismiss: () => void }) {
-  if (!row) return null;
+/** What the last automatic master change was, so it is never a surprise. */
+export type AutoMastersChange = { added: MasterSizingRow } | { removed: number };
+
+export function AutoMastersNote({ change, threshold, onDismiss }: { change: AutoMastersChange | undefined; threshold: number; onDismiss: () => void }) {
+  if (!change) return null;
+  const added = 'added' in change;
   return (
     <>
       <EuiCallOut size="s" iconType="info" onDismiss={onDismiss}
-        title={`Added ${row.count} master nodes of ${row.ramGb} GB each`}>
+        title={added ? `Added ${change.added.count} master nodes of ${change.added.ramGb} GB each` : `Removed ${change.removed} master node${change.removed === 1 ? '' : 's'}`}>
         <p>
-          With {threshold} or more data nodes, the cluster needs its own master nodes: small nodes that keep it organized.
-          Three can always outvote a tie. Remove the row if you plan to run them another way.
+          {added
+            ? <>With {threshold} or more data nodes, the cluster needs its own master nodes: small nodes that keep it organized. Three can always outvote a tie. Remove the row if you plan to run them another way.</>
+            : <>Below {threshold} data nodes, the data nodes can keep the cluster organized themselves, so separate master nodes are not needed. Add them back if you want them anyway.</>}
         </p>
       </EuiCallOut>
       <EuiSpacer size="m" />

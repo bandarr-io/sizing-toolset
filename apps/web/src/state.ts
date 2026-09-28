@@ -222,19 +222,27 @@ export function masterRowFor(c: ConstantSet, dataNodes: number): MasterSizingRow
 }
 
 /**
- * When an edit takes the data nodes from below the dedicated-master threshold to at or above it, and no
- * master group is left, add one sized from `masters.sizing` (the same table forward mode uses).
- * Only the crossing adds masters, so deleting them afterwards sticks.
+ * Dedicated masters follow the `masters.sizing` threshold (the same table forward mode uses), but only on
+ * the crossing. Going from below it to at or above it adds a master group when none is left; going back
+ * below it removes the master groups, since masters then run on the data nodes. Edits that stay on one
+ * side leave masters alone, so adding or deleting them by hand sticks. `canRemove` is false where master
+ * servers are also the ECE control plane (Compare models, or Multiple sites on ECE).
  */
 export function withAutoMasters<T extends { role: string; count: number }>(
   c: ConstantSet, prev: readonly T[], next: T[], dataNodes: (gs: readonly T[]) => number, make: (row: MasterSizingRow) => T,
-): { groups: T[]; added?: MasterSizingRow } {
-  const before = dataNodes(prev);
-  const after = dataNodes(next);
-  const row = masterRowFor(c, after);
-  const crossed = row.count > 0 && masterRowFor(c, before).count === 0;
-  if (!crossed || next.some((g) => g.role === 'master' && g.count > 0)) return { groups: next };
-  return { groups: [...next.filter((g) => g.role !== 'master'), make(row)], added: row };
+  canRemove = true,
+): { groups: T[]; added?: MasterSizingRow; removed?: number } {
+  const wanted = masterRowFor(c, dataNodes(next)).count > 0;
+  const had = masterRowFor(c, dataNodes(prev)).count > 0;
+  const masters = next.filter((g) => g.role === 'master');
+  if (wanted && !had && !masters.some((g) => g.count > 0)) {
+    const row = masterRowFor(c, dataNodes(next));
+    return { groups: [...next.filter((g) => g.role !== 'master'), make(row)], added: row };
+  }
+  if (canRemove && !wanted && had && masters.length > 0) {
+    return { groups: next.filter((g) => g.role !== 'master'), removed: masters.reduce((s, g) => s + g.count, 0) };
+  }
+  return { groups: next };
 }
 
 /** Data nodes in a hardware table (Test hardware limits): one node per row count. */

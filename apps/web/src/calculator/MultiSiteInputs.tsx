@@ -142,8 +142,8 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
 
       <Section step={3} title="What servers does each site have?" description="Add one row for each group of identical servers. The calculator works out how many nodes (running copies of Elasticsearch) fit on each." summary={perSite(ms, (site) => groupsSummary(site.servers))}>
         {ms.identical
-          ? <ServerGroups servers={ms.sites[0]!.servers} onChange={(servers) => setSite(0, { servers })} />
-          : <PerSite ms={ms} render={(site, i) => <ServerGroups key={i} servers={site.servers} onChange={(servers) => setSite(i, { servers })} />} />}
+          ? <ServerGroups keepMasters={ms.options.model === 'ece'} servers={ms.sites[0]!.servers} onChange={(servers) => setSite(0, { servers })} />
+          : <PerSite ms={ms} render={(site, i) => <ServerGroups key={i} keepMasters={ms.options.model === 'ece'} servers={site.servers} onChange={(servers) => setSite(i, { servers })} />} />}
       </Section>
       <Gap />
 
