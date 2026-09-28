@@ -1,6 +1,6 @@
 import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTemplate, EuiSpacer, EuiText, EuiTitle, EuiToolTip } from '@elastic/eui';
 import type { ConstantSet } from '@sizing/constants';
-import { compareModels, defaultIndexMode, forward, reverse, sizeTopology, type ModelRow, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
+import { compareModels, forward, reverse, sizeTopology, type ModelRow, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
@@ -25,7 +25,7 @@ import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultModels, defaultMultiSite, defaultState, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -50,8 +50,6 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
   }
 }
 
-const hasLogsdb = (w: readonly WorkloadProfile[]) => w.some((p) => (p.rawGbPerDay !== undefined || p.retentionDays.hot) && defaultIndexMode(p) === 'logsdb');
-
 type Page = 'calculator' | 'tco' | 'config';
 const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', config: '#/config' };
 const pageFromHash = (): Page => (window.location.hash.startsWith('#/config') ? 'config' : window.location.hash.startsWith('#/tco') ? 'tco' : 'calculator');
@@ -75,7 +73,7 @@ export function App() {
     <MathProvider>
       <EuiPageTemplate panelled={false} restrictWidth={1600} grow>
         <EuiPageTemplate.Header
-          pageTitle="Cluster Sizing Calculator"
+          pageTitle="Elastic Ballpark Editor"
           tabs={[
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
             { label: 'Total cost', isSelected: page === 'tco', onClick: () => go('tco') },
@@ -177,8 +175,6 @@ function ModelsCalculator({ state, setState, constants }: { state: AppState; set
     if (kind === 'md') download(`${slug(state.name)}-models.md`, modelsMarkdown(state.name, outcome.rows, at), 'text/markdown');
     else download(`${slug(state.name)}-models.json`, JSON.stringify({ exportedAt: at, engineVersion: ENGINE_VERSION, constantsHash: constants.hash, scenario: state, result: outcome.rows }, null, 2), 'application/json');
   };
-  const hasLogsdbWorkload = m.workloads.some((p) => defaultIndexMode(p) === 'logsdb');
-
   return (
     <>
       <Toolbar
@@ -203,7 +199,7 @@ function ModelsCalculator({ state, setState, constants }: { state: AppState; set
           </Section>
           <Gap />
           <Section step={3} title="Deployment" description="Requirements shared by every model.">
-            <DeploymentSettings hideSites hideModel value={deploymentOfForward(m.options)} hasLogsdb={hasLogsdbWorkload}
+            <DeploymentSettings hideSites hideModel value={deploymentOfForward(m.options)}
               onChange={(d) => setModels({ ...m, options: withForwardDeployment(m.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
           </Section>
         </EuiFlexItem>
@@ -290,7 +286,7 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
     <>
       <Section step={1} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings
-          value={deployment} hasLogsdb={hasLogsdb(f.workloads)} modelOptions={modelOptionsFor('forward')}
+          value={deployment} modelOptions={modelOptionsFor('forward')}
           onChange={(d) => (d.model === 'eck' || d.model === 'ece'
             ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
             : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
@@ -319,7 +315,8 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
         <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} objectStorage={objectStorage} />
       </Section>
       <Gap />
-      <Section step={4} title="Plan for growth" description="Size for where each workload will be, not only where it is today.">
+      <Section step={4} title="Plan for growth" description="Size for where each workload will be, not only where it is today."
+        summary={growthSummary(c, f)} startCollapsed={isDefaultGrowth(f)}>
         <GrowthPlanner value={f} onChange={setForward} />
       </Section>
     </>
@@ -341,7 +338,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   return (
     <>
       <Section step={step++} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
-        <DeploymentSettings value={deployment} hasLogsdb={hasLogsdb(r.fixed)} reverse modelOptions={modelOptionsFor('reverse')}
+        <DeploymentSettings value={deployment} reverse modelOptions={modelOptionsFor('reverse')}
           onChange={(d) => (d.model === 'eck' || d.model === 'ece'
             ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
             : setReverse(withReverseDeployment(r, d)))}

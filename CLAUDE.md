@@ -1,4 +1,4 @@
-# Elastic Sizing Calculator
+# Elastic Ballpark Editor
 
 Spec: `docs/SPEC.md` (source of truth). Decisions that fill spec gaps: `docs/DECISIONS.md`.
 Current phase: MVP (§12). Build order a → e; stop for review after each step.

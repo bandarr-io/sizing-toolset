@@ -44,6 +44,16 @@ describe('multi-site state (D32)', () => {
     expect(md).toContain('Headroom');
   });
 
+  it('D35: a saved full-LogsDB flag is dropped on load, everywhere it could live', () => {
+    const s = { ...defaultState(), multisite: { ...defaultMultiSite(), options: { model: 'self_managed' as const, fullLogsdb: true } } };
+    s.forward = { ...s.forward, options: { ...s.forward.options, fullLogsdb: true } };
+    s.reverse = { ...s.reverse, fullLogsdb: true };
+    const m = migrate(s)!;
+    expect(m.forward.options.fullLogsdb).toBeUndefined();
+    expect(m.reverse.fullLogsdb).toBeUndefined();
+    expect(m.multisite!.options.fullLogsdb).toBeUndefined();
+  });
+
   it('scenarios saved before multi-site still load', () => {
     const s = migrate(defaultState())!;
     expect(s.multisite).toBeUndefined();

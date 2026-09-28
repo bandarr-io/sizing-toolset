@@ -7,6 +7,21 @@ import type {
 
 export type Mode = 'forward' | 'reverse' | 'multisite' | 'models';
 
+/** True when no workload has a growth rate, so the Plan for growth step can start folded. */
+export function isDefaultGrowth(f: ForwardRequest): boolean {
+  return !f.workloads.some((w) => (w.growthPctPerYear ?? 0) > 0);
+}
+
+/** One line for the folded Plan for growth step: "Sized for 3 years · Logs 20%/yr, Metrics 10%/yr". */
+export function growthSummary(c: ConstantSet, f: ForwardRequest): string {
+  const rated = f.workloads.filter((w) => (w.growthPctPerYear ?? 0) > 0);
+  if (rated.length === 0) return "No growth rates set: sized for today's volume";
+  const years = f.options.growthHorizonYears ?? num(c, 'growth.default_horizon_years');
+  const horizon = years === 0 ? 'Sized for today' : `Sized for ${years} year${years === 1 ? '' : 's'}`;
+  const pct = (x: number) => x.toLocaleString('en-US', { maximumFractionDigits: 1 });
+  return `${horizon} · ${rated.map((w) => `${w.id} ${pct(w.growthPctPerYear!)}%/yr`).join(', ')}`;
+}
+
 /**
  * One input model per mode: the engine request itself. Simple and advanced inputs edit the same data;
  * advanced fields are only hidden, never a second copy.

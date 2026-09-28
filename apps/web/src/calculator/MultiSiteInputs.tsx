@@ -1,7 +1,7 @@
 import {
   EuiCallOut, EuiFieldText, EuiFlexGrid, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiPanel, EuiSpacer, EuiSwitch, EuiTab, EuiTabs, EuiText,
 } from '@elastic/eui';
-import { defaultIndexMode, type SiteInput, type WorkloadProfile } from '@sizing/engine';
+import type { SiteInput } from '@sizing/engine';
 import { useState, type ReactNode } from 'react';
 import { NumField, SelectField } from '../components/Fields.tsx';
 import {
@@ -66,8 +66,6 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
   const set = (next: MultiSiteState) => setState((s) => ({ ...s, multisite: next }));
   const setSite = (i: number, patch: Partial<SiteInput>) => set({ ...ms, sites: ms.sites.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
   const dr = ms.relationship === 'dr';
-  const allWorkloads: WorkloadProfile[] = ms.sites.flatMap((s) => s.workloads);
-  const hasLogsdb = allWorkloads.some((p) => defaultIndexMode(p) === 'logsdb');
   const leaderOptions = ms.sites.map((s, i) => ({ value: String(i), text: s.name }));
 
   const ingestNote = dr
@@ -139,7 +137,7 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
       <Gap />
 
       <Section step={4} title="Deployment" description="Shared by every site. Self-managed, ECK and ECE each carve the servers differently.">
-        <DeploymentSettings hideSites modelOptions={modelOptionsFor('multisite')} value={deploymentOfForward(ms.options)} hasLogsdb={hasLogsdb}
+        <DeploymentSettings hideSites modelOptions={modelOptionsFor('multisite')} value={deploymentOfForward(ms.options)}
           onChange={(d) => set({ ...ms, options: withForwardDeployment(ms.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
       </Section>
     </>
