@@ -32,7 +32,7 @@ describe('defaults', () => {
     expect(withIndexMode(m, 'tsds').downsampleFactor).toEqual({ frozen: 0.1 });
   });
   it('tiersInUse lists only tiers with data, in order', () => {
-    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['hot', 'frozen', 'content']);
+    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['content', 'hot', 'frozen']);
   });
 });
 
@@ -148,5 +148,15 @@ describe('export', () => {
     const j = JSON.parse(toJson(state, result, '2026-09-24T00:00:00Z'));
     expect(j.constantsHash).toBe(result.constantsHash);
     expect(forward(migrate(j.scenario)!.forward)).toEqual(result);
+  });
+});
+
+describe('role order (node sizes, hardware and server tables)', () => {
+  it('sorts content, data tiers, then Kibana, master, ML, coordinating, Fleet and APM, keeping original indices', async () => {
+    const { inRoleOrder } = await import('../src/ui/tiers.ts');
+    const rows = ['apm', 'hot', 'master', 'frozen', 'kibana', 'content', 'hot', 'fleet', 'ml', 'coordinating', 'cold', 'warm'].map((role) => ({ role: role as never }));
+    const sorted = inRoleOrder(rows);
+    expect(sorted.map((x) => x.g.role)).toEqual(['content', 'hot', 'hot', 'warm', 'cold', 'frozen', 'kibana', 'master', 'ml', 'coordinating', 'fleet', 'apm']);
+    expect(sorted.filter((x) => x.g.role === 'hot').map((x) => x.i)).toEqual([1, 6]);
   });
 });

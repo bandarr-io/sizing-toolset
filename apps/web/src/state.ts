@@ -269,7 +269,7 @@ export function tiersInUse(req: ForwardRequest): Tier[] {
     for (const [t, d] of Object.entries(p.retentionDays) as [Tier, number][]) if (d > 0) used.add(t);
     if (p.totalGb || p.vector) used.add(p.tier ?? 'content');
   }
-  return (['hot', 'warm', 'cold', 'frozen', 'content'] as Tier[]).filter((t) => used.has(t));
+  return (['content', 'hot', 'warm', 'cold', 'frozen'] as Tier[]).filter((t) => used.has(t));
 }
 
 // ---- Multiple sites (D32) --------------------------------------------------------------------------

@@ -8,10 +8,10 @@ import { useConstants } from '../constantsStore.tsx';
 import { useState } from 'react';
 import { fmtNum } from '../format.ts';
 import { newGroup } from '../state.ts';
-import { ROLE_LABEL, TIER_LABEL, roleColor } from '../ui/tiers.ts';
+import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, TIER_LABEL, roleColor } from '../ui/tiers.ts';
 import { CacheFractionField, DISK_TYPES, DISK_TYPES_HELP, DISK_WRITE_HELP, DiskWriteField, ingestTierOf } from './NodeSizes.tsx';
 
-const ROLES: NodeGroup['role'][] = ['hot', 'warm', 'cold', 'frozen', 'content', 'master', 'ml', 'coordinating', 'kibana', 'fleet', 'apm'];
+const ROLES = ROLE_ORDER;
 const DATA = new Set(['hot', 'warm', 'cold', 'frozen', 'content']);
 const cell = { padding: '6px 4px' } as const;
 /** Short names so the role select never truncates; the add menu keeps the full names. */
@@ -45,7 +45,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
   const dataNodes = groups.filter((g) => DATA.has(g.role)).reduce((s, g) => s + g.count, 0);
   const ram = groups.reduce((s, g) => s + g.count * g.ramGb, 0);
   const has = (r: NodeGroup['role']) => groups.some((g) => g.role === r && g.count > 0);
-  const ratioTiers = (['hot', 'warm', 'cold', 'content'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
+  const ratioTiers = (['content', 'hot', 'warm', 'cold'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
   const hasFrozen = groups.some((g) => g.role === 'frozen');
   const ingestTier = ingestTierOf(groups.filter((g) => g.count > 0).map((g) => g.role));
   const writeRow = groups.findIndex((g) => g.role === ingestTier && g.count > 0);
@@ -68,7 +68,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
             </tr>
           </thead>
           <tbody>
-            {groups.map((g, i) => (
+            {inRoleOrder(groups).map(({ g, i }) => (
               <tr key={i}>
                 <td style={{ ...cell, width: 140 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

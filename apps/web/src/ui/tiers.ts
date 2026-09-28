@@ -24,6 +24,14 @@ export const ROLE_LABEL: Record<NodeGroup['role'], string> = {
 
 export const DATA_TIERS: Tier[] = ['hot', 'warm', 'cold', 'frozen', 'content'];
 
+/** Display order for node sizes, hardware and server rows in every mode: data tiers first, then the supporting roles. */
+export const ROLE_ORDER: NodeGroup['role'][] = ['content', 'hot', 'warm', 'cold', 'frozen', 'kibana', 'master', 'ml', 'coordinating', 'fleet', 'apm'];
+
+/** Rows in ROLE_ORDER, each with its index in the original list so edits still land on the right row. Same-role rows keep their order. */
+export function inRoleOrder<T extends { role: NodeGroup['role'] }>(rows: readonly T[]): { g: T; i: number }[] {
+  return rows.map((g, i) => ({ g, i })).sort((a, b) => ROLE_ORDER.indexOf(a.g.role) - ROLE_ORDER.indexOf(b.g.role));
+}
+
 export function roleColor(role: string): string {
   return ROLE_COLOR[role] ?? NEUTRAL_ROLE;
 }

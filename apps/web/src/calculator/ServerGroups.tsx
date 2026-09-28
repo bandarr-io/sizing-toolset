@@ -7,10 +7,10 @@ import { num } from '@sizing/constants';
 import { useConstants } from '../constantsStore.tsx';
 import { fmtNum } from '../format.ts';
 import { GROUP_DEFAULTS } from '../state.ts';
-import { ROLE_LABEL, roleColor } from '../ui/tiers.ts';
+import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, roleColor } from '../ui/tiers.ts';
 import { DISK_TYPES, DISK_TYPES_HELP } from './NodeSizes.tsx';
 
-const ROLES: NodeGroup['role'][] = ['hot', 'warm', 'cold', 'frozen', 'content', 'master', 'ml', 'coordinating', 'kibana', 'fleet', 'apm'];
+const ROLES = ROLE_ORDER;
 const cell = { padding: '6px 4px', verticalAlign: 'middle' as const };
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75, whiteSpace: 'nowrap' as const };
 
@@ -53,7 +53,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
             </tr>
           </thead>
           <tbody>
-            {servers.map((g, i) => {
+            {inRoleOrder(servers).map(({ g, i }) => {
               const auto = layout(g);
               const nps = g.nodesPerServer ?? auto;
               const valid = Number.isInteger(nps) && nps >= 1;
