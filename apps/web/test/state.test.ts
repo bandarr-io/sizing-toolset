@@ -11,11 +11,12 @@ import {
 describe('defaults', () => {
   it('forward default sizes a 500 GB/day LogsDB logs workload', () => {
     const r = forward(defaultState().forward);
-    expect(r.tiers.map((t) => [t.tier, t.nodes])).toEqual([['hot', 4], ['frozen', 2]]);
+    // D38: 250 × 7 × 2 × 1.25 = 4,375 GB / 3,200 = 1.37 → 2 + 1 = 3 hot
+    expect(r.tiers.map((t) => [t.tier, t.nodes])).toEqual([['hot', 3], ['frozen', 2]]);
   });
-  it('reverse default reproduces §11.2 R1 shape with LogsDB (3 × 64 GB → 102.4 GB/day)', () => {
+  it('reverse default: 3 × 64 GB hot with 3,200 GB disk (D38), LogsDB, 30 d → 2 × 3,200 / 1.25 / 30 = 170.67 GB/day', () => {
     const r = reverse(defaultState().reverse);
-    expect(r.answer!.value).toBeCloseTo(102.4, 9);
+    expect(r.answer!.value).toBeCloseTo(6400 / 1.25 / 30, 9);
   });
   it('new workload names never collide', () => {
     expect(uniqueName('Logs', ['Logs', 'Logs 2'])).toBe('Logs 3');
@@ -80,8 +81,8 @@ describe('reverse question handling', () => {
     expect(n.fixed[0]).toMatchObject({ rawGbPerDay: 100, growthPctPerYear: 20 });
     const r = reverse(n);
     expect(r.answer!.unit).toBe('years');
-    // default hardware (3 × 64 GB hot, LogsDB, 30 d) holds 102.4 GB/day: 100 → 102.4 at 20%/yr
-    expect(r.answer!.value).toBeCloseTo(Math.log(102.4 / 100) / Math.log(1.2), 6);
+    // default hardware (3 × 64 GB hot, 3,200 GB disk, LogsDB, 30 d) holds 170.67 GB/day: 100 → 170.67 at 20%/yr
+    expect(r.answer!.value).toBeCloseTo(Math.log(6400 / 1.25 / 30 / 100) / Math.log(1.2), 6);
   });
   it('max retention gets a GB/day input', () => {
     expect(withSolve(base, 'max_retention').fixed[0]!.rawGbPerDay).toBeGreaterThan(0);
@@ -111,7 +112,7 @@ describe('migration from v1 scenarios', () => {
     const s = migrate(v1)!;
     expect(s.version).toBe(2);
     expect(s.forward.workloads[0]!.retentionDays).toEqual({ hot: 30, frozen: 335 });
-    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([41, 2]); // D27: frozen re-baselined
+    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([25, 2]); // D27 frozen, D38 hot re-baselined
   });
   it('v1 metrics remainder goes to warm with downsampling', () => {
     const req = fastForwardV1ToRequest({ useCase: 'metrics', gbPerDay: 100, hotDays: 7, totalRetentionDays: 37, replicas: 1, model: 'self_managed' });
@@ -145,7 +146,8 @@ describe('export', () => {
     expect(md).toContain('elastic/logs');
   });
   it('node table lists roles in display order: data tiers, then Kibana before master', () => {
-    const md = toMarkdown(state, result, state.forward.workloads, '2026-09-24T00:00:00Z');
+    const big = { ...state.forward, workloads: [{ ...state.forward.workloads[0]!, rawGbPerDay: 2000 }] };
+    const md = toMarkdown(state, forward(big), big.workloads, '2026-09-24T00:00:00Z');
     const at = (row: string) => md.indexOf(`| ${row}`);
     expect(at('hot')).toBeLessThan(at('frozen'));
     expect(at('frozen')).toBeLessThan(at('kibana'));

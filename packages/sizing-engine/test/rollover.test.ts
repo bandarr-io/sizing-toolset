@@ -68,7 +68,7 @@ describe('reverse: shard count now limits GB/day', () => {
     const r = reverse({ hardware: { model: 'self_managed', groups: [hot] }, fixed: [r1], solve: 'max_gb_day' });
     const shards = r.constraints.find((k) => k.name === 'heap_shards')!;
     expect(shards.maxValue!).toBeCloseTo(50 / (1.2 * 0.03), 1);
-    expect(r.answer!.binding).toBe('storage'); // 42.67 GB/day, far below the shard ceiling
+    expect(r.answer!.binding).toBe('disk'); // 44.44 GB/day (D38), far below the shard ceiling
   });
 
   it('R6 (daily rollover set on the workload) is unchanged: 33 data streams', () => {

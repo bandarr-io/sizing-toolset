@@ -32,7 +32,7 @@ describe('forward: object storage', () => {
   it('is absent without cold or frozen data, and does not count toward RAM or ERU', () => {
     const hotOnly: WorkloadProfile = { ...siem, retentionDays: { hot: 30 } };
     expect(forward({ workloads: [hotOnly], options: SM }).objectStorage).toBeUndefined();
-    expect(forward({ workloads: [siem], options: SM }).totalRamGb).toBe(2864); // §11.1 F3 re-baselined by D27
+    expect(forward({ workloads: [siem], options: SM }).totalRamGb).toBe(1840); // §11.1 F3 re-baselined by D27 and D38
   });
 
   it('rejects a negative override', () => {

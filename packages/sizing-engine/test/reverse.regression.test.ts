@@ -1,4 +1,6 @@
 // SPEC §11.2 reverse-mode suite. R5 re-baselined by D19 (heap cap 30 → 33 GB off-heap per 64 GB node).
+// D38 (hot 1:50): a 64 GB hot node may use up to 3,200 GB, so hardware with less disk than that is disk-bound.
+// The hardware in these cases keeps the disk the spec gives it (2 TB for R1, 1,920 GB otherwise).
 import { describe, expect, it } from 'vitest';
 import { reverse, type NodeGroup, type ReverseRequest, type WorkloadProfile } from '../src/index.ts';
 
@@ -16,19 +18,21 @@ describe('§11.2 reverse regression', () => {
   const r1Hot = hot(3, { diskGb: 2000 });
   const r1Profile = logs({ indexMode: 'standard', avgEventKb: 1 });
 
-  it('R1: 3×64 GB hot, 2 TB disk, 1 replica, 30d, ratio 1.2 → 42.67 GB/day, storage-bound (High)', () => {
+  // D38: 2 × min(3,200, 2,000) = 4,000; / 1.25 = 3,200; / 72 = 44.44. Was 2 × 1,920 / 1.25 / 72 = 42.67, storage-bound.
+  it('R1: 3×64 GB hot, 2 TB disk, 1 replica, 30d, ratio 1.2 → 44.44 GB/day, disk-bound (High)', () => {
     const r = reverse(req([r1Hot], [r1Profile], 'max_gb_day'));
-    expect(r.answer!.value).toBeCloseTo(3072 / 72, 6);
-    expect(r.answer!.value.toFixed(2)).toBe('42.67');
-    expect(r.answer!.binding).toBe('storage');
+    expect(r.answer!.value).toBeCloseTo(3200 / 72, 6);
+    expect(r.answer!.value.toFixed(2)).toBe('44.44');
+    expect(r.answer!.binding).toBe('disk');
     expect(r.answer!.bindingTier).toBe('hot');
     expect(r.answer!.confidence).toBe('high');
   });
 
-  it('R2: 41×64 GB hot, LogsDB, 30d, 1 replica → 2,048 GB/day', () => {
+  // D38: same 2,048 GB/day, but the 1,920 GB disk now binds before the 3,200 GB ratio cap.
+  it('R2: 41×64 GB hot, 1,920 GB disk, LogsDB, 30d, 1 replica → 2,048 GB/day, disk-bound', () => {
     const r = reverse(req([hot(41, { vcpu: 64 })], [logs({ indexMode: 'logsdb' })], 'max_gb_day'));
     expect(r.answer!.value).toBeCloseTo(2048, 9);
-    expect(r.answer!.binding).toBe('storage');
+    expect(r.answer!.binding).toBe('disk');
   });
 
   it('R3: 11 hot, 500 GB/day LogsDB, solve retention → 30 days', () => {
@@ -76,7 +80,8 @@ describe('§11.2 reverse regression', () => {
     expect(r.answer!.confidence).toBe('low');
   });
 
-  it('R8: R1 + 8 vCPU/node, 1 KB events → CPU max 1,037 GB/day; binding storage; CPU headroom ~24× (Low)', () => {
+  // D38: R1 now binds on disk at 44.44 GB/day, so CPU headroom is 1,036.8 / 44.44 = 23.3×.
+  it('R8: R1 + 8 vCPU/node, 1 KB events → CPU max 1,037 GB/day; binding disk; CPU headroom ~23× (Low)', () => {
     const r = reverse(req([r1Hot], [r1Profile], 'max_gb_day'));
     const cpu = r.constraints.find((k) => k.name === 'cpu_ingest')!;
     expect(cpu.maxValue).toBeCloseTo(1036.8, 9);
@@ -84,8 +89,8 @@ describe('§11.2 reverse regression', () => {
     expect(cpu.confidence).toBe('low');
     expect(cpu.rallyRequired).toBe(true);
     expect(cpu.binding).toBe(false);
-    expect(r.answer!.binding).toBe('storage');
-    expect(Math.round(cpu.maxValue! / r.answer!.value)).toBe(24);
+    expect(r.answer!.binding).toBe('disk');
+    expect(Math.round(cpu.maxValue! / r.answer!.value)).toBe(23);
   });
 
   it('R9: R1 with 1,000 GB disk/node → 22.2 GB/day, disk-bound; HV5 fires, HV4 does not (D1)', () => {
@@ -111,7 +116,7 @@ describe('§5.3 reverse details', () => {
     const other = logs({ id: 'other', indexMode: 'standard', rawGbPerDay: 10 });
     const target = logs({ id: 'target', indexMode: 'standard' });
     const r = reverse(req([hot(3, { diskGb: 2000 })], [other, target], 'max_gb_day', { targetProfileId: 'target' }));
-    expect(r.answer!.value).toBeCloseTo(3072 / 72 - 10, 9);
+    expect(r.answer!.value).toBeCloseTo(3200 / 72 - 10, 9); // D38: R1 capacity is 3,200 / 72
   });
 
   it('solves frozen jointly with hot', () => {

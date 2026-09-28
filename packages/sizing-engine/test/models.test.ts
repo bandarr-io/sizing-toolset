@@ -3,7 +3,8 @@ import { defaultConstants } from '@sizing/constants';
 import { describe, expect, it } from 'vitest';
 import { compareModels, gbToGib, gibToGb, serverLayout, type ServerGroup, type WorkloadProfile } from '../src/index.ts';
 
-const hot = (count: number, ramGb = 256, diskGb = 7680, vcpu = 64): ServerGroup => ({ role: 'hot', count, ramGb, diskGb, diskType: 'nvme', vcpu });
+// D38: 256 GB × 50 = 12,800 GB, so each 64 GB node's disk matches the hot 1:50 default.
+const hot = (count: number, ramGb = 256, diskGb = 12800, vcpu = 64): ServerGroup => ({ role: 'hot', count, ramGb, diskGb, diskType: 'nvme', vcpu });
 const master = (count: number, ramGb: number): ServerGroup => ({ role: 'master', count, ramGb, diskGb: 500, diskType: 'ssd', vcpu: 16 });
 const logs = (gbDay: number): WorkloadProfile => ({ id: 'logs', kind: 'logs', rawGbPerDay: gbDay, indexMode: 'standard', retentionDays: { hot: 30 }, replicas: { hot: 1 } });
 const SM = { model: 'self_managed' as const };
@@ -48,17 +49,17 @@ describe('compareModels', () => {
   });
 
   it('ECE packs fewer nodes per 256 GB server, so it needs more hot servers than self-managed', () => {
-    // 500 × 1.2 × 30 × 2 × 1.25 = 45,000 GB / 1,920 = 23.4 → 24 nodes
+    // 500 × 1.2 × 30 × 2 × 1.25 = 45,000 GB / 3,200 (D38) = 14.1 → 15 nodes
     const need = (m: string) => by(m).topology.sites[0]!.fit.find((f) => f.role === 'hot')!.neededServers;
-    expect(need('self_managed')).toBe(6 + 1); // 24 / 4
-    expect(need('ece')).toBe(8 + 1); // 24 / 3
+    expect(need('self_managed')).toBe(4 + 1); // 15 / 4
+    expect(need('ece')).toBe(5 + 1); // 15 / 3
   });
 
   it('ECK licenses pod memory in GiB; ECE licenses the allocator capacity of the hosts it uses', () => {
     const eck = by('eck');
     expect(eck.eruMath.map((s) => s.expr).join(' ')).toMatch(/GiB/);
-    // ECE: 9 hot allocators × 256 GB + 3 control-plane hosts × 128 GB = 2,688 GB / 64 = 42 ERU
-    expect(by('ece').eru).toBe(42);
+    // ECE: 6 hot allocators × 256 GB + 3 control-plane hosts × 128 GB = 1,920 GB / 64 = 30 ERU
+    expect(by('ece').eru).toBe(30);
   });
 
   it('ECE needs 3 control-plane hosts of at least 80 GB; 32 GB master servers fall short', () => {

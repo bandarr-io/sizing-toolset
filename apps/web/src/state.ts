@@ -1,4 +1,4 @@
-import { num, val, type ConstantSet, type MasterSizingRow } from '@sizing/constants';
+import { defaultConstants, num, val, type ConstantSet, type MasterSizingRow } from '@sizing/constants';
 import { nodesPerServer } from '@sizing/engine';
 import type { CostSettings } from './cost.ts';
 import type {
@@ -191,7 +191,7 @@ export function defaultDiskType(tier: Tier): 'nvme' | 'ssd' {
 // ---- Reverse helpers ------------------------------------------------------------------------------
 
 export const GROUP_DEFAULTS: Record<NodeGroup['role'], Omit<NodeGroup, 'role'>> = {
-  hot: { count: 3, ramGb: 64, diskGb: 1920, diskType: 'nvme', vcpu: 8 },
+  hot: { count: 3, ramGb: 64, diskGb: 3200, diskType: 'nvme', vcpu: 8 },
   warm: { count: 2, ramGb: 64, diskGb: 10240, diskType: 'ssd', vcpu: 8 },
   cold: { count: 2, ramGb: 64, diskGb: 10240, diskType: 'ssd', vcpu: 8 },
   frozen: { count: 2, ramGb: 64, diskGb: 1920, diskType: 'ssd', vcpu: 8 },
@@ -205,9 +205,11 @@ export const GROUP_DEFAULTS: Record<NodeGroup['role'], Omit<NodeGroup, 'role'>> 
 };
 
 /** With constants, a frozen group's disk follows `frozen_local_disk_ratio` (D27) so it matches forward sizing. */
-export function newGroup(role: NodeGroup['role'], c?: ConstantSet): NodeGroup {
+/** A new node group. Data tiers get the disk their default mem:disk ratio calls for (D38: hot 64 × 50 = 3,200 GB). */
+export function newGroup(role: NodeGroup['role'], c: ConstantSet = defaultConstants): NodeGroup {
   const g: NodeGroup = { role, ...GROUP_DEFAULTS[role] };
-  if (role === 'frozen' && c) g.diskGb = g.ramGb * num(c, 'frozen_local_disk_ratio');
+  if (role === 'frozen') g.diskGb = g.ramGb * num(c, 'frozen_local_disk_ratio');
+  if (role === 'hot' || role === 'warm' || role === 'cold' || role === 'content') g.diskGb = g.ramGb * num(c, `mem_disk.${role}`);
   return g;
 }
 
@@ -356,7 +358,7 @@ export function siteName(i: number): string {
 export function defaultServers(): ServerGroup[] {
   return [
     { role: 'master', count: 3, ramGb: 32, diskGb: 500, diskType: 'ssd', vcpu: 8 },
-    { role: 'hot', count: 22, ramGb: 256, diskGb: 7680, diskType: 'nvme', vcpu: 64 },
+    { role: 'hot', count: 22, ramGb: 256, diskGb: 12800, diskType: 'nvme', vcpu: 64 }, // 256 × 50 (D38)
     { role: 'frozen', count: 8, ramGb: 128, diskGb: 7680, diskType: 'ssd', vcpu: 16 },
     { role: 'kibana', count: 2, ramGb: 32, diskGb: 200, diskType: 'ssd', vcpu: 8 },
   ];

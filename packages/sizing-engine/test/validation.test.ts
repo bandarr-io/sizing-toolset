@@ -5,14 +5,14 @@ import { forward, reverse, type NodeGroup, type Warning } from '../src/index.ts'
 import { validateHardware, type ValidationInput } from '../src/validation.ts';
 
 const hot = (count: number, extra: Partial<NodeGroup> = {}): NodeGroup => ({
-  role: 'hot', count, ramGb: 64, diskGb: 1920, diskType: 'nvme', vcpu: 8, ...extra,
+  role: 'hot', count, ramGb: 64, diskGb: 3200, diskType: 'nvme', vcpu: 8, ...extra,
 });
 const base: ValidationInput = { groups: [hot(3)], airGapped: false, autoOps: false, replicasByTier: { hot: 1 }, agents: 0 };
 const run = (v: Partial<ValidationInput>) => validateHardware(defaultConstants, { ...base, ...v });
 const ids = (w: Warning[]) => w.map((x) => `${x.id}/${x.severity}`);
 
 describe('§5.7 hardware validation', () => {
-  it('baseline 3×64 GB hot, 1:30, 1:8 vCPU raises nothing', () => {
+  it('baseline 3×64 GB hot, 1:50 (D38), 1:8 vCPU raises nothing', () => {
     expect(run({})).toEqual([]);
   });
 
@@ -35,9 +35,9 @@ describe('§5.7 hardware validation', () => {
   });
 
   it('HV4: mem:disk outside the tier band warns with the effective ratio', () => {
-    const w = run({ groups: [hot(3, { diskGb: 64 * 50 })] });
+    const w = run({ groups: [hot(3, { diskGb: 64 * 70 })] }); // D38: hot band is 1:15 to 1:60
     expect(ids(w)).toContain('HV4/warn');
-    expect(w.find((x) => x.id === 'HV4')!.message).toMatch(/looks after 50 GB of disk/);
+    expect(w.find((x) => x.id === 'HV4')!.message).toMatch(/looks after 70 GB of disk/);
     const warm: NodeGroup = { role: 'warm', count: 2, ramGb: 64, diskGb: 64 * 90, diskType: 'ssd', vcpu: 8 };
     expect(ids(run({ groups: [hot(3), warm] }))).toContain('HV4/warn');
   });
@@ -60,9 +60,9 @@ describe('§5.7 hardware validation', () => {
   });
 
   it('HV7: projected disk above the 85% low watermark warns', () => {
-    // 3 × 1,920 GB; after losing one node, 3,840 GB usable. 3,500 GB of data = 91%.
-    expect(ids(run({ dataGbByTier: { hot: 3500 } }))).toContain('HV7/warn');
-    expect(ids(run({ dataGbByTier: { hot: 3000 } }))).not.toContain('HV7/warn');
+    // 3 × 3,200 GB (D38); after losing one node, 6,400 GB usable. 5,800 GB of data = 91%.
+    expect(ids(run({ dataGbByTier: { hot: 5800 } }))).toContain('HV7/warn');
+    expect(ids(run({ dataGbByTier: { hot: 5000 } }))).not.toContain('HV7/warn');
   });
 
   it('HV7: data on a tier with no nodes names the missing tier instead of an infinite percentage', () => {

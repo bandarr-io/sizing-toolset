@@ -64,8 +64,8 @@ describe('overrides', () => {
     const req = { workloads: [{ id: 'a', kind: 'logs' as const, rawGbPerDay: 30, indexMode: 'standard' as const, retentionDays: { hot: 30 }, replicas: {} }], options: { model: 'self_managed' as const } };
     const set = buildConstantSet(applyOverrides(allConstants, { 'mem_disk.hot': edited('mem_disk.hot', { value: 10 }) }));
     expect(set.hash).not.toBe(constantsHash);
-    // 2,700 GB / (64 × 10) = 4.2 → 5 + 1 = 6 hot nodes, versus 3 with 1:30.
+    // 2,700 GB / (64 × 10) = 4.2 → 5 + 1 = 6 hot nodes, versus 2 with the 1:50 default (D38).
     expect(forward(req, set).tiers[0]!.nodes).toBe(6);
-    expect(forward(req).tiers[0]!.nodes).toBe(3);
+    expect(forward(req).tiers[0]!.nodes).toBe(2);
   });
 });

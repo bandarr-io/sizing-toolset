@@ -21,8 +21,8 @@ describe('forward: tier ratio override', () => {
     expect(r.assumptions.join(' ')).toMatch(/hot 1:20/);
   });
 
-  it('blank keeps the default (§11.1 F1 unchanged)', () => {
-    expect(forward({ workloads: [f1], options: { model: 'self_managed', nodes: { hot: {} } } }).tiers[0]!.nodes).toBe(3);
+  it('blank keeps the default (§11.1 F1: 2 hot at 1:50, D38)', () => {
+    expect(forward({ workloads: [f1], options: { model: 'self_managed', nodes: { hot: {} } } }).tiers[0]!.nodes).toBe(2);
   });
 
   it('rejects a ratio that is not a positive number', () => {
@@ -41,7 +41,7 @@ describe('reverse: tier ratio override', () => {
     const r = reverse({ hardware: { model: 'self_managed', groups: [hot(2000)], memDiskRatio: { hot: 40 } }, fixed: [r1], solve: 'max_gb_day' });
     expect(r.answer!.binding).toBe('disk'); // 64 × 40 = 2,560 > 2,000 GB disk
     expect(r.warnings.map((w) => w.id)).toContain('HV5');
-    const plain = reverse({ hardware: { model: 'self_managed', groups: [hot(2000)] }, fixed: [r1], solve: 'max_gb_day' });
+    const plain = reverse({ hardware: { model: 'self_managed', groups: [hot(2000)], memDiskRatio: { hot: 30 } }, fixed: [r1], solve: 'max_gb_day' });
     expect(plain.warnings.map((w) => w.id)).not.toContain('HV5');
   });
 });
