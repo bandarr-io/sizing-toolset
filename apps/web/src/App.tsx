@@ -24,6 +24,7 @@ import { MultiSiteInputs } from './calculator/MultiSiteInputs.tsx';
 import { TopologyPanel } from './results/TopologyPanel.tsx';
 import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
+import { ValidationPage } from './pages/ValidationPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
   defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
@@ -51,9 +52,9 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
   }
 }
 
-type Page = 'calculator' | 'tco' | 'config';
-const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', config: '#/config' };
-const pageFromHash = (): Page => (window.location.hash.startsWith('#/config') ? 'config' : window.location.hash.startsWith('#/tco') ? 'tco' : 'calculator');
+type Page = 'calculator' | 'tco' | 'validate' | 'config';
+const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', validate: '#/validate', config: '#/config' };
+const pageFromHash = (): Page => (['config', 'tco', 'validate'] as const).find((p) => window.location.hash.startsWith(HASH[p])) ?? 'calculator';
 
 export function App() {
   const [page, setPage] = useState<Page>(pageFromHash);
@@ -78,6 +79,7 @@ export function App() {
           tabs={[
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
             { label: 'Total cost', isSelected: page === 'tco', onClick: () => go('tco') },
+            { label: 'Validation', isSelected: page === 'validate', onClick: () => go('validate') },
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
           ]}
           rightSideItems={[
@@ -94,6 +96,10 @@ export function App() {
         <EuiPageTemplate.Section>
           {page === 'config' && <ConfigPage />}
           {page === 'tco' && <TcoPage state={state} setState={setState} constants={constants} />}
+          {page === 'validate' && (
+            <ValidationPage state={state} constants={constants}
+              onOpen={(forward, name) => { setState((s) => ({ ...s, name, mode: 'forward', forward })); go('calculator'); }} />
+          )}
           {page === 'calculator' && (
             <Calculator state={state} setState={setState} constants={constants} overriddenKeys={overriddenKeys} overrides={Object.values(overrides)} onOpenTco={() => go('tco')} />
           )}
