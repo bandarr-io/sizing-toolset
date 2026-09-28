@@ -1,3 +1,9 @@
+/** Shown for constants flagged `carried_forward` in the data files. */
+export const UNCONFIRMED = 'unconfirmed';
+export const UNCONFIRMED_HELP =
+  'Unconfirmed means nobody has checked this value against its source since it was carried over from the spec or an earlier version. '
+  + 'Most are rules of thumb or design choices with no published figure to check. It may well be right, but confirm it before relying on an estimate that depends on it.';
+
 export function formatValue(v: unknown): string {
   if (Array.isArray(v)) return `table (${v.length} rows)`;
   if (v !== null && typeof v === 'object') {

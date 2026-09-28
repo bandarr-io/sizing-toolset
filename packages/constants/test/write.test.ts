@@ -34,7 +34,7 @@ describe('writeOverrides', () => {
     const r = writeOverrides(dir, [bad], TODAY);
     expect(r.ok).toBe(false);
     expect(r.errors.join()).toMatch(/older than 12 months/);
-    expect(read('storage.json').find((c) => c.key === 'mem_disk.hot')!.value).toBe(30);
+    expect(read('storage.json').find((c) => c.key === 'mem_disk.hot')!.value).toBe(50); // unchanged shipped value (D38)
   });
 
   it('rejects unknown keys', () => {

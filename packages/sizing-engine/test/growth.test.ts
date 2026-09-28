@@ -9,7 +9,7 @@ const logs = (p: Partial<WorkloadProfile>): WorkloadProfile => ({
 });
 const years = (fixed: WorkloadProfile[], extra: Partial<ReverseRequest> = {}) =>
   reverse({ hardware: { model: 'self_managed', groups: [hot] }, fixed, solve: 'years_to_capacity', ...extra });
-const MAX = 3072 / 72;
+const MAX = 3200 / 72; // R1 hardware at hot 1:50 (D38): disk-bound at 44.44 GB/day
 
 describe('forward growth', () => {
   it('compounds GB/day over the horizon: 500 GB/day at 20% for 3 years sizes for 864 GB/day', () => {
@@ -30,17 +30,17 @@ describe('forward growth', () => {
 });
 
 describe('reverse: years until full', () => {
-  it('20 GB/day growing 20% a year fills 42.67 GB/day in ln(42.67/20)/ln(1.2) ≈ 4.16 years', () => {
+  it('20 GB/day growing 20% a year fills 44.44 GB/day in ln(44.44/20)/ln(1.2) ≈ 4.38 years', () => {
     const r = years([logs({ rawGbPerDay: 20, growthPctPerYear: 20 })]);
     expect(r.answer!.value).toBeCloseTo(Math.log(MAX / 20) / Math.log(1.2), 6);
     expect(r.answer!.unit).toBe('years');
-    expect(r.answer!.binding).toBe('storage');
+    expect(r.answer!.binding).toBe('disk');
     expect(r.answer!.confidence).toBe('high');
   });
 
   it('other workloads grow at their own rate and fill the cluster sooner', () => {
     const r = years([logs({ rawGbPerDay: 20, growthPctPerYear: 20 }), logs({ id: 'other', rawGbPerDay: 10, growthPctPerYear: 20 })], { targetProfileId: 'w' });
-    // (20 + 10) × 1.2^t = 42.67 → t = ln(1.4222) / ln(1.2) ≈ 1.93
+    // (20 + 10) × 1.2^t = 44.44 → t = ln(1.4815) / ln(1.2) ≈ 2.16
     expect(r.answer!.value).toBeCloseTo(Math.log(MAX / 30) / Math.log(1.2), 6);
   });
 

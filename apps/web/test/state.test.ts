@@ -1,21 +1,22 @@
-import { forward, reverse } from '@sizing/engine';
+import { forward, reverse, type NodeGroup, type ServerGroup } from '@sizing/engine';
 import { describe, expect, it } from 'vitest';
 import { toJson, toMarkdown } from '../src/export.ts';
 import { fastForwardV1ToRequest, migrate } from '../src/migrate.ts';
 import {
   withIndexMode,
-  defaultState, deploymentOfForward, deploymentOfReverse, newWorkload, normalizeReverse, tiersInUse, uniqueName,
+  defaultState, deploymentOfForward, deploymentOfReverse, newGroup, newWorkload, normalizeReverse, tiersInUse, uniqueName,
   withForwardDeployment, withReverseDeployment, withSolve,
 } from '../src/state.ts';
 
 describe('defaults', () => {
   it('forward default sizes a 500 GB/day LogsDB logs workload', () => {
     const r = forward(defaultState().forward);
-    expect(r.tiers.map((t) => [t.tier, t.nodes])).toEqual([['hot', 4], ['frozen', 2]]);
+    // D38: 250 × 7 × 2 × 1.25 = 4,375 GB / 3,200 = 1.37 → 2 + 1 = 3 hot
+    expect(r.tiers.map((t) => [t.tier, t.nodes])).toEqual([['hot', 3], ['frozen', 2]]);
   });
-  it('reverse default reproduces §11.2 R1 shape with LogsDB (3 × 64 GB → 102.4 GB/day)', () => {
+  it('reverse default: 3 × 64 GB hot with 3,200 GB disk (D38), LogsDB, 30 d → 2 × 3,200 / 1.25 / 30 = 170.67 GB/day', () => {
     const r = reverse(defaultState().reverse);
-    expect(r.answer!.value).toBeCloseTo(102.4, 9);
+    expect(r.answer!.value).toBeCloseTo(6400 / 1.25 / 30, 9);
   });
   it('new workload names never collide', () => {
     expect(uniqueName('Logs', ['Logs', 'Logs 2'])).toBe('Logs 3');
@@ -32,7 +33,30 @@ describe('defaults', () => {
     expect(withIndexMode(m, 'tsds').downsampleFactor).toEqual({ frozen: 0.1 });
   });
   it('tiersInUse lists only tiers with data, in order', () => {
-    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['hot', 'frozen', 'content']);
+    expect(tiersInUse({ workloads: [newWorkload('metrics'), newWorkload('vector')], options: { model: 'self_managed' } })).toEqual(['content', 'hot', 'frozen']);
+  });
+});
+
+describe('Plan for growth folding', () => {
+  it('starts folded with no rates, and summarizes the horizon and rates when set', async () => {
+    const { defaultConstants } = await import('@sizing/constants');
+    const { growthSummary, isDefaultGrowth } = await import('../src/state.ts');
+    const f = defaultState().forward;
+    expect(isDefaultGrowth(f)).toBe(true);
+    expect(growthSummary(defaultConstants, f)).toMatch(/No growth set/);
+    const grown = { ...f, workloads: [{ ...f.workloads[0]!, growthPctPerYear: 20 }], options: { ...f.options, growthHorizonYears: 3 } };
+    expect(isDefaultGrowth(grown)).toBe(false);
+    expect(growthSummary(defaultConstants, grown)).toBe(`Sized for 3 years · ${f.workloads[0]!.id} 20% a year`);
+  });
+});
+
+describe('folded card summaries', () => {
+  it('lists workloads and server groups in a line', async () => {
+    const { groupsSummary, workloadsSummary, defaultServers } = await import('../src/state.ts');
+    expect(workloadsSummary([])).toBe('No workloads yet');
+    expect(workloadsSummary([{ ...newWorkload('logs'), rawGbPerDay: 500 }])).toBe('1 workload: Logs 500 GB/day');
+    expect(groupsSummary(defaultServers())).toMatch(/^35 servers: 3 master × 32 GB, 22 hot × 256 GB/);
+    expect(groupsSummary([], 'nodes')).toBe('No nodes yet');
   });
 });
 
@@ -43,10 +67,9 @@ describe('reverse question handling', () => {
     expect(n.fixed[0]!.kind).toBe('logs');
     expect(n.targetProfileId).toBe(n.fixed[0]!.id);
   });
-  it('switching to max vectors creates a vector target and keeps the other workloads', () => {
+  it('switching to max vectors creates a vector target and keeps only the solved workload', () => {
     const n = withSolve(base, 'max_vectors');
-    expect(n.fixed[0]!.kind).toBe('vector');
-    expect(n.fixed.some((p) => p.kind === 'logs')).toBe(true);
+    expect(n.fixed.map((p) => p.kind)).toEqual(['vector']);
     expect(reverse(n).answer!.unit).toBe('vectors');
   });
   it('hardware-only questions add the node group they need', () => {
@@ -58,8 +81,8 @@ describe('reverse question handling', () => {
     expect(n.fixed[0]).toMatchObject({ rawGbPerDay: 100, growthPctPerYear: 20 });
     const r = reverse(n);
     expect(r.answer!.unit).toBe('years');
-    // default hardware (3 × 64 GB hot, LogsDB, 30 d) holds 102.4 GB/day: 100 → 102.4 at 20%/yr
-    expect(r.answer!.value).toBeCloseTo(Math.log(102.4 / 100) / Math.log(1.2), 6);
+    // default hardware (3 × 64 GB hot, 3,200 GB disk, LogsDB, 30 d) holds 170.67 GB/day: 100 → 170.67 at 20%/yr
+    expect(r.answer!.value).toBeCloseTo(Math.log(6400 / 1.25 / 30 / 100) / Math.log(1.2), 6);
   });
   it('max retention gets a GB/day input', () => {
     expect(withSolve(base, 'max_retention').fixed[0]!.rawGbPerDay).toBeGreaterThan(0);
@@ -89,7 +112,7 @@ describe('migration from v1 scenarios', () => {
     const s = migrate(v1)!;
     expect(s.version).toBe(2);
     expect(s.forward.workloads[0]!.retentionDays).toEqual({ hot: 30, frozen: 335 });
-    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([41, 2]); // D27: frozen re-baselined
+    expect(forward(s.forward).tiers.map((t) => t.nodes)).toEqual([25, 2]); // D27 frozen, D38 hot re-baselined
   });
   it('v1 metrics remainder goes to warm with downsampling', () => {
     const req = fastForwardV1ToRequest({ useCase: 'metrics', gbPerDay: 100, hotDays: 7, totalRetentionDays: 37, replicas: 1, model: 'self_managed' });
@@ -122,9 +145,69 @@ describe('export', () => {
     expect(md).toContain('## Assumptions');
     expect(md).toContain('elastic/logs');
   });
+  it('node table lists roles in display order: data tiers, then Kibana before master', () => {
+    const big = { ...state.forward, workloads: [{ ...state.forward.workloads[0]!, rawGbPerDay: 2000 }] };
+    const md = toMarkdown(state, forward(big), big.workloads, '2026-09-24T00:00:00Z');
+    const at = (row: string) => md.indexOf(`| ${row}`);
+    expect(at('hot')).toBeLessThan(at('frozen'));
+    expect(at('frozen')).toBeLessThan(at('kibana'));
+    expect(at('kibana')).toBeLessThan(at('master'));
+  });
   it('JSON reproduces the result from the exported scenario (FR-E2)', () => {
     const j = JSON.parse(toJson(state, result, '2026-09-24T00:00:00Z'));
     expect(j.constantsHash).toBe(result.constantsHash);
     expect(forward(migrate(j.scenario)!.forward)).toEqual(result);
+  });
+});
+
+describe('role order (node sizes, hardware and server tables)', () => {
+  it('sorts content, data tiers, then Kibana, master, ML, coordinating, Fleet and APM, keeping original indices', async () => {
+    const { inRoleOrder } = await import('../src/ui/tiers.ts');
+    const rows = ['apm', 'hot', 'master', 'frozen', 'kibana', 'content', 'hot', 'fleet', 'ml', 'coordinating', 'cold', 'warm'].map((role) => ({ role: role as never }));
+    const sorted = inRoleOrder(rows);
+    expect(sorted.map((x) => x.g.role)).toEqual(['content', 'hot', 'hot', 'warm', 'cold', 'frozen', 'kibana', 'master', 'ml', 'coordinating', 'fleet', 'apm']);
+    expect(sorted.filter((x) => x.g.role === 'hot').map((x) => x.i)).toEqual([1, 6]);
+  });
+});
+
+describe('automatic dedicated masters when data nodes cross the threshold', () => {
+  it('adds 3 × 16 GB masters at 6 data nodes, sized from masters.sizing', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfGroups, masterGroup } = await import('../src/state.ts');
+    const prev = [newGroup('hot')]; // 3 hot
+    const next = [{ ...newGroup('hot'), count: 4 }, newGroup('frozen')]; // 6 data nodes, frozen counts (D4)
+    const r = withAutoMasters(c, prev, next, dataNodesOfGroups, (row) => masterGroup(c, row));
+    expect(r.added).toMatchObject({ count: 3, ramGb: 16 });
+    expect(r.groups.find((g) => g.role === 'master')).toMatchObject({ count: 3, ramGb: 16, vcpu: 2 });
+  });
+  it('does nothing below the threshold, when masters exist, or when already above it (so deleting them sticks)', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfGroups, masterGroup } = await import('../src/state.ts');
+    const make = (row: Parameters<typeof masterGroup>[1]) => masterGroup(c, row);
+    const hotGroups = (n: number): NodeGroup[] => [{ ...newGroup('hot'), count: n }];
+        expect(withAutoMasters(c, hotGroups(3), hotGroups(5), dataNodesOfGroups, make).added).toBeUndefined();
+    expect(withAutoMasters(c, hotGroups(3), [...hotGroups(8), newGroup('master')], dataNodesOfGroups, make).added).toBeUndefined();
+    expect(withAutoMasters(c, [...hotGroups(8), newGroup('master')], hotGroups(8), dataNodesOfGroups, make).added).toBeUndefined();
+  });
+  it('removes masters when data nodes drop below 6, unless they are the ECE control plane', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfGroups, masterGroup } = await import('../src/state.ts');
+    const make = (row: Parameters<typeof masterGroup>[1]) => masterGroup(c, row);
+    const withMasters = [{ ...newGroup('hot'), count: 6 }, newGroup('master')];
+    const shrunk = [{ ...newGroup('hot'), count: 5 }, newGroup('master')];
+    const r = withAutoMasters(c, withMasters, shrunk, dataNodesOfGroups, make);
+    expect(r.removed).toBe(3);
+    expect(r.groups.map((g) => g.role)).toEqual(['hot']);
+    expect(withAutoMasters(c, withMasters, shrunk, dataNodesOfGroups, make, false).groups).toEqual(shrunk);
+    // masters added by hand below the threshold stay
+    expect(withAutoMasters(c, [{ ...newGroup('hot'), count: 3 }], [{ ...newGroup('hot'), count: 3 }, newGroup('master')], dataNodesOfGroups, make).removed).toBeUndefined();
+  });
+  it('counts nodes per server on physical servers: 2 × 256 GB hot servers hold 8 nodes', async () => {
+    const { defaultConstants: c } = await import('@sizing/constants');
+    const { withAutoMasters, dataNodesOfServers, masterServers } = await import('../src/state.ts');
+    const hot = (n: number): ServerGroup[] => [{ role: 'hot', count: n, ramGb: 256, diskGb: 7680, diskType: 'nvme', vcpu: 64 }];
+    expect(dataNodesOfServers(c, hot(2))).toBe(8);
+    const r = withAutoMasters(c, hot(1), hot(2), (gs) => dataNodesOfServers(c, gs), (row) => masterServers(c, row));
+    expect(r.groups.find((g) => g.role === 'master')).toMatchObject({ count: 3, ramGb: 16 });
   });
 });

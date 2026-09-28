@@ -60,10 +60,33 @@ function localDisksOnly(s: AppState): AppState {
   };
 }
 
+/**
+ * D35: the "Full LogsDB capabilities" switch was removed. Drop the flag from older scenarios so it cannot
+ * keep raising the license floor with no control left to turn it off.
+ */
+function withoutFullLogsdb(s: AppState): AppState {
+  const strip = <T extends { fullLogsdb?: boolean }>(o: T): T => {
+    if (o.fullLogsdb === undefined) return o;
+    const { fullLogsdb: _drop, ...rest } = o;
+    return rest as T;
+  };
+  return {
+    ...s,
+    forward: { ...s.forward, options: strip(s.forward.options) },
+    reverse: strip(s.reverse),
+    ...(s.multisite ? { multisite: { ...s.multisite, options: strip(s.multisite.options) } } : {}),
+    ...(s.models ? { models: { ...s.models, options: strip(s.models.options) } } : {}),
+  };
+}
+
 /** Any saved or exported scenario → current format, or undefined if it is not a scenario. */
 export function migrate(x: unknown): AppState | undefined {
   if (!x || typeof x !== 'object') return undefined;
-  if (isV2(x as Partial<AppState>)) return localDisksOnly(x as AppState);
+  if (isV2(x as Partial<AppState>)) {
+    const s = withoutFullLogsdb(localDisksOnly(x as AppState));
+    // "Already running on this cluster" was removed: drop saved extra workloads so they cannot use capacity unseen.
+    return { ...s, reverse: normalizeReverse(s.reverse) };
+  }
   const v1 = x as Partial<AppStateV1>;
   if (!isV1(v1)) return undefined;
   const fast = v1.inputMode === 'fast';

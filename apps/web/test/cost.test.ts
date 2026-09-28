@@ -1,7 +1,7 @@
 import { defaultConstants } from '@sizing/constants';
 import { forward, type SizingResult } from '@sizing/engine';
 import { describe, expect, it } from 'vitest';
-import { annualCosts, costReport, mergeRates, nodeInventory, subscriptionCost, termCosts, type CostRates } from '../src/cost.ts';
+import { annualCosts, costReport, mergeRates, nodeInventory, subscriptionCost, termCosts, validDiscount, type CostRates } from '../src/cost.ts';
 import { toMarkdown } from '../src/export.ts';
 import { defaultState, type AppState } from '../src/state.ts';
 
@@ -25,6 +25,42 @@ describe('cost: subscription', () => {
 
   it('is left out, not zero, when no price is set', () => {
     expect(subscriptionCost(r, {}).annual).toBeUndefined();
+  });
+});
+
+describe('cost: subscription discount', () => {
+  const list = r.allSites.licenseUnits * 1000;
+
+  it('takes the percentage off the list price and shows list, discount and net in the math', () => {
+    const s = subscriptionCost(r, { eruPerYear: 1000 }, 25);
+    expect(s.annual).toBeCloseTo(list * 0.75, 6);
+    expect(s.label).toBe('Elastic subscription (25% discount)');
+    expect(s.math.map((m) => m.value)).toEqual([list, list * 0.25, list * 0.75]);
+  });
+
+  it('0% or blank leaves the list price; 100% makes it free', () => {
+    expect(subscriptionCost(r, { eruPerYear: 1000 }, 0).annual).toBe(list);
+    expect(subscriptionCost(r, { eruPerYear: 1000 }).annual).toBe(list);
+    expect(subscriptionCost(r, { eruPerYear: 1000 }, 100).annual).toBe(0);
+  });
+
+  it('ignores a value outside 0 to 100 instead of producing a negative or inflated price', () => {
+    expect(validDiscount(-5)).toBeUndefined();
+    expect(validDiscount(120)).toBeUndefined();
+    expect(subscriptionCost(r, { eruPerYear: 1000 }, 120).annual).toBe(list);
+  });
+
+  it('applies only to the subscription line of the total, and carries into the term and export', () => {
+    const rates: CostRates = { eruPerYear: 1000, hostingPerNodeMonth: 100 };
+    const discounted: AppState = { ...state, cost: { discountPct: 40 } };
+    const plain = annualCosts(state, r, rates);
+    const off = annualCosts(discounted, r, rates);
+    expect(off.find((l) => l.part === 'subscription')!.annual).toBeCloseTo(list * 0.6, 6);
+    expect(off.find((l) => l.part === 'hosting')!.annual).toBe(plain.find((l) => l.part === 'hosting')!.annual);
+    const report = costReport(discounted, defaultConstants, rates);
+    expect('error' in report).toBe(false);
+    const md = toMarkdown(discounted, r, discounted.forward.workloads, 'x', report);
+    expect(md).toContain('Elastic subscription (40% discount)');
   });
 });
 

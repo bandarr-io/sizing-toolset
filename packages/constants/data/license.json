@@ -89,5 +89,71 @@
     "confidence": "high",
     "notes": "Free on all tiers; suppressed when air-gapped (HV10).",
     "carried_forward": true
+  },
+  {
+    "key": "eck.k8s_reserve_ram_gb",
+    "value": 6,
+    "unit": "GB per server",
+    "source_url": "https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/",
+    "as_of_date": "2026-09-27",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "D33: kubelet, container runtime and system daemons per Kubernetes node. Cautious default; Kubernetes gives no fixed figure. Adjust to the customer's platform.",
+    "carried_forward": true
+  },
+  {
+    "key": "eck.k8s_reserve_vcpu",
+    "value": 1,
+    "unit": "vCPU per server",
+    "source_url": "https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/",
+    "as_of_date": "2026-09-27",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "D33: CPU kept back for Kubernetes on each node.",
+    "carried_forward": true
+  },
+  {
+    "key": "eck.operator_ram_gb",
+    "value": 1,
+    "unit": "GB per cluster",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/cloud-on-k8s/manage-compute-resources",
+    "as_of_date": "2026-09-27",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "D33: the ECK operator pod, once per Kubernetes cluster.",
+    "carried_forward": true
+  },
+  {
+    "key": "ece.control_plane_hosts",
+    "value": 3,
+    "unit": "hosts",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/cloud-enterprise/ece-ha",
+    "as_of_date": "2026-09-27",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "D33: three hosts run the ECE control plane (director, coordinator, proxy) for high availability.",
+    "carried_forward": true
+  },
+  {
+    "key": "ece.control_plane_ram_gb",
+    "value": 80,
+    "unit": "GB per host",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/cloud-enterprise/ece-hardware-prereq",
+    "as_of_date": "2026-09-27",
+    "stack_version": "9.4",
+    "confidence": "medium",
+    "notes": "D33: coordinator 32 GB + director 32 GB + proxy 16 GB (small and medium deployments). Spec §5.5's '28 GB reserved on multi-role hosts' is not used.",
+    "carried_forward": false
+  },
+  {
+    "key": "ece.allocator_planning_fraction",
+    "value": 0.85,
+    "unit": "fraction of RAM",
+    "source_url": "https://www.elastic.co/docs/deploy-manage/deploy/cloud-enterprise/ece-hardware-prereq",
+    "as_of_date": "2026-09-27",
+    "stack_version": "9.4",
+    "confidence": "low",
+    "notes": "D33: plan allocators to 85% of RAM (spec §5.5). Not stated on the source page.",
+    "carried_forward": true
   }
 ]

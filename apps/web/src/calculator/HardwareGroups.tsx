@@ -2,16 +2,17 @@ import {
   EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiCallOut, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldNumber, EuiFlexGroup, EuiFlexItem,
   EuiIcon, EuiPopover, EuiSelect, EuiSpacer, EuiText, EuiToolTip,
 } from '@elastic/eui';
-import { num } from '@sizing/constants';
+import { num, val, type MasterSizingRow } from '@sizing/constants';
 import type { DiskType, NodeGroup, Solve, Tier } from '@sizing/engine';
 import { useConstants } from '../constantsStore.tsx';
 import { useState } from 'react';
 import { fmtNum } from '../format.ts';
-import { newGroup } from '../state.ts';
-import { ROLE_LABEL, TIER_LABEL, roleColor } from '../ui/tiers.ts';
-import { CacheFractionField, DISK_TYPES, DISK_WRITE_HELP, DiskWriteField, ingestTierOf } from './NodeSizes.tsx';
+import { dataNodesOfGroups, masterGroup, newGroup, withAutoMasters } from '../state.ts';
+import { inRoleOrder, ROLE_LABEL, ROLE_ORDER, TIER_LABEL, roleColor } from '../ui/tiers.ts';
+import { CacheFractionField, DISK_TYPES, DISK_TYPES_HELP, DISK_WRITE_HELP, DiskWriteField, ingestTierOf } from './NodeSizes.tsx';
+import { AutoMastersNote, masterThreshold, type AutoMastersChange } from './AutoMastersNote.tsx';
 
-const ROLES: NodeGroup['role'][] = ['hot', 'warm', 'cold', 'frozen', 'content', 'master', 'ml', 'coordinating', 'kibana', 'fleet', 'apm'];
+const ROLES = ROLE_ORDER;
 const DATA = new Set(['hot', 'warm', 'cold', 'frozen', 'content']);
 const cell = { padding: '6px 4px' } as const;
 /** Short names so the role select never truncates; the add menu keeps the full names. */
@@ -19,8 +20,10 @@ const ROLE_SHORT: Partial<Record<NodeGroup['role'], string>> = { fleet: 'Fleet',
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75, whiteSpace: 'nowrap' as const };
 
 /** Node groups as an editable table, with prompts for the group the chosen question depends on. */
-export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cacheFraction, onCacheFraction }: {
+export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cacheFraction, onCacheFraction, dataTiers = [] }: {
   groups: NodeGroup[];
+  /** Tiers the workloads keep data on; any without nodes makes the answer 0, so prompt to add them. */
+  dataTiers?: Tier[];
   onChange: (g: NodeGroup[]) => void;
   solve: Solve;
   /** D25: per-tier mem:disk ratio for this scenario; blank = constants. Frozen uses the cache fraction instead (D27). */
@@ -30,45 +33,61 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
   onCacheFraction: (v: number | undefined) => void;
 }) {
   const { set: c } = useConstants();
+  const [autoMasters, setAutoMasters] = useState<AutoMastersChange | undefined>();
+  const change = (next: typeof groups) => {
+    const r = withAutoMasters(c, groups, next, dataNodesOfGroups, (row) => masterGroup(c, row));
+    if (r.added) setAutoMasters({ added: r.added });
+    else if (r.removed) setAutoMasters({ removed: r.removed });
+    onChange(r.groups);
+  };
   const [adding, setAdding] = useState(false);
   const [showHeap, setShowHeap] = useState(() => groups.some((g) => g.heapGbOverride !== undefined));
-  const set = (i: number, patch: Partial<NodeGroup>) => onChange(groups.map((g, j) => {
+  const set = (i: number, patch: Partial<NodeGroup>) => change(groups.map((g, j) => {
     if (j !== i) return g;
     const next = { ...g, ...patch } as NodeGroup & Record<string, unknown>;
     if (next.heapGbOverride === undefined) delete next.heapGbOverride;
     if (next.diskWriteMBps === undefined) delete next.diskWriteMBps;
     return next;
   }));
-  const add = (role: NodeGroup['role']) => { onChange([...groups, newGroup(role, c)]); setAdding(false); };
+  const add = (role: NodeGroup['role']) => { change([...groups, newGroup(role, c)]); setAdding(false); };
   const n = (s: string) => (s === '' ? 0 : Number(s));
 
   const dataNodes = groups.filter((g) => DATA.has(g.role)).reduce((s, g) => s + g.count, 0);
   const ram = groups.reduce((s, g) => s + g.count * g.ramGb, 0);
   const has = (r: NodeGroup['role']) => groups.some((g) => g.role === r && g.count > 0);
-  const ratioTiers = (['hot', 'warm', 'cold', 'content'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
+  const ratioTiers = (['content', 'hot', 'warm', 'cold'] as Tier[]).filter((t) => groups.some((g) => g.role === t));
   const hasFrozen = groups.some((g) => g.role === 'frozen');
   const ingestTier = ingestTierOf(groups.filter((g) => g.count > 0).map((g) => g.role));
   const writeRow = groups.findIndex((g) => g.role === ingestTier && g.count > 0);
 
   return (
     <>
+      <AutoMastersNote change={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
+      {dataTiers.filter((t) => !has(t)).map((t) => (
+        <div key={t}>
+          <EuiCallOut size="s" color="warning" iconType="warning" title={`The workload keeps data on the ${TIER_LABEL[t].toLowerCase()} tier, but there are no ${TIER_LABEL[t].toLowerCase()} nodes, so the answer is 0.`}>
+            <EuiButton size="s" onClick={() => add(t)}>Add {TIER_LABEL[t].toLowerCase()} nodes</EuiButton>
+          </EuiCallOut>
+          <EuiSpacer size="m" />
+        </div>
+      ))}
       {solve === 'max_agents' && !has('fleet') && (
-        <><EuiCallOut size="s" iconType="info" title="This question needs Fleet Servers."><EuiButton size="s" onClick={() => add('fleet')}>Add Fleet Servers</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
+        <><EuiCallOut size="s" iconType="info" title="This question needs Fleet Servers, which manage Elastic Agents."><EuiButton size="s" onClick={() => add('fleet')}>Add Fleet Servers</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
       )}
       {solve === 'max_ml_jobs' && !has('ml') && (
-        <><EuiCallOut size="s" iconType="info" title="This question needs ML nodes."><EuiButton size="s" onClick={() => add('ml')}>Add ML nodes</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
+        <><EuiCallOut size="s" iconType="info" title="This question needs machine learning nodes."><EuiButton size="s" onClick={() => add('ml')}>Add machine learning nodes</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
       )}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 560 }}>
           <thead>
             <tr>
-              <th style={head}>Role</th><th style={head}>Nodes</th><th style={head}>RAM (GB)</th><th style={head}>Disk (GB)</th>
-              {writeRow >= 0 && <th style={head}><EuiToolTip content={DISK_WRITE_HELP}><span>Write (MB/s) <EuiIcon type="question" size="s" /></span></EuiToolTip></th>}
-              <th style={head}>Disk type</th><th style={head}>vCPU</th>{showHeap && <th style={head}>Heap</th>}<th />
+              <th style={head}>Role</th><th style={head}>Nodes</th><th style={head}>Memory (GB)</th><th style={head}>Disk (GB)</th>
+              {writeRow >= 0 && <th style={head}><EuiToolTip content={DISK_WRITE_HELP}><span>Disk write (MB/s) <EuiIcon type="question" size="s" /></span></EuiToolTip></th>}
+              <th style={head}>Disk type</th><th style={head}>Cores</th>{showHeap && <th style={head}>Heap (GB)</th>}<th />
             </tr>
           </thead>
           <tbody>
-            {groups.map((g, i) => (
+            {inRoleOrder(groups).map(({ g, i }) => (
               <tr key={i}>
                 <td style={{ ...cell, width: 140 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -78,7 +97,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
                   </div>
                 </td>
                 <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="Nodes" min={0} value={g.count} onChange={(e) => set(i, { count: n(e.target.value) })} /></td>
-                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="RAM GB" value={g.ramGb} onChange={(e) => set(i, { ramGb: n(e.target.value) })} /></td>
+                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="Memory GB" value={g.ramGb} onChange={(e) => set(i, { ramGb: n(e.target.value) })} /></td>
                 <td style={cell}><EuiFieldNumber compressed aria-label="Disk GB" value={g.diskGb} onChange={(e) => set(i, { diskGb: n(e.target.value) })} /></td>
                 {writeRow >= 0 && (
                   <td style={{ ...cell, width: 84 }}>
@@ -87,8 +106,8 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
                       : <EuiText size="xs" color="subdued" textAlign="center">–</EuiText>}
                   </td>
                 )}
-                <td style={{ ...cell, width: 92 }}><EuiSelect compressed aria-label="Disk type" options={DISK_TYPES} value={g.diskType} onChange={(e) => set(i, { diskType: e.target.value as DiskType })} /></td>
-                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="vCPU" value={g.vcpu} onChange={(e) => set(i, { vcpu: n(e.target.value) })} /></td>
+                <td style={{ ...cell, width: 150 }}><EuiSelect compressed aria-label="Disk type" options={DISK_TYPES} value={g.diskType} onChange={(e) => set(i, { diskType: e.target.value as DiskType })} /></td>
+                <td style={{ ...cell, width: 64 }}><EuiFieldNumber compressed aria-label="Processor cores" value={g.vcpu} onChange={(e) => set(i, { vcpu: n(e.target.value) })} /></td>
                 {showHeap && (
                   <td style={{ ...cell, width: 100 }}>
                     <EuiFieldNumber compressed aria-label="Heap GB" placeholder="auto" value={g.heapGbOverride ?? ''}
@@ -96,7 +115,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
                   </td>
                 )}
                 <td style={{ ...cell, width: 32 }}>
-                  <EuiButtonIcon iconType="trash" color="danger" aria-label={`Remove ${g.role} group`} onClick={() => onChange(groups.filter((_, j) => j !== i))} />
+                  <EuiButtonIcon iconType="trash" color="danger" aria-label={`Remove ${g.role} group`} onClick={() => change(groups.filter((_, j) => j !== i))} />
                 </td>
               </tr>
             ))}
@@ -108,7 +127,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
           <EuiSpacer size="m" />
           <EuiFlexGroup gutterSize="m" alignItems="center" wrap responsive={false}>
             <EuiFlexItem grow={false}>
-              <EuiText size="xs"><strong>Tier ratios</strong><br /><span style={{ opacity: 0.7 }}>Blank uses the default</span></EuiText>
+              <EuiText size="xs"><strong>GB of disk per GB of memory</strong><br /><span style={{ opacity: 0.7 }}>Blank uses the default</span></EuiText>
             </EuiFlexItem>
             {ratioTiers.map((t) => {
               const v = ratios[t];
@@ -128,7 +147,7 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
             })}
             {hasFrozen && (
               <EuiFlexItem grow={false} style={{ width: 200 }}>
-                <CacheFractionField value={cacheFraction} onChange={onCacheFraction} prepend="Frozen cache" />
+                <CacheFractionField value={cacheFraction} onChange={onCacheFraction} prepend="Frozen kept locally" />
               </EuiFlexItem>
             )}
           </EuiFlexGroup>
@@ -145,8 +164,8 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
             </EuiContextMenuItem>
           ))} />
         </EuiPopover>
-        {!showHeap && <EuiButtonEmpty size="xs" onClick={() => setShowHeap(true)}>Heap overrides</EuiButtonEmpty>}
-        <EuiText size="xs" color="subdued">{dataNodes} data nodes · {fmtNum(ram)} GB RAM · the largest node per tier is set aside for failover (N−1)</EuiText>
+        {!showHeap && <EuiButtonEmpty size="xs" onClick={() => setShowHeap(true)}>Set heap (memory Elasticsearch keeps for itself)</EuiButtonEmpty>}
+        <EuiText size="xs" color="subdued">{dataNodes} data nodes · {fmtNum(ram)} GB memory · the largest node in each tier is kept spare in case another fails · {DISK_TYPES_HELP}</EuiText>
       </div>
     </>
   );

@@ -33,7 +33,7 @@ describe('constant values used by §11', () => {
     expect(num(c, 'storage_overhead')).toBeCloseTo(1 + num(c, 'storage.watermark_headroom') + num(c, 'storage.margin'), 12);
   });
   it('per-node capacities for 64 GB nodes match §11.1 common assumptions', () => {
-    expect(64 * num(c, 'mem_disk.hot')).toBe(1920);
+    expect(64 * num(c, 'mem_disk.hot')).toBe(3200); // D38: hot 1:50 (§11.1 said 1:30, 1,920 GB)
     expect(64 * num(c, 'mem_disk.warm')).toBe(10240);
     expect(64 * num(c, 'mem_disk.frozen')).toBe(96000);
   });

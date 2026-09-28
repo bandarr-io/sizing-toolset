@@ -41,27 +41,27 @@ export function CostRatesForm({ value, onChange, fallback, subscriptionOnly = fa
   );
   const heading = (text: string) => <><EuiSpacer size="m" /><EuiTitle size="xxs"><h3>{text}</h3></EuiTitle><EuiSpacer size="s" /></>;
 
-  const subscription = field('eruPerYear', 'Subscription, per ERU per year', { prepend: '$' }, 'Enterprise. Basic has no subscription.');
+  const subscription = field('eruPerYear', 'Subscription, per ERU per year', { prepend: '$' }, 'An ERU (Enterprise Resource Unit) is the block of memory Elastic licenses by. This is the Enterprise price; the free Basic level has no subscription.');
   if (subscriptionOnly) return <div>{subscription}</div>;
   return (
     <>
       <EuiFlexGrid columns={3} gutterSize="m">{subscription}</EuiFlexGrid>
       {heading('Hardware')}
       <EuiFlexGrid columns={3} gutterSize="m">
-        {field('serverPerGbRam', 'Server, per GB RAM', { prepend: '$' }, 'Chassis, CPU and memory together.')}
-        {field('amortYears', 'Amortization', { append: 'years' })}
+        {field('serverPerGbRam', 'Server, per GB of memory', { prepend: '$' }, 'The whole server (case, processors and memory), divided by its GB of memory.')}
+        {field('amortYears', 'Hardware life', { append: 'years' }, 'The purchase price is spread evenly over these years.')}
         <EuiFlexItem />
-        {disk('nvme', 'NVMe')}
-        {disk('ssd', 'SSD')}
-        {disk('hdd', 'HDD')}
+        {disk('nvme', 'NVMe (fastest)')}
+        {disk('ssd', 'SSD (solid-state)')}
+        {disk('hdd', 'HDD (spinning)')}
       </EuiFlexGrid>
       {heading('Running costs')}
       <EuiFlexGrid columns={3} gutterSize="m">
-        {field('objectPerTbMonth', 'Object storage, per TB-month', { prepend: '$' })}
-        {field('hostingPerNodeMonth', 'Hosting, per node-month', { prepend: '$' }, 'Rack, power, cooling, network.')}
+        {field('objectPerTbMonth', 'Object storage, per TB per month', { prepend: '$' }, 'Cheap bulk storage, such as Amazon S3, that holds cold and frozen data.')}
+        {field('hostingPerNodeMonth', 'Hosting, per node per month', { prepend: '$' }, 'Rack space, power, cooling and network for one node.')}
         <EuiFlexItem />
-        {field('opsFte', 'Operations staff', { append: 'FTE' })}
-        {field('opsCostPerFte', 'Cost per FTE, per year', { prepend: '$' }, 'Fully loaded.')}
+        {field('opsFte', 'Operations staff', { append: 'people' }, 'Full-time people who run the cluster. Fractions are fine.')}
+        {field('opsCostPerFte', 'Cost per person, per year', { prepend: '$' }, 'Salary plus benefits and overheads.')}
       </EuiFlexGrid>
     </>
   );

@@ -11,7 +11,7 @@ import { MathButton } from '../components/MathFlyout.tsx';
 import { constraintWithTier, solveLabel } from '../export.ts';
 import { SOLVES } from '../state.ts';
 import { fmtCompact, fmtMoney, fmtNum, fmtStorage } from '../format.ts';
-import { ROLE_LABEL } from '../ui/tiers.ts';
+import { byRoleOrder, ROLE_LABEL } from '../ui/tiers.ts';
 import { ClusterMap } from './ClusterMap.tsx';
 
 const ANSWER_COLOR = '#0B64DD';
@@ -42,20 +42,22 @@ function SubscriptionStats({ r, cost }: { r: SizingResult; cost?: CostProps }) {
   const priceEditor = cost && (
     <EuiPopover isOpen={editing} closePopover={() => setEditing(false)} anchorPosition="downCenter" panelStyle={{ width: 320 }}
       button={line?.annual === undefined
-        ? <EuiButtonEmpty size="xs" flush="left" iconType="pencil" onClick={() => setEditing(!editing)}>Set ERU price</EuiButtonEmpty>
-        : <EuiButtonIcon size="xs" iconType="pencil" aria-label="Edit ERU price" onClick={() => setEditing(!editing)} />}>
+        ? <EuiButtonEmpty size="xs" flush="left" iconType="pencil" onClick={() => setEditing(!editing)}>Set license price</EuiButtonEmpty>
+        : <EuiButtonIcon size="xs" iconType="pencil" aria-label="Edit license price" onClick={() => setEditing(!editing)} />}>
       {cost.priceEditor}
     </EuiPopover>
   );
   return (
     <>
       <Stat label="License" value={basic ? 'Basic' : `${fmtNum(r.licenseUnits.value, 0)} ERU`} steps={basic ? undefined : [...r.totalRamMath, ...r.licenseUnits.math]}
-        hint={basic ? 'No licensed features, so no subscription is needed.' : r.licenseFloorReasons.join('; ')}
-        sub={basic ? 'no subscription' : 'Enterprise'} />
+        hint={basic
+          ? 'No paid features are used, so no subscription is needed.'
+          : `An ERU (Enterprise Resource Unit) is the unit Elastic licenses by, a block of memory. Enterprise is needed for: ${r.licenseFloorReasons.join('; ')}.`}
+        sub={basic ? 'no subscription' : 'Enterprise license'} />
       {cost && !basic && (
         <Stat label="Subscription" value={line?.annual === undefined ? priceEditor : `${fmtMoney(line.annual)} / yr`}
           steps={line?.math} action={line?.annual !== undefined ? priceEditor : undefined}
-          sub={<EuiLink onClick={cost.onOpenTco}>Total cost of platform</EuiLink>} />
+          sub={<EuiLink onClick={cost.onOpenTco}>See total cost</EuiLink>} />
       )}
     </>
   );
@@ -69,10 +71,10 @@ function nodeCounts(r: SizingResult) {
 /** Why each tier has its node count, then the sum that gives the headline number. */
 function nodeMath(r: SizingResult): MathStep[] {
   const { allNodes } = nodeCounts(r);
-  const parts = [
-    ...r.tiers.map((t) => `${t.nodes} ${t.tier}`),
-    ...r.overhead.filter((o) => o.count > 0).map((o) => `${o.count} ${(ROLE_LABEL[o.role] ?? o.role).toLowerCase()}`),
-  ];
+  const parts = byRoleOrder([
+    ...r.tiers.map((t) => ({ role: t.tier as string, text: `${t.nodes} ${t.tier}` })),
+    ...r.overhead.filter((o) => o.count > 0).map((o) => ({ role: o.role as string, text: `${o.count} ${(ROLE_LABEL[o.role] ?? o.role).toLowerCase()}` })),
+  ]).map((x) => x.text);
   return [
     ...r.tiers.flatMap((t) => t.math),
     ...r.overhead.filter((o) => o.count > 0).flatMap((o) => o.math),
@@ -84,14 +86,14 @@ function Totals({ r, withNodes, cost }: { r: SizingResult; withNodes: boolean; c
   const { dataNodes, allNodes } = nodeCounts(r);
   return (
     <EuiFlexGroup gutterSize="l" wrap responsive={false}>
-      {withNodes && <Stat label={r.sites > 1 ? 'Nodes per site' : 'Nodes'} value={`${allNodes}`} hint={`${dataNodes} data nodes`} steps={nodeMath(r)} />}
-      <Stat label={r.sites > 1 ? 'RAM per site' : 'Total RAM'} value={`${fmtNum(r.totalRamGb)} GB`} steps={r.totalRamMath} />
+      {withNodes && <Stat label={r.sites > 1 ? 'Nodes per site' : 'Nodes'} value={`${allNodes}`} hint={`${dataNodes} hold data; the rest keep the cluster running. A node is one running copy of Elasticsearch.`} steps={nodeMath(r)} />}
+      <Stat label={r.sites > 1 ? 'Memory per site' : 'Total memory'} value={`${fmtNum(r.totalRamGb)} GB`} steps={r.totalRamMath} />
       <SubscriptionStats r={r} {...(cost ? { cost } : {})} />
       {r.objectStorage && (
         <Stat label="Object storage" value={fmtStorage(r.objectStorage.gb)} steps={r.objectStorage.math}
-          hint={`Snapshot repository for cold and frozen${r.objectStorage.overridden ? ' (size set for this scenario)' : ''}. Not counted in RAM or ERU.`} />
+          hint={`Cheap bulk storage (such as S3) that holds the cold and frozen data${r.objectStorage.overridden ? '. Size set by hand for this scenario' : ''}. Not counted in memory or license units.`} />
       )}
-      {r.sites > 1 && <Stat label={`All ${r.sites} sites`} value={`${fmtNum(r.allSites.licenseUnits, 0)} ERU`} hint={`${fmtNum(r.allSites.totalRamGb)} GB RAM`} />}
+      {r.sites > 1 && <Stat label={`All ${r.sites} sites`} value={`${fmtNum(r.allSites.licenseUnits, 0)} ERU`} hint={`${fmtNum(r.allSites.totalRamGb)} GB memory across all sites`} />}
     </EuiFlexGroup>
   );
 }
@@ -115,7 +117,7 @@ function Headline({ label, value, unit, math, mathTitle }: { label: string; valu
 
 /** Short horizons read better in months: 0.13 years → "1.6 months". */
 function yearsText(years: number): { n: string; unit: string } {
-  if (years === 0) return { n: '0', unit: 'years (full today)' };
+  if (years === 0) return { n: '0', unit: 'years (already full)' };
   if (years < 1) return { n: fmtNum(years * 12, 1), unit: years * 12 === 1 ? 'month' : 'months' };
   return { n: fmtNum(years, 1), unit: years === 1 ? 'year' : 'years' };
 }
@@ -138,12 +140,12 @@ function Answer({ r }: { r: SizingResult }) {
       <Headline label={title} value={neverFull ? 'Not reached' : shown.n} unit={neverFull ? '' : shown.unit}
         {...(binding ? { math: binding.math } : {})} mathTitle={solveLabel(a.solve)} />
       {a.unit === 'years' && Number.isFinite(a.value) && a.value > 0 && <EuiText size="s" color="subdued">around {fillDate(a.value)}</EuiText>}
-      {a.dataStreams !== undefined && <EuiText size="s">≈ <strong>{fmtNum(a.dataStreams, 0)}</strong> data streams like this workload</EuiText>}
+      {a.dataStreams !== undefined && <EuiText size="s">About <strong>{fmtNum(a.dataStreams, 0)}</strong> data streams (separate data feeds) like this one</EuiText>}
       <EuiSpacer size="xs" />
       <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false} wrap>
-        <EuiFlexItem grow={false}><EuiText size="s">Limited by <strong>{constraintWithTier(a.binding, a.bindingTier)}</strong></EuiText></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiText size="s">Runs out first: <strong>{constraintWithTier(a.binding, a.bindingTier)}</strong></EuiText></EuiFlexItem>
         <EuiFlexItem grow={false}><ConfidenceBadge c={a.confidence} /></EuiFlexItem>
-        {binding?.rallyRequired && <EuiFlexItem grow={false}><EuiBadge color="accent">Rally required</EuiBadge></EuiFlexItem>}
+        {binding?.rallyRequired && <EuiFlexItem grow={false}><EuiBadge color="accent">Needs a Rally test</EuiBadge></EuiFlexItem>}
       </EuiFlexGroup>
     </>
   );
@@ -168,13 +170,13 @@ function Block({ title, action, children }: { title: string; action?: ReactNode;
   );
 }
 
-const PIN_TOP = 16;
+export const PIN_TOP = 16;
 
 /**
  * True while the element fits in the window below the pin offset. A pinned element taller than the
  * window would hide its own bottom forever (the page seems to stop scrolling), so it is only pinned when it fits.
  */
-function useFitsViewport<T extends HTMLElement>() {
+export function useFitsViewport<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [fits, setFits] = useState(true);
   useEffect(() => {
@@ -214,9 +216,9 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
   const link = (label: string, d: Detail) => <EuiButtonEmpty size="xs" flush="right" onClick={() => setOpen(d)}>{label}</EuiButtonEmpty>;
 
   const titles: Record<Detail, string> = {
-    constraints: r.answer ? 'Constraints and headroom' : 'Utilization by constraint',
-    nodes: r.sites > 1 ? 'Nodes per site' : 'Node table',
-    checks: 'Hardware checks (HV1 to HV12)',
+    constraints: r.answer ? 'Limits and spare room' : 'How full each resource is',
+    nodes: r.sites > 1 ? 'Nodes per site' : 'Node details',
+    checks: 'Hardware checks',
     assumptions: 'Assumptions',
   };
 
@@ -227,11 +229,11 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
         <EuiSpacer size="m" />
         <Totals r={r} withNodes={!!r.answer} {...(cost ? { cost } : {})} />
 
-        <Block title={r.sites > 1 ? 'Cluster map (per site)' : 'Cluster map'} action={link('Node table', 'nodes')}>
+        <Block title={r.sites > 1 ? 'Cluster map (per site)' : 'Cluster map'} action={link('Node details', 'nodes')}>
           <ClusterMap r={r} />
         </Block>
 
-        <Block title={r.answer ? 'Closest limits' : 'Tightest constraints'} action={link('All constraints', 'constraints')}>
+        <Block title="What runs out first" action={link('All limits', 'constraints')}>
           <TopConstraints r={r} />
         </Block>
 
@@ -244,7 +246,7 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
       <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
         <EuiFlexItem grow={false}><EuiIcon type="info" color="subdued" size="s" /></EuiFlexItem>
         <EuiFlexItem>
-          <EuiText size="xs" color="subdued"><strong>Estimate, not benchmark.</strong> Storage math is reliable; CPU, query latency and ML are not. Validate with Rally.</EuiText>
+          <EuiText size="xs" color="subdued"><strong>Estimate, not benchmark.</strong> Disk space figures are dependable. Processor, search speed and machine learning figures are rough, so test them with Rally, Elastic's benchmarking tool.</EuiText>
         </EuiFlexItem>
         <EuiFlexItem grow={false}>{link(`${assumptions.length} assumptions`, 'assumptions')}</EuiFlexItem>
       </EuiFlexGroup>
@@ -260,7 +262,7 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
             {open === 'checks' && <WarningsPanel warnings={r.warnings} />}
             {open === 'assumptions' && (
               <EuiText size="s">
-                <p><strong>Estimate, not benchmark.</strong> Storage math is reliable; CPU, query latency and ML are not. Validate with Rally on the customer's hardware. These assumptions are exported verbatim.</p>
+                <p><strong>Estimate, not benchmark.</strong> Disk space figures are dependable. Processor, search speed and machine learning figures are rough. Test them with Rally, Elastic's benchmarking tool, on the customer's hardware. Exports include these assumptions word for word.</p>
                 <ul>{assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul>
               </EuiText>
             )}

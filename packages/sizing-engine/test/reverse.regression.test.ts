@@ -1,9 +1,11 @@
 // SPEC §11.2 reverse-mode suite. R5 re-baselined by D19 (heap cap 30 → 33 GB off-heap per 64 GB node).
+// D38 (hot 1:50): a 64 GB hot node holds up to 3,200 GB. Cases that state a disk keep it (R1: 2 TB, R9: 1,000 GB)
+// and are disk-bound; the others use the common-assumption node, now 64 × 50 = 3,200 GB (§11.1 said 1:30, 1,920 GB).
 import { describe, expect, it } from 'vitest';
 import { reverse, type NodeGroup, type ReverseRequest, type WorkloadProfile } from '../src/index.ts';
 
 const hot = (count: number, extra: Partial<NodeGroup> = {}): NodeGroup => ({
-  role: 'hot', count, ramGb: 64, diskGb: 1920, diskType: 'nvme', vcpu: 8, ...extra,
+  role: 'hot', count, ramGb: 64, diskGb: 3200, diskType: 'nvme', vcpu: 8, ...extra,
 });
 const logs = (p: Partial<WorkloadProfile> = {}): WorkloadProfile => ({
   id: 'w', kind: 'logs', retentionDays: { hot: 30 }, replicas: { hot: 1 }, ...p,
@@ -16,24 +18,27 @@ describe('§11.2 reverse regression', () => {
   const r1Hot = hot(3, { diskGb: 2000 });
   const r1Profile = logs({ indexMode: 'standard', avgEventKb: 1 });
 
-  it('R1: 3×64 GB hot, 2 TB disk, 1 replica, 30d, ratio 1.2 → 42.67 GB/day, storage-bound (High)', () => {
+  // D38: 2 × min(3,200, 2,000) = 4,000; / 1.25 = 3,200; / 72 = 44.44. Was 2 × 1,920 / 1.25 / 72 = 42.67, storage-bound.
+  it('R1: 3×64 GB hot, 2 TB disk, 1 replica, 30d, ratio 1.2 → 44.44 GB/day, disk-bound (High)', () => {
     const r = reverse(req([r1Hot], [r1Profile], 'max_gb_day'));
-    expect(r.answer!.value).toBeCloseTo(3072 / 72, 6);
-    expect(r.answer!.value.toFixed(2)).toBe('42.67');
-    expect(r.answer!.binding).toBe('storage');
+    expect(r.answer!.value).toBeCloseTo(3200 / 72, 6);
+    expect(r.answer!.value.toFixed(2)).toBe('44.44');
+    expect(r.answer!.binding).toBe('disk');
     expect(r.answer!.bindingTier).toBe('hot');
     expect(r.answer!.confidence).toBe('high');
   });
 
-  it('R2: 41×64 GB hot, LogsDB, 30d, 1 replica → 2,048 GB/day', () => {
+  // D38: 40 × 3,200 = 128,000; / 1.25 = 102,400; / 30 = 3,413.33. Was 40 × 1,920 / 1.25 / 30 = 2,048.
+  it('R2: 41×64 GB hot, LogsDB, 30d, 1 replica → 3,413.33 GB/day', () => {
     const r = reverse(req([hot(41, { vcpu: 64 })], [logs({ indexMode: 'logsdb' })], 'max_gb_day'));
-    expect(r.answer!.value).toBeCloseTo(2048, 9);
+    expect(r.answer!.value).toBeCloseTo(102400 / 30, 9);
     expect(r.answer!.binding).toBe('storage');
   });
 
-  it('R3: 11 hot, 500 GB/day LogsDB, solve retention → 30 days', () => {
+  // D38: 10 × 3,200 = 32,000; / 1.25 = 25,600; / (500 × 0.5 × 2 = 500 GB a day) = 51.2 → 51 days. Was 30.
+  it('R3: 11 hot, 500 GB/day LogsDB, solve retention → 51 days', () => {
     const r = reverse(req([hot(11)], [logs({ indexMode: 'logsdb', rawGbPerDay: 500 })], 'max_retention'));
-    expect(r.answer!.value).toBe(30);
+    expect(r.answer!.value).toBe(51);
     expect(r.answer!.unit).toBe('days');
   });
 
@@ -76,7 +81,8 @@ describe('§11.2 reverse regression', () => {
     expect(r.answer!.confidence).toBe('low');
   });
 
-  it('R8: R1 + 8 vCPU/node, 1 KB events → CPU max 1,037 GB/day; binding storage; CPU headroom ~24× (Low)', () => {
+  // D38: R1 now binds on disk at 44.44 GB/day, so CPU headroom is 1,036.8 / 44.44 = 23.3×.
+  it('R8: R1 + 8 vCPU/node, 1 KB events → CPU max 1,037 GB/day; binding disk; CPU headroom ~23× (Low)', () => {
     const r = reverse(req([r1Hot], [r1Profile], 'max_gb_day'));
     const cpu = r.constraints.find((k) => k.name === 'cpu_ingest')!;
     expect(cpu.maxValue).toBeCloseTo(1036.8, 9);
@@ -84,8 +90,8 @@ describe('§11.2 reverse regression', () => {
     expect(cpu.confidence).toBe('low');
     expect(cpu.rallyRequired).toBe(true);
     expect(cpu.binding).toBe(false);
-    expect(r.answer!.binding).toBe('storage');
-    expect(Math.round(cpu.maxValue! / r.answer!.value)).toBe(24);
+    expect(r.answer!.binding).toBe('disk');
+    expect(Math.round(cpu.maxValue! / r.answer!.value)).toBe(23);
   });
 
   it('R9: R1 with 1,000 GB disk/node → 22.2 GB/day, disk-bound; HV5 fires, HV4 does not (D1)', () => {
@@ -100,6 +106,15 @@ describe('§11.2 reverse regression', () => {
 });
 
 describe('§5.3 reverse details', () => {
+  it('a tier with retention but no nodes gives 0 and says why (HV7 error)', () => {
+    const r = reverse(req([hot(3)], [logs({ indexMode: 'logsdb', retentionDays: { hot: 7, frozen: 83 } })], 'max_gb_day'));
+    expect(r.answer!.value).toBe(0);
+    const hv7 = r.warnings.filter((w) => w.id === 'HV7');
+    expect(hv7).toHaveLength(1);
+    expect(hv7[0]).toMatchObject({ severity: 'error' });
+    expect(hv7[0]!.message).toMatch(/frozen tier for 83 days, but there are no frozen nodes/);
+  });
+
   it('reports headroom on every other constraint', () => {
     const r = reverse(req([hot(3, { diskGb: 2000 })], [logs({ indexMode: 'standard' })], 'max_gb_day'));
     const nonBinding = r.constraints.filter((k) => !k.binding && k.maxValue !== undefined && Number.isFinite(k.maxValue));
@@ -111,13 +126,13 @@ describe('§5.3 reverse details', () => {
     const other = logs({ id: 'other', indexMode: 'standard', rawGbPerDay: 10 });
     const target = logs({ id: 'target', indexMode: 'standard' });
     const r = reverse(req([hot(3, { diskGb: 2000 })], [other, target], 'max_gb_day', { targetProfileId: 'target' }));
-    expect(r.answer!.value).toBeCloseTo(3072 / 72 - 10, 9);
+    expect(r.answer!.value).toBeCloseTo(3200 / 72 - 10, 9); // D38: R1 capacity is 3,200 / 72
   });
 
   it('solves frozen jointly with hot', () => {
     const frozen: NodeGroup = { role: 'frozen', count: 2, ramGb: 64, diskGb: 1920, diskType: 'ssd', vcpu: 8 };
     const r = reverse(req([hot(41, { vcpu: 64 }), frozen], [logs({ indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 } })], 'max_gb_day'));
-    // D27: frozen capacity (N−1) = 1 × 1,920 GB disk / 1.25 overhead / 0.10 cache fraction = 15,360 GB → 15,360 / (335 × 0.5) = 91.64 GB/day, below hot's 2,048.
+    // D27: frozen capacity (N−1) = 1 × 1,920 GB disk / 1.25 overhead / 0.10 cache fraction = 15,360 GB → 15,360 / (335 × 0.5) = 91.64 GB/day, below hot's 3,413 (D38).
     expect(r.answer!.value).toBeCloseTo(15360 / (335 * 0.5), 9);
     expect(r.answer!.binding).toBe('frozen');
   });

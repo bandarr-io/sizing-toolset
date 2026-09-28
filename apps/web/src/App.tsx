@@ -1,10 +1,11 @@
-import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiLink, EuiPageTemplate, EuiSpacer, EuiText, EuiTitle, EuiToolTip } from '@elastic/eui';
+import { EuiBadge, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiPageTemplate, EuiSpacer, EuiToolTip } from '@elastic/eui';
 import type { ConstantSet } from '@sizing/constants';
-import { defaultIndexMode, forward, reverse, ENGINE_VERSION, type SizingResult, type Tier, type WorkloadProfile } from '@sizing/engine';
+import { compareModels, forward, reverse, sizeTopology, type ModelRow, ENGINE_VERSION, type SiteRelationship, type SizingResult, type Tier, type TopologyResult, type WorkloadProfile } from '@sizing/engine';
 import { useEffect, useMemo, useState } from 'react';
-import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment } from './calculator/DeploymentSettings.tsx';
+import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment, requirementsSummary } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
 import { HardwareGroups } from './calculator/HardwareGroups.tsx';
+import { HowLimitsWork } from './calculator/HowLimitsWork.tsx';
 import { isDefaultNodeSizes, NodeSizes, nodeSizesSummary } from './calculator/NodeSizes.tsx';
 import { SolvePicker } from './calculator/SolvePicker.tsx';
 import { Toolbar } from './calculator/Toolbar.tsx';
@@ -16,12 +17,16 @@ import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
 import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
 import { useCostDefaults } from './costStore.tsx';
-import { download, slug, toJson, toMarkdown } from './export.ts';
+import { download, modelsMarkdown, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
+import { ModelsPanel } from './results/ModelsPanel.tsx';
+import { ServerGroups } from './calculator/ServerGroups.tsx';
+import { MultiSiteInputs } from './calculator/MultiSiteInputs.tsx';
+import { TopologyPanel } from './results/TopologyPanel.tsx';
 import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultState, deploymentOfForward, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -37,7 +42,7 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
     if (overriddenKeys.length) {
       out.result = {
         ...out.result,
-        assumptions: [`Custom constants in use (${overriddenKeys.length}, changed in this browser): ${overriddenKeys.join(', ')}.`, ...out.result.assumptions],
+        assumptions: [`Settings changed in this browser (${overriddenKeys.length}): ${overriddenKeys.join(', ')}.`, ...out.result.assumptions],
       };
     }
     return out;
@@ -45,8 +50,6 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
     return { error: e instanceof Error ? e.message : String(e) };
   }
 }
-
-const hasLogsdb = (w: readonly WorkloadProfile[]) => w.some((p) => (p.rawGbPerDay !== undefined || p.retentionDays.hot) && defaultIndexMode(p) === 'logsdb');
 
 type Page = 'calculator' | 'tco' | 'config';
 const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', config: '#/config' };
@@ -71,19 +74,19 @@ export function App() {
     <MathProvider>
       <EuiPageTemplate panelled={false} restrictWidth={1600} grow>
         <EuiPageTemplate.Header
-          pageTitle="Cluster Sizing Calculator"
+          pageTitle="Elastic Ballpark Editor"
           tabs={[
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
             { label: 'Total cost', isSelected: page === 'tco', onClick: () => go('tco') },
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
           ]}
           rightSideItems={[
-            <EuiToolTip key="v" content={`Constants hash ${constants.hash}`}>
-              <EuiBadge color="hollow">engine {ENGINE_VERSION} · constants {constants.hash.slice(0, 8)}</EuiBadge>
+            <EuiToolTip key="v" content={`Fingerprint of the settings used: ${constants.hash}`}>
+              <EuiBadge color="hollow">version {ENGINE_VERSION} · settings {constants.hash.slice(0, 8)}</EuiBadge>
             </EuiToolTip>,
             ...(overriddenKeys.length
               ? [<EuiToolTip key="c" content={overriddenKeys.join(', ')}>
-                  <EuiBadge color="warning" onClick={() => go('config')} onClickAriaLabel="Open configurations">custom constants ({overriddenKeys.length})</EuiBadge>
+                  <EuiBadge color="warning" onClick={() => go('config')} onClickAriaLabel="Open configurations">changed settings ({overriddenKeys.length})</EuiBadge>
                 </EuiToolTip>]
               : []),
           ]}
@@ -117,6 +120,9 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
     else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
   };
 
+  if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
+  if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
+
   return (
     <>
       <Toolbar
@@ -140,7 +146,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
         <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
           {'error' in outcome
             ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
-            : <ResultsPanel r={outcome.result} subscription={subscriptionCost(outcome.result, rates)}
+            : <ResultsPanel r={outcome.result} subscription={subscriptionCost(outcome.result, rates, state.cost?.discountPct)}
                 subscriptionPrice={<CostRatesForm value={state.cost?.rates ?? {}} onChange={setScenarioRates} fallback={defaults} subscriptionOnly />}
                 onOpenTco={onOpenTco} />}
         </EuiFlexItem>
@@ -151,8 +157,120 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
 
 type Setter = (f: (s: AppState) => AppState) => void;
 
+/** D33: one site's servers, sized under self-managed, ECK and ECE side by side. */
+function ModelsCalculator({ state, setState, constants }: { state: AppState; setState: Setter; constants: ConstantSet }) {
+  const m = state.models ?? defaultModels();
+  useEffect(() => { if (!state.models) setState((s) => ({ ...s, models: s.models ?? defaultModels() })); }, [state.models, setState]);
+  const outcome = useMemo((): { rows: ModelRow[] } | { error: string } => {
+    try {
+      return { rows: compareModels({ workloads: m.workloads, servers: m.servers, options: m.options }, constants) };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [m, constants]);
+  const setModels = (next: typeof m) => setState((s) => ({ ...s, models: next }));
+  const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
+  const exportAs = (kind: 'md' | 'json') => {
+    if ('error' in outcome) return;
+    const at = new Date().toISOString();
+    if (kind === 'md') download(`${slug(state.name)}-models.md`, modelsMarkdown(state.name, outcome.rows, at), 'text/markdown');
+    else download(`${slug(state.name)}-models.json`, JSON.stringify({ exportedAt: at, engineVersion: ENGINE_VERSION, constantsHash: constants.hash, scenario: state, result: outcome.rows }, null, 2), 'application/json');
+  };
+  return (
+    <>
+      <Toolbar
+        state={state}
+        canExport={!('error' in outcome)}
+        onMode={(mode) => patch({ mode })}
+        onRename={(name) => patch({ name })}
+        onLoad={(s) => setState(() => s)}
+        onReset={() => setState((s) => ({ ...s, models: defaultModels() }))}
+        onExportMd={() => exportAs('md')}
+        onExportJson={() => exportAs('json')}
+      />
+      <EuiSpacer size="l" />
+      <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
+        <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
+          <Section step={1} title="What will the cluster hold?" description="Each way of running Elastic is sized for the same data." summary={workloadsSummary(m.workloads)}>
+            <WorkloadList workloads={m.workloads} onChange={(workloads) => setModels({ ...m, workloads })} />
+          </Section>
+          <Gap />
+          <Section step={2} title="What servers do they have?" description="Add one row for each group of identical servers. Each option splits them up differently. With ECE, the master servers run the platform itself." summary={groupsSummary(m.servers)}>
+            <ServerGroups keepMasters servers={m.servers} onChange={(servers) => setModels({ ...m, servers })} />
+          </Section>
+          <Gap />
+          <Section step={3} title="Requirements" description="These apply to every option." summary={requirementsSummary(deploymentOfForward(m.options))}>
+            <DeploymentSettings hideSites hideModel value={deploymentOfForward(m.options)}
+              onChange={(d) => setModels({ ...m, options: withForwardDeployment(m.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
+          </Section>
+        </EuiFlexItem>
+        <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
+          {'error' in outcome
+            ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
+            : <ModelsPanel rows={outcome.rows} />}
+        </EuiFlexItem>
+      </EuiFlexGroup>
+    </>
+  );
+}
+
+type TopologyOutcome = { result: TopologyResult; compare?: Partial<Record<SiteRelationship, TopologyResult>> } | { error: string };
+
+/** D32: several clusters on physical servers. Shares the toolbar; its own inputs and results. */
+function MultiSiteCalculator({ state, setState, constants }: { state: AppState; setState: Setter; constants: ConstantSet }) {
+  const ms = state.multisite ?? defaultMultiSite();
+  // Persist the defaults the first time the mode is opened.
+  useEffect(() => { if (!state.multisite) setState((s) => ({ ...s, multisite: s.multisite ?? defaultMultiSite() })); }, [state.multisite, setState]);
+  const outcome = useMemo((): TopologyOutcome => {
+    try {
+      const result = sizeTopology(topologyRequest(ms), constants);
+      if (!ms.compare) return { result };
+      const compare = Object.fromEntries(RELATIONSHIPS.map((r) => [r.value, r.value === ms.relationship ? result : sizeTopology(topologyRequest(ms, r.value), constants)]));
+      return { result, compare };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [ms, constants]);
+  const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
+
+  const exportAs = (kind: 'md' | 'json') => {
+    if ('error' in outcome) return;
+    const at = new Date().toISOString();
+    if (kind === 'md') download(`${slug(state.name)}.md`, topologyMarkdown(state.name, outcome.result, at), 'text/markdown');
+    else download(`${slug(state.name)}.json`, JSON.stringify({ exportedAt: at, engineVersion: ENGINE_VERSION, constantsHash: constants.hash, scenario: state, result: outcome.result }, null, 2), 'application/json');
+  };
+
+  return (
+    <>
+      <Toolbar
+        state={state}
+        canExport={!('error' in outcome)}
+        onMode={(mode) => patch({ mode })}
+        onRename={(name) => patch({ name })}
+        onLoad={(s) => setState(() => s)}
+        onReset={() => setState((s) => ({ ...s, multisite: defaultMultiSite() }))}
+        onExportMd={() => exportAs('md')}
+        onExportJson={() => exportAs('json')}
+      />
+      <EuiSpacer size="l" />
+      <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
+        <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
+          <MultiSiteInputs ms={ms} setState={setState} />
+        </EuiFlexItem>
+        <EuiFlexItem style={{ minWidth: 360, flexBasis: 0, flexGrow: 5, alignSelf: 'stretch' }}>
+          {'error' in outcome
+            ? <EuiCallOut color="danger" iconType="error" title="Cannot calculate yet"><p>{outcome.error}</p></EuiCallOut>
+            : <TopologyPanel result={outcome.result} {...(outcome.compare ? { compare: outcome.compare } : {})}
+                modelName={MODEL_NAMES[topologyRequest(ms).hostModel ?? 'self_managed']}
+                onPick={(relationship) => setState((s) => ({ ...s, multisite: { ...(s.multisite ?? defaultMultiSite()), relationship } }))} />}
+        </EuiFlexItem>
+      </EuiFlexGroup>
+    </>
+  );
+}
+
 /** Folded-step summary text for a CPU throughput override. */
-const cpuThroughputExtra = (ev: number | undefined) => (ev !== undefined ? `CPU ${ev.toLocaleString('en-US')} ev/s/vCPU` : '');
+const cpuThroughputExtra = (ev: number | undefined) => (ev !== undefined ? `${ev.toLocaleString('en-US')} events per second per core` : '');
 
 function ForwardInputs({ state, setState, objectStorage }: { state: AppState; setState: Setter; objectStorage?: SizingResult['objectStorage'] }) {
   const f = state.forward;
@@ -169,13 +287,15 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
     <>
       <Section step={1} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings
-          value={deployment} hasLogsdb={hasLogsdb(f.workloads)}
-          onChange={(d) => setForward({ ...f, options: withForwardDeployment(f.options, d) })}
+          value={deployment} modelOptions={modelOptionsFor('forward')}
+          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
+            ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
+            : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
           more={
             <>
               <EuiFlexItem>
                 <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
-                  helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
+                  helpText="Nodes that only route searches and combine results. Add them for heavy search or reporting load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
               </EuiFlexItem>
               <EuiFlexItem>
                 <CpuThroughputField value={f.options.eventsPerSecondPerVcpu}
@@ -186,17 +306,18 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
         />
       </Section>
       <Gap />
-      <Section step={2} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type.">
+      <Section step={2} title="What will the cluster hold?" description="Add each kind of data the cluster will store. The cluster is the group of servers running Elasticsearch. Results update as you type." summary={workloadsSummary(f.workloads)}>
         <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
       </Section>
       <Gap />
       <Section step={3} title="Node sizes and ratios"
-        description="Defaults suit most sizings. Change a tier's node size, mem:disk ratio or frozen cache for this scenario only; Configurations holds the defaults."
+        description="The defaults suit most cases. A node is one running copy of Elasticsearch. Change a tier's node size, disk per GB of memory or frozen cache here, for this scenario only. The Configurations page holds the defaults."
         summary={nodeSizesSummary(c, tiers as Tier[], objectStorage)} startCollapsed={isDefaultNodeSizes(f.options)}>
         <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} objectStorage={objectStorage} />
       </Section>
       <Gap />
-      <Section step={4} title="Plan for growth" description="Size for where each workload will be, not only where it is today.">
+      <Section step={4} title="Plan for growth" description="Size for how much data you will have in a few years, not only today."
+        summary={growthSummary(c, f)} startCollapsed={isDefaultGrowth(f)}>
         <GrowthPlanner value={f} onChange={setForward} />
       </Section>
     </>
@@ -208,8 +329,6 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   const setReverse = (next: AppState['reverse']) => setState((s) => ({ ...s, reverse: normalizeReverse(next) }));
   const kinds = SOLVE_KINDS[r.solve];
   const target = kinds.length ? r.fixed[0] : undefined;
-  const others = kinds.length ? r.fixed.slice(1) : r.fixed;
-  const withOthers = (o: WorkloadProfile[]) => setReverse({ ...r, fixed: target ? [target, ...o] : o });
   const targetTier = r.targetTier ?? (target ? (Object.keys(target.retentionDays).find((t) => (target.retentionDays[t as Tier] ?? 0) > 0) as Tier | undefined) : undefined) ?? 'hot';
 
   const deployment = deploymentOfReverse(r);
@@ -218,8 +337,10 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   return (
     <>
       <Section step={step++} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
-        <DeploymentSettings value={deployment} hasLogsdb={hasLogsdb(r.fixed)} reverse
-          onChange={(d) => setReverse(withReverseDeployment(r, d))}
+        <DeploymentSettings value={deployment} reverse modelOptions={modelOptionsFor('reverse')}
+          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
+            ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
+            : setReverse(withReverseDeployment(r, d)))}
           more={
             <EuiFlexItem>
               <CpuThroughputField value={r.eventsPerSecondPerVcpu} onChange={(eventsPerSecondPerVcpu) => setReverse({ ...r, eventsPerSecondPerVcpu })} />
@@ -227,12 +348,12 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
           } />
       </Section>
       <Gap />
-      <Section step={step++} title="What do you want to find out?">
+      <Section step={step++} title="What do you want to find out?" summary={SOLVES.find((x) => x.value === r.solve)?.title} actions={<HowLimitsWork />}>
         <SolvePicker value={r.solve} onChange={(solve) => setState((s) => ({ ...s, reverse: withSolve(s.reverse, solve) }))} />
       </Section>
       <Gap />
-      <Section step={step++} title="What hardware do they have?" description="One row per group of identical nodes.">
-        <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
+      <Section step={step++} title="What hardware do they have?" description="Add one row for each group of identical nodes. A node is one running copy of Elasticsearch." summary={groupsSummary(r.hardware.groups, 'nodes')}>
+        <HardwareGroups groups={r.hardware.groups} solve={r.solve} dataTiers={target ? tiersInUse({ workloads: r.fixed, options: { model: 'self_managed' } }) : []} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
           ratios={r.hardware.memDiskRatio ?? {}}
           onRatios={(memDiskRatio) => {
             const { memDiskRatio: _drop, ...hw } = r.hardware;
@@ -247,19 +368,12 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
       <Gap />
       {target && (
         <>
-          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "Today's volume and how fast it grows." : 'Fixed parameters for the workload being solved.'}>
+          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "How much data arrives today and how fast it grows." : 'Describe the data you want the answer for.'} summary={workloadsSummary(r.fixed)}>
             <WorkloadCard
               p={target} kindChoices={kinds} showGrowth={r.solve === 'years_to_capacity'}
               role={{ kind: 'reverse-target', solve: r.solve, targetTier, onTargetTier: (t) => setReverse({ ...r, targetTier: t }) }}
-              onChange={(p) => setReverse({ ...r, fixed: [p, ...others], targetProfileId: p.id })}
+              onChange={(p) => setReverse({ ...r, fixed: [p], targetProfileId: p.id })}
             />
-            <EuiSpacer size="l" />
-            <EuiTitle size="xxs"><h3>Already running on this cluster</h3></EuiTitle>
-            <EuiText size="xs" color="subdued"><p>Other workloads use capacity before the answer is calculated.</p></EuiText>
-            <EuiSpacer size="s" />
-            {others.length === 0
-              ? <OthersEmpty add={(w) => withOthers([w])} taken={r.fixed.map((p) => p.id)} />
-              : <WorkloadList workloads={others} onChange={withOthers} role={{ kind: 'reverse-other' }} addLabel="Add another workload" showGrowth={r.solve === 'years_to_capacity'} />}
           </Section>
         </>
       )}
@@ -267,11 +381,3 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
   );
 }
 
-/** Collapsed entry point for "other workloads" so the common case (nothing else on the cluster) stays quiet. */
-function OthersEmpty({ add, taken }: { add: (w: WorkloadProfile) => void; taken: string[] }) {
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return <EuiText size="s"><EuiLink onClick={() => setOpen(true)}>Add a workload that already runs here</EuiLink></EuiText>;
-  }
-  return <WorkloadList workloads={[]} onChange={(w) => { if (w[0]) add({ ...w[0], id: taken.includes(w[0].id) ? `${w[0].id} (existing)` : w[0].id }); }} role={{ kind: 'reverse-other' }} />;
-}

@@ -1,23 +1,25 @@
 import type { Constant } from '@sizing/constants';
-import type { SizingResult, WorkloadProfile } from '@sizing/engine';
+import type { ModelRow, SizingResult, TopologyResult, WorkloadProfile } from '@sizing/engine';
 import type { CostReport } from './cost.ts';
 import { fmtMoney } from './format.ts';
+import { byRoleOrder } from './ui/tiers.ts';
 import type { AppState } from './state.ts';
 
 const n = (x: number, d = 2) =>
   Number.isFinite(x) ? x.toLocaleString('en-US', { maximumFractionDigits: d }) : x > 0 ? 'not limiting' : String(x);
 
 const CONSTRAINT_LABEL: Record<string, string> = {
-  storage: 'Storage', disk: 'Disk', frozen: 'Frozen cache', heap_shards: 'Shards / heap', masters: 'Master heap (indices)',
-  vector_offheap: 'Vector off-heap', cpu_ingest: 'CPU / ingest', disk_write: 'Disk write', query: 'Query', fleet: 'Fleet', ml: 'ML',
+  storage: 'Storage', disk: 'Disk', frozen: 'Frozen local cache', heap_shards: 'Shard count (memory)', masters: 'Master node memory',
+  vector_offheap: 'Vector search memory', cpu_ingest: 'Processor', disk_write: 'Disk write speed', query: 'Search load',
+  fleet: 'Fleet (agent management)', ml: 'Machine learning',
 };
 export const constraintLabel = (name: string) => CONSTRAINT_LABEL[name] ?? name;
 /** Label plus tier, without repeating it ("Frozen cache" already names its tier). */
 export const constraintWithTier = (name: string, tier?: string) => (tier && name !== 'frozen' ? `${constraintLabel(name)} (${tier})` : constraintLabel(name));
 
 const SOLVE_LABEL: Record<string, string> = {
-  max_gb_day: 'Max GB/day', max_retention: 'Max retention', max_agents: 'Max Elastic Agents',
-  max_vectors: 'Max vectors', max_shards: 'Max shards', max_ml_jobs: 'Max ML jobs', years_to_capacity: 'Years until full',
+  max_gb_day: 'Most GB per day', max_retention: 'Longest retention', max_agents: 'Most Elastic Agents',
+  max_vectors: 'Most vectors', max_shards: 'Most shards', max_ml_jobs: 'Most machine learning jobs', years_to_capacity: 'Years until full',
 };
 export const solveLabel = (s: string) => SOLVE_LABEL[s] ?? s;
 
@@ -71,49 +73,56 @@ export function toMarkdown(state: AppState, result: SizingResult, workloads: rea
   const L: string[] = [];
   const perSite = result.sites > 1 ? ' (per site)' : '';
   L.push(`# ${state.name}`, '');
-  L.push('> **Estimate, not benchmark.** Storage math is reliable; CPU, query latency and ML are not. Validate with Rally before committing hardware.', '');
+  L.push('> **Estimate, not benchmark.** Disk space figures are dependable. Processor, search speed and machine learning figures are rough. Test them with Rally, Elastic\'s benchmarking tool, before buying hardware.', '');
 
   if (result.mode === 'reverse' && result.answer) {
     const a = result.answer;
     L.push('## Capacity answer', '');
     L.push(`**${solveLabel(a.solve)}: ${n(a.value)} ${a.unit}**${a.dataStreams !== undefined ? ` (${n(a.dataStreams, 0)} data streams)` : ''}`, '');
-    L.push(`Binding constraint: ${constraintLabel(a.binding)}${a.bindingTier ? ` (${a.bindingTier})` : ''}, ${a.confidence} confidence.`, '');
+    L.push(`Runs out first: ${constraintLabel(a.binding)}${a.bindingTier ? ` (${a.bindingTier})` : ''}. Confidence in this figure: ${a.confidence}.`, '');
   }
 
-  L.push(`## Architecture summary${perSite}`, '');
-  L.push(`- Total RAM: **${n(result.totalRamGb)} GB**`);
+  L.push(`## Cluster summary${perSite}`, '');
+  L.push(`- Total memory (RAM): **${n(result.totalRamGb)} GB**`);
   L.push(result.licenseFloor === 'basic'
-    ? '- Subscription: **Basic**, no licensed features and no ERUs to buy'
-    : `- Subscription: **Enterprise, ${n(result.licenseUnits.value, 0)} ${result.licenseUnits.unit}** (self-managed; ${result.licenseFloorReasons.join('; ')})`);
-  if (result.objectStorage) L.push(`- Object storage (snapshot repository for cold and frozen): **${n(result.objectStorage.gb, 0)} GB**${result.objectStorage.overridden ? ` (set for this scenario; calculated ${n(result.objectStorage.calculatedGb, 0)} GB)` : ''}`);
-  if (result.sites > 1) L.push(`- All ${result.sites} sites: ${n(result.allSites.totalRamGb)} GB RAM, ${n(result.allSites.licenseUnits, 0)} ERU`);
+    ? '- Subscription: **Basic**, no paid features used, so no license units to buy'
+    : `- Subscription: **Enterprise, ${n(result.licenseUnits.value, 0)} ${result.licenseUnits.unit}** (self-managed). Needed for: ${result.licenseFloorReasons.join('; ')}. An ERU (Enterprise Resource Unit) is the unit Elastic licenses by, a block of memory.`);
+  if (result.objectStorage) L.push(`- Object storage (cheap bulk storage such as S3, holding the cold and frozen data): **${n(result.objectStorage.gb, 0)} GB**${result.objectStorage.overridden ? ` (set by hand for this scenario; calculated ${n(result.objectStorage.calculatedGb, 0)} GB)` : ''}`);
+  if (result.sites > 1) L.push(`- All ${result.sites} sites: ${n(result.allSites.totalRamGb)} GB memory, ${n(result.allSites.licenseUnits, 0)} ERU`);
   L.push('');
 
-  L.push(`## Node table${perSite}`, '', '| Role | Nodes | RAM/node (GB) | Disk/node (GB) | vCPU/node |', '|---|---:|---:|---:|---:|');
-  for (const t of result.tiers) L.push(`| ${t.tier} | ${t.nodes} | ${n(t.ramGb)} | ${n(t.diskGb)} | ${n(t.vcpu)} |`);
-  for (const o of result.overhead) L.push(`| ${o.role}${o.countsTowardLicense ? '' : ' (not licensed)'} | ${o.count} | ${n(o.ramGb)} | ${o.diskGb ? n(o.diskGb) : '–'} | ${n(o.vcpu)} |`);
+  L.push(`## Nodes${perSite}`, '', 'A node is one running copy of Elasticsearch on a server.', '', '| Role | Nodes | Memory each (GB) | Disk each (GB) | Cores each |', '|---|---:|---:|---:|---:|');
+  const nodeRows = byRoleOrder([
+    ...result.tiers.map((t) => ({ role: t.tier as string, line: `| ${t.tier} | ${t.nodes} | ${n(t.ramGb)} | ${n(t.diskGb)} | ${n(t.vcpu)} |` })),
+    ...result.overhead.map((o) => ({ role: o.role as string, line: `| ${o.role}${o.countsTowardLicense ? '' : ' (no license needed)'} | ${o.count} | ${n(o.ramGb)} | ${o.diskGb ? n(o.diskGb) : '–'} | ${n(o.vcpu)} |` })),
+  ]);
+  for (const x of nodeRows) L.push(x.line);
   L.push('');
 
-  L.push('## Constraints', '', '| Constraint | Tier | Value | Utilization | Confidence | Binding |', '|---|---|---:|---:|---|---|');
+  L.push('## Limits', '', 'How full each resource is. The one marked "runs out first" sets the size.', '', '| Resource | Tier | Value | How full | Confidence | Runs out first |', '|---|---|---:|---:|---|---|');
   for (const k of result.constraints) {
-    const value = k.maxValue !== undefined ? `max ${n(k.maxValue)} ${k.unit}` : k.demand !== undefined ? `${n(k.demand)} / ${n(k.capacity)} ${k.unit}` : 'not modeled';
+    const value = k.maxValue !== undefined ? `up to ${n(k.maxValue)} ${k.unit}` : k.demand !== undefined ? `${n(k.demand)} / ${n(k.capacity)} ${k.unit}` : 'not estimated';
     const util = k.utilization !== undefined && Number.isFinite(k.utilization) ? `${n(k.utilization * 100, 1)}%` : '–';
-    L.push(`| ${constraintLabel(k.name)}${k.rallyRequired ? ' (Rally required)' : ''} | ${k.tier ?? ''} | ${value} | ${util} | ${k.confidence} | ${k.binding ? '**yes**' : ''} |`);
+    L.push(`| ${constraintLabel(k.name)}${k.rallyRequired ? ' (needs a Rally test)' : ''} | ${k.tier ?? ''} | ${value} | ${util} | ${k.confidence} | ${k.binding ? '**yes**' : ''} |`);
   }
   L.push('');
 
-  L.push('## Warnings', '');
-  if (result.warnings.length === 0) L.push('None.');
-  for (const w of result.warnings) L.push(`- **${w.id}** (${w.severity}): ${w.message}`);
+  L.push('## Hardware checks', '');
+  if (result.warnings.length === 0) L.push('No hardware problems found.');
+  for (const w of result.warnings) L.push(`- **${SEVERITY_WORD[w.severity]}:** ${w.message} (check ${w.id})`);
   L.push('');
 
   if (cost) L.push(...costSection(cost));
 
   L.push('## Assumptions', '', ...result.assumptions.map((a) => `- ${a}`), '');
-  L.push('## Recommended Rally plan', '', ...rallyPlan(workloads), '');
+  L.push('## Recommended Rally tests', '', 'Rally is Elastic\'s benchmarking tool. These steps are for the technical team.', '', ...rallyPlan(workloads), '');
   L.push('---', `Engine ${result.engineVersion} · constants ${result.constantsHash.slice(0, 12)} · exported ${exportedAt}`);
   return L.join('\n');
 }
+
+const SEVERITY_WORD: Record<string, string> = { error: 'Problem to fix', warn: 'Worth a look', info: 'Note' };
+const STATUS_WORD: Record<string, string> = { ok: 'fits', short: 'not enough', missing: 'no servers', unplaced: 'not placed', idle: 'unused' };
+const RELATIONSHIP_WORD: Record<string, string> = { independent: 'independent clusters', dr: 'disaster recovery (a standby site takes over if the main one fails)', active_active: 'active-active (every site serves traffic and holds all the data)' };
 
 export function download(filename: string, content: string, type: string): void {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -126,4 +135,54 @@ export function download(filename: string, content: string, type: string): void 
 
 export function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scenario';
+}
+
+/** D32: Markdown for a multi-site scenario: verdict, headroom, per-site server fit and assumptions. */
+export function topologyMarkdown(name: string, t: TopologyResult, exportedAt: string): string {
+  const L: string[] = [`# ${name}`, ''];
+  L.push('> **Estimate, not benchmark.** Disk space figures are dependable. Processor, search speed and machine learning figures are rough. Test them with Rally, Elastic\'s benchmarking tool, before buying hardware.', '');
+  L.push('## Summary', '');
+  L.push(`- Site setup: **${RELATIONSHIP_WORD[t.relationship] ?? t.relationship}**, ${t.sites.length} sites`);
+  L.push(`- Verdict: **${t.fitsAll ? 'fits on these servers' : 'short of servers'}**`);
+  if (t.headroom) {
+    const s = t.headroom.scale;
+    L.push(`- Headroom (spare room): ${Number.isFinite(s) ? `${n(s, 2)}× today's data volume` : 'not limited by these servers'}${t.headroom.binding ? ` (${t.headroom.binding.site} ${t.headroom.binding.role} runs out first)` : ''}`);
+  }
+  L.push(`- Servers needed: ${t.totals.neededServers} of ${t.totals.availableServers}; memory ${n(t.totals.ramGb)} GB; ${t.totals.eru} ERU (each site licensed separately, added up). An ERU (Enterprise Resource Unit) is the unit Elastic licenses by, a block of memory.`);
+  if (t.totals.objectStorageGb > 0) L.push(`- Object storage (cheap bulk storage for cold and frozen data): ${n(t.totals.objectStorageGb, 0)} GB`);
+  L.push('');
+  for (const s of t.sites) {
+    L.push(`## ${s.name}`, '', `Holds: ${s.holds.join(', ') || 'no data'}`, '');
+    L.push('| Role | Servers needed | Available | Nodes per server | Status |', '|---|---:|---:|---:|---|');
+    for (const f of byRoleOrder(s.fit)) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${STATUS_WORD[f.status] ?? f.status} |`);
+    L.push('');
+  }
+  L.push('## Assumptions', '', ...[...t.assumptions, ...(t.sites[0]?.result.assumptions ?? [])].map((a) => `- ${a}`), '');
+  L.push('---', `Engine ${t.sites[0]?.result.engineVersion ?? ''} · constants ${t.sites[0]?.result.constantsHash.slice(0, 12) ?? ''} · exported ${exportedAt}`);
+  return L.join('\n');
+}
+
+const MODEL_LABEL: Record<string, string> = { self_managed: 'Self-managed', eck: 'ECK (Kubernetes)', ece: 'ECE' };
+const BEST_WORD: Record<string, string> = { eru: 'fewest license units', headroom: 'most spare room', servers: 'fewest servers' };
+
+/** D33: Markdown for a deployment-model comparison on one site's servers. */
+export function modelsMarkdown(name: string, rows: readonly ModelRow[], exportedAt: string): string {
+  const L: string[] = [`# ${name}: deployment models compared`, ''];
+  L.push('> **Estimate, not benchmark.** ECK and ECE need some servers and memory for themselves; those amounts are cautious defaults. Test with Rally and check with the platform team.', '');
+  L.push('Self-managed installs Elasticsearch directly on the servers. ECK runs it in containers managed by Kubernetes. ECE is Elastic\'s private-cloud platform, installed on your servers. An ERU (Enterprise Resource Unit) is the unit Elastic licenses by, a block of memory.', '');
+  L.push('| Model | Fits | Spare room | Servers needed | ERU | Best on |', '|---|---|---:|---:|---:|---|');
+  for (const r of rows) {
+    const s = r.topology.headroom?.scale;
+    const head = s === undefined ? '–' : Number.isFinite(s) ? `${n(s, 2)}×` : 'unlimited';
+    L.push(`| ${MODEL_LABEL[r.model]} | ${r.topology.fitsAll ? 'yes' : 'no'} | ${head} | ${r.topology.totals.neededServers} / ${r.topology.totals.availableServers} | ${r.eru} | ${r.best.map((b) => BEST_WORD[b] ?? b).join(', ') || '–'} |`);
+  }
+  L.push('');
+  for (const r of rows) {
+    L.push(`## ${MODEL_LABEL[r.model]}`, '', ...r.requirements.map((q) => `- ${q}`), '');
+    L.push('| Role | Servers needed | Available | Nodes per server | Status |', '|---|---:|---:|---:|---|');
+    for (const f of byRoleOrder(r.topology.sites[0]!.fit)) L.push(`| ${f.role} | ${f.status === 'idle' ? '–' : f.neededServers} | ${f.availableServers} | ${f.nodesPerServer} | ${STATUS_WORD[f.status] ?? f.status} |`);
+    L.push('');
+  }
+  L.push('---', `Engine ${rows[0]?.topology.sites[0]?.result.engineVersion ?? ''} · constants ${rows[0]?.topology.sites[0]?.result.constantsHash.slice(0, 12) ?? ''} · exported ${exportedAt}`);
+  return L.join('\n');
 }

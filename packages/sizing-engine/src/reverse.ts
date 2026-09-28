@@ -11,7 +11,7 @@ import {
 import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import type {
   Constraint, ConstraintName, MathStep, NodeGroup, OverheadResult, ReverseRequest, SizingResult, Tier, TierResult,
-  WorkloadProfile,
+  Warning, WorkloadProfile,
 } from './types.ts';
 import { TIERS } from './types.ts';
 import { validateHardware } from './validation.ts';
@@ -505,6 +505,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
       shards: estimateShards(c, atMax, 0), dataGbByTier, ratioOverrides: req.hardware.memDiskRatio ?? {},
     }),
     ...commonWarnings(req.hardware.model),
+    ...tiersWithoutNodes(req.fixed, groups, dataGbByTier),
   ];
 
   const assumptions = [
@@ -563,4 +564,26 @@ function workloadsAtMax(req: ReverseRequest, solved: Solved): WorkloadProfile[] 
     return p;
   };
   return req.fixed.map(swap);
+}
+
+/**
+ * A workload that keeps data on a tier with no nodes makes the answer 0, and HV7 stays silent because no data
+ * fits there to be counted. Say so plainly, once per tier (HV7 already covers tiers that did get data).
+ */
+function tiersWithoutNodes(fixed: readonly WorkloadProfile[], groups: readonly NodeGroup[], dataGbByTier: Partial<Record<Tier, number>>): Warning[] {
+  const out: Warning[] = [];
+  const seen = new Set<Tier>();
+  for (const p of fixed) {
+    const tiers: [Tier, number | undefined][] = [
+      ...retentionTiers(p).map((t): [Tier, number | undefined] => [t, p.retentionDays[t]]),
+      ...(p.totalGb || p.vector ? [[placementTier(p), undefined] as [Tier, undefined]] : []),
+    ];
+    for (const [t, days] of tiers) {
+      if (seen.has(t) || dataGbByTier[t] || groups.some((g) => g.role === t && g.count > 0)) continue;
+      seen.add(t);
+      const kept = days ? `keeps data on the ${t} tier for ${days} days` : `keeps its data on the ${t} tier`;
+      out.push({ id: 'HV7', severity: 'error', message: `${p.id} ${kept}, but there are no ${t} nodes, so nothing fits and the answer is 0. Add ${t} nodes or remove the ${t} days.` });
+    }
+  }
+  return out;
 }
