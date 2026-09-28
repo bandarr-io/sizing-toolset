@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CpuThroughputField, DeploymentSettings, deploymentSummary, isDefaultDeployment, requirementsSummary } from './calculator/DeploymentSettings.tsx';
 import { GrowthPlanner } from './calculator/GrowthPlanner.tsx';
 import { HardwareGroups } from './calculator/HardwareGroups.tsx';
+import { HowLimitsWork } from './calculator/HowLimitsWork.tsx';
 import { isDefaultNodeSizes, NodeSizes, nodeSizesSummary } from './calculator/NodeSizes.tsx';
 import { SolvePicker } from './calculator/SolvePicker.tsx';
 import { Toolbar } from './calculator/Toolbar.tsx';
@@ -347,7 +348,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
           } />
       </Section>
       <Gap />
-      <Section step={step++} title="What do you want to find out?" summary={SOLVES.find((x) => x.value === r.solve)?.title}>
+      <Section step={step++} title="What do you want to find out?" summary={SOLVES.find((x) => x.value === r.solve)?.title} actions={<HowLimitsWork />}>
         <SolvePicker value={r.solve} onChange={(solve) => setState((s) => ({ ...s, reverse: withSolve(s.reverse, solve) }))} />
       </Section>
       <Gap />
