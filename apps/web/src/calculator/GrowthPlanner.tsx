@@ -38,7 +38,7 @@ export function GrowthPlanner({ value, onChange }: { value: ForwardRequest; onCh
   const applyAll = () =>
     onChange({ ...value, workloads: value.workloads.map((w) => (volume(w) ? withRate(w, allRate) : w)) });
 
-  if (rows.length === 0) return <EuiText size="s" color="subdued"><p>Add a workload with a volume to plan for growth.</p></EuiText>;
+  if (rows.length === 0) return <EuiText size="s" color="subdued"><p>Add a workload with an amount of data to plan for growth.</p></EuiText>;
 
   return (
     <>
@@ -103,7 +103,7 @@ export function GrowthPlanner({ value, onChange }: { value: ForwardRequest; onCh
       </table>
       <EuiSpacer size="s" />
       <EuiText size="xs" color="subdued">
-        <p>Growth compounds yearly and scales daily ingest, corpus size or vector count. Retention and replicas stay as set.</p>
+        <p>Growth builds on itself each year. It scales data per day, document size or vector count. How long data is kept and the number of spare copies stay as set.</p>
       </EuiText>
     </>
   );

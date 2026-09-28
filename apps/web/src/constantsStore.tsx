@@ -37,7 +37,7 @@ function orderProblems(key: string, value: unknown): string[] {
   const col = value.map((r) => (r as Record<string, number>)[rule.column]!);
   const errors: string[] = [];
   if (rule.first !== undefined && col[0] !== rule.first) errors.push(`${key}: first row must have ${rule.column} = ${rule.first}`);
-  if (col.some((v, i) => i > 0 && v <= col[i - 1]!)) errors.push(`${key}: rows must be sorted by ${rule.column}, strictly increasing`);
+  if (col.some((v, i) => i > 0 && v <= col[i - 1]!)) errors.push(`${key}: rows must be sorted by ${rule.column}, each row larger than the one before`);
   return errors;
 }
 
@@ -95,7 +95,7 @@ export function validateDraft(original: Constant, draft: Constant, today: string
     errors.push(`${draft.key}: must be one of ${LICENSE_TIERS.join(', ')}`);
   }
   if (!sameValue(original.value, draft.value) && sameValue(original.source_url, draft.source_url) && draft.as_of_date === original.as_of_date) {
-    errors.push(`${draft.key}: a changed value needs a new as_of_date or a new source_url`);
+    errors.push(`${draft.key}: a changed value needs a new checked date or a new source link`);
   }
   return errors;
 }

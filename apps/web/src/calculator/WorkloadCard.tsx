@@ -15,12 +15,12 @@ import { TIER_LABEL } from '../ui/tiers.ts';
 import { RetentionTimeline } from './RetentionTimeline.tsx';
 
 const QUANTS: { value: Quant; text: string }[] = [
-  { value: 'bbq', text: 'BBQ (HNSW), smallest in memory' },
-  { value: 'bbq_disk', text: 'DiskBBQ (Low confidence)' },
-  { value: 'int8', text: 'int8' },
-  { value: 'int4', text: 'int4' },
-  { value: 'bfloat16', text: 'bfloat16' },
-  { value: 'float32', text: 'float32 (no quantization)' },
+  { value: 'bbq', text: 'BBQ: smallest in memory' },
+  { value: 'bbq_disk', text: 'DiskBBQ: mostly on disk (rough estimate)' },
+  { value: 'int8', text: 'int8: 4× smaller' },
+  { value: 'int4', text: 'int4: 8× smaller' },
+  { value: 'bfloat16', text: 'bfloat16: 2× smaller' },
+  { value: 'float32', text: 'float32: full size, no compression' },
 ];
 
 /** What the card is being used for. Reverse targets hide the quantity that is the answer. */
@@ -45,12 +45,12 @@ function MoreOptions({ children, count, hasError = false }: { children: ReactNod
 }
 
 export function summarize(p: WorkloadProfile): string {
-  if (p.kind === 'search') return `${fmtNum(p.totalGb ?? 0)} GB corpus`;
-  if (p.kind === 'vector' && p.vector) return `${fmtCompact(p.vector.count)} × ${p.vector.dims}-d ${p.vector.quant}`;
-  if (p.kind === 'ml' && p.ml) return `${p.ml.anomalyJobs} jobs`;
+  if (p.kind === 'search') return `${fmtNum(p.totalGb ?? 0)} GB of documents`;
+  if (p.kind === 'vector' && p.vector) return `${fmtCompact(p.vector.count)} vectors, ${p.vector.dims} dimensions, ${p.vector.quant}`;
+  if (p.kind === 'ml' && p.ml) return `${p.ml.anomalyJobs} machine learning jobs`;
   if (p.kind === 'fleet' && p.fleet) return `${fmtNum(p.fleet.agents, 0)} agents`;
   const days = Object.values(p.retentionDays).reduce<number>((s, d) => s + (d ?? 0), 0);
-  return `${p.rawGbPerDay !== undefined ? `${fmtNum(p.rawGbPerDay)} GB/day` : 'GB/day solved'} · ${days} days`;
+  return `${p.rawGbPerDay !== undefined ? `${fmtNum(p.rawGbPerDay)} GB/day` : 'GB/day is the answer'} · ${days} days`;
 }
 
 export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGrowth = false }: {
@@ -118,24 +118,24 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
           {needsVolume && (
             <EuiFlexItem style={{ flexBasis: 150, minWidth: 140 }}>
               {solvingGb
-                ? <EuiFormRow label="Daily ingest"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
-                : <NumField label={volumeOptional ? 'Daily ingest (optional)' : 'Daily ingest (raw)'} append="GB/day" value={p.rawGbPerDay}
+                ? <EuiFormRow label="Data per day"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>This is the answer</strong></EuiText></EuiPanel></EuiFormRow>
+                : <NumField label={volumeOptional ? 'Data per day (optional)' : 'Data per day'} append="GB/day" value={p.rawGbPerDay}
                     optional={volumeOptional} onChange={(v) => set({ rawGbPerDay: volumeOptional ? v : v ?? 0 })}
                     helpText={volumeOptional
-                      ? 'Sets how often the stream rolls over. Blank assumes the 30-day max age.'
-                      : indexed !== undefined ? `≈ ${fmtNum(indexed)} GB/day indexed` : undefined} />}
+                      ? 'Used to decide when a fresh index starts. Leave blank to start one every 30 days.'
+                      : indexed !== undefined ? `About ${fmtNum(indexed)} GB/day once stored` : undefined} />}
             </EuiFlexItem>
           )}
           {needsVolume && (
             <EuiFlexItem style={{ flexBasis: 270, minWidth: 260 }}>
-              <EuiFormRow label="Index mode" helpText={p.indexRatioOverride !== undefined ? `Ratio overridden to ${p.indexRatioOverride}` : `Indexed size = raw × ${ratio}`}>
-                <EuiButtonGroup legend="Index mode" isFullWidth buttonSize="m" idSelected={mode} onChange={(id) => onChange(withIndexMode(p, id as IndexMode))}
+              <EuiFormRow label="Storage mode" helpText={`LogsDB compresses logs; TSDS is for metrics. Stored size is ${p.indexRatioOverride ?? ratio} × the raw data${p.indexRatioOverride !== undefined ? ' (set by you)' : ''}.`}>
+                <EuiButtonGroup legend="Storage mode" isFullWidth buttonSize="m" idSelected={mode} onChange={(id) => onChange(withIndexMode(p, id as IndexMode))}
                   options={(['standard', 'logsdb', 'tsds'] as IndexMode[]).map((m) => ({ id: m, label: m === 'standard' ? 'Standard' : m === 'logsdb' ? 'LogsDB' : 'TSDS' }))} />
               </EuiFormRow>
             </EuiFlexItem>
           )}
           <EuiFlexItem grow={false} style={{ width: 84 }}>
-            <NumField label={<EuiToolTip content="Applies to hot and warm. Cold and frozen never carry replicas."><span>Replicas <EuiIcon type="question" size="s" /></span></EuiToolTip>}
+            <NumField label={<EuiToolTip content="Spare copies of the data on other nodes, so nothing is lost if one fails. Applies to hot and warm; cold and frozen are backed up in object storage instead."><span>Replicas <EuiIcon type="question" size="s" /></span></EuiToolTip>}
               aria-label="Replicas" value={replicas} step={1} onChange={(v) => setReplicas(v ?? 0)} />
           </EuiFlexItem>
           {showGrowth && (
@@ -145,7 +145,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
           )}
           {solve === 'max_shards' && (
             <EuiFlexItem style={{ flexBasis: 160, minWidth: 140 }}>
-              <NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="auto" helpText="Blank rolls over at 50 GB per primary shard or 30 days, whichever comes first." onChange={(v) => set({ rolloverDays: v })} />
+              <NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="auto" helpText="How often a fresh index starts. Blank starts one at 50 GB per shard or every 30 days, whichever comes first." onChange={(v) => set({ rolloverDays: v })} />
             </EuiFlexItem>
           )}
         </EuiFlexGroup>
@@ -167,22 +167,22 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     advanced = (
       <>
         <EuiFlexGrid columns={3} gutterSize="l">
-          <EuiFlexItem><NumField label="Index ratio override" value={p.indexRatioOverride} optional placeholder={String(num(c, `index_ratio.${mode}`))} onChange={(v) => set({ indexRatioOverride: v })} /></EuiFlexItem>
-          <EuiFlexItem><NumField label="Average event size" append="KB" value={p.avgEventKb} optional placeholder={String(num(c, 'ingest.default_avg_event_kb'))} onChange={(v) => set({ avgEventKb: v })} /></EuiFlexItem>
-          {solve !== 'max_shards' && <EuiFlexItem><NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="auto" helpText="Blank rolls over at 50 GB per primary shard or 30 days, whichever comes first." onChange={(v) => set({ rolloverDays: v })} /></EuiFlexItem>}
-          <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="1" onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
-          <EuiFlexItem><NumField label="Warm replicas" value={p.replicas.warm} optional step={1} placeholder={String(replicas)} onChange={(v) => set({ replicas: { ...p.replicas, warm: v } })} /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Stored size ratio" value={p.indexRatioOverride} optional placeholder={String(num(c, `index_ratio.${mode}`))} helpText="GB stored per GB of raw data. Blank uses the default." onChange={(v) => set({ indexRatioOverride: v })} /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Average event size" append="KB" value={p.avgEventKb} optional placeholder={String(num(c, 'ingest.default_avg_event_kb'))} helpText="Size of one log line or record. Used to estimate processor load." onChange={(v) => set({ avgEventKb: v })} /></EuiFlexItem>
+          {solve !== 'max_shards' && <EuiFlexItem><NumField label="Rollover" append="days" value={p.rolloverDays} optional placeholder="auto" helpText="How often a fresh index starts. Blank starts one at 50 GB per shard or every 30 days, whichever comes first." onChange={(v) => set({ rolloverDays: v })} /></EuiFlexItem>}
+          <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="1" helpText="How many slices each index is split into." onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Warm replicas" value={p.replicas.warm} optional step={1} placeholder={String(replicas)} helpText="Spare copies on the warm tier. Blank matches hot." onChange={(v) => set({ replicas: { ...p.replicas, warm: v } })} /></EuiFlexItem>
           {downsampleTiers.map((t) => (
             <EuiFlexItem key={t}>
-              <NumField label={`${TIER_LABEL[t]} downsample factor`} value={p.downsampleFactor?.[t]} optional placeholder="1" step={0.01}
-                helpText="Share of data kept after TSDS downsampling, above 0 up to 1. Leave empty for none."
+              <NumField label={`${TIER_LABEL[t]} downsampling`} value={p.downsampleFactor?.[t]} optional placeholder="1" step={0.01}
+                helpText="Share of metric data kept after thinning it to a coarser time step, such as 0.1. Blank keeps it all."
                 error={fieldError(t)}
                 onChange={(v) => { const d = { ...(p.downsampleFactor ?? {}) }; if (v === undefined) delete d[t]; else d[t] = v; set({ downsampleFactor: d }); }} />
             </EuiFlexItem>
           ))}
         </EuiFlexGrid>
         <EuiSpacer size="l" />
-        <SwitchField label="Ingest pipelines" helpText="Processing in ingest pipelines can make indexing up to 50% slower." checked={p.ingestPipelines ?? false} onChange={(v) => set({ ingestPipelines: v })} />
+        <SwitchField label="Ingest pipelines" helpText="Turn on if data is reshaped on the way in. That processing can make intake up to 50% slower." checked={p.ingestPipelines ?? false} onChange={(v) => set({ ingestPipelines: v })} />
       </>
     );
   }
@@ -190,16 +190,16 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
   if (p.kind === 'search') {
     body = (
       <EuiFlexGrid columns={2} gutterSize="l">
-        <EuiFlexItem><NumField label="Corpus size (indexed)" append="GB" value={p.totalGb} onChange={(v) => set({ totalGb: v ?? 0 })} /></EuiFlexItem>
-        <EuiFlexItem><NumField label="Replicas" value={replicas} step={1} onChange={(v) => setReplicas(v ?? 0)} /></EuiFlexItem>
+        <EuiFlexItem><NumField label="Size of the documents" append="GB" value={p.totalGb} helpText="As stored in Elasticsearch." onChange={(v) => set({ totalGb: v ?? 0 })} /></EuiFlexItem>
+        <EuiFlexItem><NumField label="Replicas" value={replicas} step={1} helpText="Spare copies, so nothing is lost if a node fails." onChange={(v) => setReplicas(v ?? 0)} /></EuiFlexItem>
       </EuiFlexGrid>
     );
     advancedCount = [p.indexRatioOverride, p.primaryShards, p.tier].filter((x) => x !== undefined).length;
     advanced = (
       <EuiFlexGrid columns={3} gutterSize="l">
-        <EuiFlexItem><SelectField label="Tier" value={placement} options={[{ value: 'content', text: 'Content' }, { value: 'hot', text: 'Hot' }]} onChange={(t) => set({ tier: t })} /></EuiFlexItem>
-        <EuiFlexItem><NumField label="Index ratio" value={p.indexRatioOverride} optional placeholder={String(num(c, 'index_ratio.standard'))} onChange={(v) => set({ indexRatioOverride: v })} helpText="1.0 when the size above is already indexed" /></EuiFlexItem>
-        <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="auto" onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
+        <EuiFlexItem><SelectField label="Tier" value={placement} options={[{ value: 'content', text: 'Content' }, { value: 'hot', text: 'Hot' }]} helpText="Content suits data that does not age, like a catalog." onChange={(t) => set({ tier: t })} /></EuiFlexItem>
+        <EuiFlexItem><NumField label="Stored size ratio" value={p.indexRatioOverride} optional placeholder={String(num(c, 'index_ratio.standard'))} onChange={(v) => set({ indexRatioOverride: v })} helpText="GB stored per GB above. Use 1.0 if the size is already as stored." /></EuiFlexItem>
+        <EuiFlexItem><NumField label="Primary shards" value={p.primaryShards} optional step={1} placeholder="auto" helpText="How many slices the index is split into." onChange={(v) => set({ primaryShards: v })} /></EuiFlexItem>
       </EuiFlexGrid>
     );
   }
@@ -214,18 +214,18 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
         <EuiFlexGrid columns={2} gutterSize="l">
           <EuiFlexItem>
             {solvingCount
-              ? <EuiFormRow label="Vectors"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>Solving for this</strong></EuiText></EuiPanel></EuiFormRow>
+              ? <EuiFormRow label="Vectors"><EuiPanel paddingSize="s" color="primary" hasShadow={false} style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><EuiText size="s"><strong>This is the answer</strong></EuiText></EuiPanel></EuiFormRow>
               : <NumField label="Vectors" value={v.count} step={1} onChange={(n) => set({ vector: { ...v, count: n ?? 0 } })} helpText={fmtCompact(v.count)} />}
           </EuiFlexItem>
-          <EuiFlexItem><NumField label="Dimensions" value={v.dims} step={1} onChange={(n) => set({ vector: { ...v, dims: n ?? 0 } })} /></EuiFlexItem>
-          <EuiFlexItem><SelectField label="Quantization" value={v.quant} options={QUANTS} onChange={(quant) => set({ vector: { ...v, quant } })} /></EuiFlexItem>
-          <EuiFlexItem><NumField label="Replicas" value={replicas} step={1} onChange={(n) => setReplicas(n ?? 0)} /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Dimensions" value={v.dims} step={1} helpText="Numbers in each vector, set by the AI model." onChange={(n) => set({ vector: { ...v, dims: n ?? 0 } })} /></EuiFlexItem>
+          <EuiFlexItem><SelectField label="Quantization" value={v.quant} options={QUANTS} helpText="Compression that saves memory." onChange={(quant) => set({ vector: { ...v, quant } })} /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Replicas" value={replicas} step={1} helpText="Spare copies, so nothing is lost if a node fails." onChange={(n) => setReplicas(n ?? 0)} /></EuiFlexItem>
         </EuiFlexGrid>
         <EuiSpacer size="m" />
         <EuiPanel color="subdued" paddingSize="s" hasShadow={false}>
           <EuiText size="xs">
             <strong>{fmtNum(cost.offheapBytes, 1)} bytes</strong> per vector in memory
-            {!solvingCount && <> · <strong>{fmtNum((v.count * cost.offheapBytes * copies) / 1e9, 1)} GB</strong> off-heap with {copies} cop{copies === 1 ? 'y' : 'ies'}</>}
+            {!solvingCount && <> · <strong>{fmtNum((v.count * cost.offheapBytes * copies) / 1e9, 1)} GB</strong> of memory for {copies} cop{copies === 1 ? 'y' : 'ies'}</>}
             {' '}· {fmtNum(cost.diskBytes, 0)} bytes per vector on disk
           </EuiText>
         </EuiPanel>
@@ -235,7 +235,7 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     advanced = (
       <EuiFlexGrid columns={3} gutterSize="l">
         <EuiFlexItem>
-          <NumField label="HNSW m" value={v.hnswM} optional step={1} placeholder={String(num(c, 'knn.hnsw_m'))} onChange={(n) => {
+          <NumField label="Graph links (HNSW m)" value={v.hnswM} optional step={1} placeholder={String(num(c, 'knn.hnsw_m'))} helpText="Links per vector in the search graph. More links use more memory." onChange={(n) => {
             const { hnswM: _drop, ...rest } = v; set({ vector: n === undefined ? rest : { ...rest, hnswM: n } });
           }} />
         </EuiFlexItem>
@@ -249,8 +249,8 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     body = (
       <EuiFlexGrid columns={2} gutterSize="l">
         <EuiFlexItem><NumField label="Anomaly detection jobs" value={ml.anomalyJobs} step={1} onChange={(n) => set({ ml: { ...ml, anomalyJobs: n ?? 0 } })}
-          helpText={`${num(c, 'ml.jobs_per_node')} jobs per ${num(c, 'ml.node_ram_gb')} GB ML node (Low confidence)`} /></EuiFlexItem>
-        <EuiFlexItem><NumField label="Trained models" append="GB" value={ml.trainedModelsGb} optional placeholder="0" onChange={(n) => set({ ml: { ...ml, trainedModelsGb: n } })} /></EuiFlexItem>
+          helpText={`Assumes ${num(c, 'ml.jobs_per_node')} jobs per ${num(c, 'ml.node_ram_gb')} GB machine learning node (rough estimate).`} /></EuiFlexItem>
+        <EuiFlexItem><NumField label="Trained models" append="GB" value={ml.trainedModelsGb} optional placeholder="0" helpText="Total size of the AI models you load." onChange={(n) => set({ ml: { ...ml, trainedModelsGb: n } })} /></EuiFlexItem>
       </EuiFlexGrid>
     );
   }
@@ -262,10 +262,10 @@ export function WorkloadCard({ p, onChange, onRemove, role, kindChoices, showGro
     body = (
       <>
         <EuiFlexGrid columns={2} gutterSize="l">
-          <EuiFlexItem><NumField label="Elastic Agents" value={f.agents} step={1} onChange={(n) => set({ fleet: { ...f, agents: n ?? 0 } })} /></EuiFlexItem>
-          <EuiFlexItem><SwitchField label="Elastic Defend" checked={f.defend} onChange={(defend) => set({ fleet: { ...f, defend } })} helpText="Recorded for the scenario; the Fleet table does not change with Defend." /></EuiFlexItem>
+          <EuiFlexItem><NumField label="Elastic Agents" value={f.agents} step={1} helpText="Machines running Elastic Agent, which collects their data." onChange={(n) => set({ fleet: { ...f, agents: n ?? 0 } })} /></EuiFlexItem>
+          <EuiFlexItem><SwitchField label="Elastic Defend" checked={f.defend} onChange={(defend) => set({ fleet: { ...f, defend } })} helpText="Elastic's endpoint security. Noted for the record; it does not change the sizing." /></EuiFlexItem>
         </EuiFlexGrid>
-        <Hint>Fleet table row: up to {fmtNum(row.agents, 0)} agents on a {row.fleetMemGb} GB Fleet Server. Hot tier needs at least {row.hotRamGb} GB RAM and {row.hotVcpu} vCPU.</Hint>
+        <Hint>Fleet Server, which manages the agents, needs {row.fleetMemGb} GB of memory for up to {fmtNum(row.agents, 0)} agents. The hot tier needs at least {row.hotRamGb} GB of memory and {row.hotVcpu} processor cores.</Hint>
       </>
     );
   }

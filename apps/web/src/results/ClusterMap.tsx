@@ -21,7 +21,7 @@ function Tiles({ count, color, failover }: { count: number; color: string; failo
             boxSizing: 'border-box',
           }} />
         );
-        return isFailover ? <EuiToolTip key={i} content="Failover node (N+1): capacity is sized without it">{tile}</EuiToolTip> : tile;
+        return isFailover ? <EuiToolTip key={i} content="Spare node: keeps the cluster running if a node fails. The sizing leaves it out of usable capacity.">{tile}</EuiToolTip> : tile;
       })}
       {count > MAX_TILES && <EuiText size="xs" color="subdued">+{count - MAX_TILES}</EuiText>}
     </div>
@@ -39,13 +39,13 @@ export function ClusterMap({ r }: { r: SizingResult }) {
     <div>
       {rows.map((row) => (
         <EuiFlexGroup key={row.key} gutterSize="m" alignItems="center" responsive={false} style={{ padding: '3px 0' }}>
-          <EuiFlexItem grow={false} style={{ width: 200, whiteSpace: 'nowrap' }}>
+          <EuiFlexItem grow={false} style={{ width: 270, whiteSpace: 'nowrap' }}>
             <EuiText size="s">
               <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: roleColor(row.role), marginRight: 8 }} />
               <strong>{row.count}</strong> {ROLE_LABEL[row.role as keyof typeof ROLE_LABEL] ?? row.role}
             </EuiText>
             <EuiText size="xs" color="subdued" style={{ paddingLeft: 18 }}>
-              {fmtNum(row.ramGb)} GB{row.diskGb ? ` · ${fmtNum(row.diskGb, 0)} GB` : ''} · {fmtNum(row.vcpu, 0)} vCPU{!row.counted && ' · unlicensed'}
+              {fmtNum(row.ramGb)} GB memory{row.diskGb ? ` · ${fmtNum(row.diskGb, 0)} GB disk` : ''} · {fmtNum(row.vcpu, 0)} {row.vcpu === 1 ? 'core' : 'cores'}{!row.counted && ' · no license needed'}
             </EuiText>
           </EuiFlexItem>
           <EuiFlexItem><Tiles count={row.count} color={roleColor(row.role)} failover={row.data} /></EuiFlexItem>

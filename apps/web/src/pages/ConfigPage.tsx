@@ -14,14 +14,14 @@ import { download } from '../export.ts';
 
 const FILE_LABEL: Record<string, string> = {
   'storage.json': 'Storage, index ratios and tier ratios',
-  'memory.json': 'Memory, heap and node defaults',
-  'shards.json': 'Shards, masters and watermarks',
-  'overhead.json': 'Overhead nodes (masters, Kibana, APM, ML, Fleet)',
-  'fleet.json': 'Fleet Server scalability',
-  'knn.json': 'Vector search (kNN)',
-  'license.json': 'Licensing and license floor',
-  'ingest.json': 'Ingest / CPU heuristic',
-  'federal.json': 'Federal',
+  'memory.json': 'Memory and node size defaults',
+  'shards.json': 'Shards, master nodes and disk-full limits',
+  'overhead.json': 'Supporting nodes (master, Kibana, APM, machine learning, Fleet)',
+  'fleet.json': 'Fleet Server capacity (agent management)',
+  'knn.json': 'Vector search (search by similarity)',
+  'license.json': 'Licensing and minimum license level',
+  'ingest.json': 'Ingest speed per processor core',
+  'federal.json': 'US government (federal) requirements',
 };
 
 /** Default prices for cost estimates. Browser-only: list prices have no public source, so they never go to the repo. */
@@ -31,9 +31,9 @@ function CostDefaultsPanel() {
     <EuiPanel hasBorder paddingSize="m">
       <EuiFlexGroup alignItems="baseline" gutterSize="s" responsive={false}>
         <EuiFlexItem grow={false}><EuiTitle size="xs"><h3>Cost defaults</h3></EuiTitle></EuiFlexItem>
-        <EuiFlexItem grow={false}><EuiText size="xs" color="subdued">US dollars · this browser only, not written to the repo</EuiText></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiText size="xs" color="subdued">US dollars · saved in this browser only, never in the project files</EuiText></EuiFlexItem>
       </EuiFlexGroup>
-      <EuiText size="xs" color="subdued"><p>Every scenario uses these unless it sets its own price on the Total cost page. Leave a price blank to leave that component out.</p></EuiText>
+      <EuiText size="xs" color="subdued"><p>Every scenario uses these prices unless it sets its own on the Total cost page. Leave a price blank to leave that item out of the totals.</p></EuiText>
       <EuiSpacer size="s" />
       <CostRatesForm value={defaults} onChange={setDefaults} />
     </EuiPanel>
@@ -120,7 +120,7 @@ export function ConfigPage() {
     try {
       const parsed = JSON.parse(await f.text()) as { overrides?: Constant[] } | Constant[];
       const list = Array.isArray(parsed) ? parsed : parsed.overrides;
-      if (!Array.isArray(list)) throw new Error('Expected an overrides export');
+      if (!Array.isArray(list)) throw new Error('This is not a file exported from this page');
       const next: Overrides = { ...overrides };
       for (const c of list) if (c && typeof c.key === 'string') next[c.key] = c;
       replaceAll(next);
@@ -132,7 +132,7 @@ export function ConfigPage() {
 
   const columns: EuiBasicTableColumn<Row>[] = [
     {
-      name: 'Key', width: '22em',
+      name: 'Name', width: '22em',
       render: (r: Row) => (
         <div>
           <EuiCode>{r.shipped.key}</EuiCode>
@@ -145,7 +145,7 @@ export function ConfigPage() {
       render: (r: Row) => (
         <div>
           <EuiText size="s"><strong>{formatValue(r.current.value)}</strong> <span style={{ opacity: 0.7 }}>{r.current.unit}</span></EuiText>
-          {r.overridden && <EuiText size="xs" color="subdued">shipped: {formatValue(r.shipped.value)}</EuiText>}
+          {r.overridden && <EuiText size="xs" color="subdued">original: {formatValue(r.shipped.value)}</EuiText>}
         </div>
       ),
     },
@@ -163,8 +163,8 @@ export function ConfigPage() {
         return (
           <div>
             <EuiLink href={r.current.source_url} target="_blank" external>{new URL(r.current.source_url).pathname.split('/').filter(Boolean).pop() ?? 'source'}</EuiLink>
-            <EuiText size="xs" color="subdued">as of {r.current.as_of_date} · stack {r.current.stack_version}</EuiText>
-            {days <= EXPIRING_DAYS && <EuiBadge color={days < 0 ? 'danger' : 'warning'}>{days < 0 ? 'expired' : `CI fails in ${days} d`}</EuiBadge>}
+            <EuiText size="xs" color="subdued">checked {r.current.as_of_date} · Elastic {r.current.stack_version}</EuiText>
+            {days <= EXPIRING_DAYS && <EuiBadge color={days < 0 ? 'danger' : 'warning'}>{days < 0 ? 'source date too old' : `re-check within ${days} days`}</EuiBadge>}
           </div>
         );
       },
@@ -173,8 +173,8 @@ export function ConfigPage() {
       name: 'Status', width: '10em',
       render: (r: Row) => (
         <EuiFlexGroup gutterSize="xs" wrap responsive={false}>
-          {r.overridden && <EuiFlexItem grow={false}><EuiBadge color="primary">overridden</EuiBadge></EuiFlexItem>}
-          {r.current.carried_forward && <EuiFlexItem grow={false}><EuiBadge color="hollow">carried forward</EuiBadge></EuiFlexItem>}
+          {r.overridden && <EuiFlexItem grow={false}><EuiBadge color="primary">changed here</EuiBadge></EuiFlexItem>}
+          {r.current.carried_forward && <EuiFlexItem grow={false}><EuiBadge color="hollow">not re-checked</EuiBadge></EuiFlexItem>}
         </EuiFlexGroup>
       ),
     },
@@ -187,7 +187,7 @@ export function ConfigPage() {
           </EuiFlexItem>
           {r.overridden && (
             <EuiFlexItem grow={false}>
-              <EuiToolTip content="Revert to shipped value"><EuiButtonIcon iconType="refresh" color="danger" aria-label={`Revert ${r.shipped.key}`} onClick={() => revert(r.shipped.key)} /></EuiToolTip>
+              <EuiToolTip content="Go back to the original value"><EuiButtonIcon iconType="refresh" color="danger" aria-label={`Revert ${r.shipped.key}`} onClick={() => revert(r.shipped.key)} /></EuiToolTip>
             </EuiFlexItem>
           )}
         </EuiFlexGroup>
@@ -198,10 +198,11 @@ export function ConfigPage() {
   return (
     <>
       <EuiCallOut size="s" iconType="info" title="How configuration changes work">
+        <p>Constants are the fixed numbers the calculator uses. Each one names the source it came from and how much to trust it.</p>
         <ul>
-          <li><strong>Apply</strong> puts a value into effect in this browser right away. The calculator shows a "custom constants" badge, a new constants hash, and lists the changed keys in its assumptions and exports.</li>
-          <li><strong>Write to repo</strong> saves the applied changes into <EuiCode>packages/constants/data/*.json</EuiCode> after the same checks CI runs. Commit the files to share them.</li>
-          <li>Every change needs an https source and a date within the last 12 months.</li>
+          <li><strong>Apply</strong> uses a new value in this browser straight away. The page header then shows a "changed settings" badge. Results list every changed value in their assumptions and exports.</li>
+          <li><strong>Write to repo</strong> saves the applied changes into the project's shared files. It first runs the same checks as the automated build. Commit the files to share them.</li>
+          <li>Every change needs a web link (https) to its source and a date within the last 12 months.</li>
         </ul>
       </EuiCallOut>
       <EuiSpacer size="m" />
@@ -210,29 +211,29 @@ export function ConfigPage() {
 
       <EuiFlexGroup gutterSize="s" alignItems="center" wrap>
         <EuiFlexItem style={{ minWidth: 240 }}>
-          <EuiFieldSearch compressed fullWidth placeholder="Search keys and notes" value={query} onChange={(e) => setQuery(e.target.value)} isClearable />
+          <EuiFieldSearch compressed fullWidth placeholder="Search names and notes" value={query} onChange={(e) => setQuery(e.target.value)} isClearable />
         </EuiFlexItem>
         <EuiFlexItem grow={false}>
           <EuiButtonGroup legend="Filter" buttonSize="compressed" idSelected={filter} onChange={(id) => setFilter(id as Filter)}
             options={[
               { id: 'all', label: 'All' },
-              { id: 'overridden', label: `Overridden (${overrideCount})` },
-              { id: 'carried', label: 'Carried forward' },
-              { id: 'expiring', label: 'Expiring' },
+              { id: 'overridden', label: `Changed here (${overrideCount})` },
+              { id: 'carried', label: 'Not re-checked' },
+              { id: 'expiring', label: 'Due for re-check' },
             ]} />
         </EuiFlexItem>
         <EuiFlexItem grow={false}>
           <EuiButtonEmpty size="s" iconType="export" isDisabled={overrideCount === 0}
             onClick={() => download('constant-overrides.json', JSON.stringify({ exportedAt: new Date().toISOString(), overrides: Object.values(overrides) }, null, 2), 'application/json')}>
-            Export overrides
+            Export changes
           </EuiButtonEmpty>
         </EuiFlexItem>
-        <EuiFlexItem grow={false}><EuiButtonEmpty size="s" iconType="upload" onClick={() => file.current?.click()}>Import overrides</EuiButtonEmpty></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiButtonEmpty size="s" iconType="upload" onClick={() => file.current?.click()}>Import changes</EuiButtonEmpty></EuiFlexItem>
         <EuiFlexItem grow={false}>
           <EuiButtonEmpty size="s" iconType="trash" color="danger" isDisabled={overrideCount === 0} onClick={() => setConfirmDiscard(true)}>Discard all</EuiButtonEmpty>
         </EuiFlexItem>
         <EuiFlexItem grow={false}>
-          <EuiToolTip content={writable ? 'Save applied changes into packages/constants/data' : 'Only available when running pnpm dev'}>
+          <EuiToolTip content={writable ? "Save applied changes into the project's shared files" : 'Only available when the app runs on your own computer (pnpm dev)'}>
             <EuiButton size="s" fill iconType="save" isDisabled={!writable || overrideCount === 0} isLoading={write.status === 'writing'} onClick={() => setConfirmWrite(true)}>
               Write {overrideCount || ''} to repo
             </EuiButton>
@@ -245,15 +246,15 @@ export function ConfigPage() {
       {write.status === 'done' && (
         <>
           <EuiSpacer size="s" />
-          <EuiCallOut size="s" color="success" iconType="check" title={write.written.length ? `Wrote ${write.written.join(', ')}` : 'Nothing to write: files already match'}>
-            {write.written.length > 0 && <p>Commit to share: <EuiCode>git add packages/constants/data && git commit</EuiCode></p>}
+          <EuiCallOut size="s" color="success" iconType="check" title={write.written.length ? `Saved ${write.written.join(', ')}` : 'Nothing to save: the files already match'}>
+            {write.written.length > 0 && <p>Commit the files to share them: <EuiCode>git add packages/constants/data && git commit</EuiCode></p>}
           </EuiCallOut>
         </>
       )}
       {write.status === 'failed' && (
         <>
           <EuiSpacer size="s" />
-          <EuiCallOut size="s" color="danger" iconType="error" title="Nothing was written">
+          <EuiCallOut size="s" color="danger" iconType="error" title="Nothing was saved">
             <ul>{write.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
           </EuiCallOut>
         </>
@@ -286,21 +287,21 @@ export function ConfigPage() {
       )}
       {confirmWrite && (
         <EuiConfirmModal
-          title={`Write ${overrideCount} constant${overrideCount === 1 ? '' : 's'} to the repo?`}
+          title={`Save ${overrideCount} constant${overrideCount === 1 ? '' : 's'} to the project files?`}
           onCancel={() => setConfirmWrite(false)} onConfirm={() => void doWrite()}
-          cancelButtonText="Cancel" confirmButtonText="Write files"
+          cancelButtonText="Cancel" confirmButtonText="Save files"
         >
-          <p>These keys will be replaced in <EuiCode>packages/constants/data</EuiCode>. The shipped constants hash changes and every result computed afterwards uses the new values.</p>
+          <p>These values will be replaced in the project's shared files. Every result calculated afterwards uses the new values, and its fingerprint (the constants hash) changes.</p>
           <ul>{Object.keys(overrides).map((k) => <li key={k}><EuiCode>{k}</EuiCode></li>)}</ul>
         </EuiConfirmModal>
       )}
       {confirmDiscard && (
         <EuiConfirmModal
-          title="Discard all overrides in this browser?" buttonColor="danger"
+          title="Discard all changes in this browser?" buttonColor="danger"
           onCancel={() => setConfirmDiscard(false)} onConfirm={() => { replaceAll({}); setConfirmDiscard(false); }}
           cancelButtonText="Keep" confirmButtonText="Discard"
         >
-          <p>The calculator goes back to the shipped constants. Files in the repo are not touched.</p>
+          <p>The calculator goes back to the original constants. The project files are not touched.</p>
         </EuiConfirmModal>
       )}
     </>

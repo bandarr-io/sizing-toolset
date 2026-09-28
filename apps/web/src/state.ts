@@ -40,11 +40,11 @@ export function isDefaultGrowth(f: ForwardRequest): boolean {
 /** One line for the folded Plan for growth step: "Sized for 3 years · Logs 20%/yr, Metrics 10%/yr". */
 export function growthSummary(c: ConstantSet, f: ForwardRequest): string {
   const rated = f.workloads.filter((w) => (w.growthPctPerYear ?? 0) > 0);
-  if (rated.length === 0) return "No growth rates set: sized for today's volume";
+  if (rated.length === 0) return "No growth set: sized for today's data";
   const years = f.options.growthHorizonYears ?? num(c, 'growth.default_horizon_years');
   const horizon = years === 0 ? 'Sized for today' : `Sized for ${years} year${years === 1 ? '' : 's'}`;
   const pct = (x: number) => x.toLocaleString('en-US', { maximumFractionDigits: 1 });
-  return `${horizon} · ${rated.map((w) => `${w.id} ${pct(w.growthPctPerYear!)}%/yr`).join(', ')}`;
+  return `${horizon} · ${rated.map((w) => `${w.id} ${pct(w.growthPctPerYear!)}% a year`).join(', ')}`;
 }
 
 /**
@@ -71,35 +71,35 @@ export type ModelOption = { value: DeploymentModel; text: string; disabled?: boo
 /** Default list; see modelOptionsFor for what each mode offers. */
 export const MODELS: ModelOption[] = [
   { value: 'self_managed', text: 'Self-managed' },
-  { value: 'eck', text: 'ECK (coming in v2)', disabled: true },
-  { value: 'ece', text: 'ECE (coming in v2)', disabled: true },
-  { value: 'ech', text: 'Elastic Cloud Hosted (coming in v2)', disabled: true },
-  { value: 'serverless', text: 'Serverless (coming in v2)', disabled: true },
+  { value: 'eck', text: 'ECK (coming later)', disabled: true },
+  { value: 'ece', text: 'ECE (coming later)', disabled: true },
+  { value: 'ech', text: 'Elastic Cloud Hosted (coming later)', disabled: true },
+  { value: 'serverless', text: 'Serverless (coming later)', disabled: true },
 ];
 
 export interface KindMeta { label: string; icon: string; blurb: string; stream: boolean }
 
 export const KINDS: Record<WorkloadKind, KindMeta> = {
-  logs: { label: 'Logs', icon: 'logoLogging', blurb: 'Application and infrastructure logs', stream: true },
-  siem: { label: 'Security', icon: 'logoSecurity', blurb: 'SIEM and security analytics', stream: true },
-  metrics: { label: 'Metrics', icon: 'logoMetrics', blurb: 'Time series metrics (TSDS)', stream: true },
-  apm: { label: 'APM', icon: 'apmApp', blurb: 'Traces and APM events', stream: true },
-  search: { label: 'Search', icon: 'logoEnterpriseSearch', blurb: 'Fixed content corpus', stream: false },
-  vector: { label: 'Vectors', icon: 'logoVectorDB', blurb: 'Dense vectors for kNN search', stream: false },
-  ml: { label: 'Machine learning', icon: 'machineLearningApp', blurb: 'Anomaly detection jobs, models', stream: false },
-  fleet: { label: 'Fleet agents', icon: 'fleetApp', blurb: 'Elastic Agents managed by Fleet', stream: false },
+  logs: { label: 'Logs', icon: 'logoLogging', blurb: 'Records of what apps and systems did', stream: true },
+  siem: { label: 'Security', icon: 'logoSecurity', blurb: 'Security events for spotting threats', stream: true },
+  metrics: { label: 'Metrics', icon: 'logoMetrics', blurb: 'Measurements over time, like CPU use', stream: true },
+  apm: { label: 'APM', icon: 'apmApp', blurb: 'Application performance monitoring data', stream: true },
+  search: { label: 'Search', icon: 'logoEnterpriseSearch', blurb: 'Documents to search, like a catalog', stream: false },
+  vector: { label: 'Vectors', icon: 'logoVectorDB', blurb: 'Numeric fingerprints for AI search', stream: false },
+  ml: { label: 'Machine learning', icon: 'machineLearningApp', blurb: 'Jobs that spot unusual activity', stream: false },
+  fleet: { label: 'Fleet agents', icon: 'fleetApp', blurb: 'Elastic Agents, which collect data on each machine', stream: false },
 };
 
 export const KIND_ORDER: WorkloadKind[] = ['logs', 'siem', 'metrics', 'apm', 'search', 'vector', 'ml', 'fleet'];
 
 export const SOLVES: { value: Solve; title: string; blurb: string; icon: string }[] = [
-  { value: 'max_gb_day', title: 'Max daily ingest', blurb: 'GB/day this hardware can retain', icon: 'storage' },
-  { value: 'max_retention', title: 'Max retention', blurb: 'Days of data at a given ingest', icon: 'clock' },
-  { value: 'years_to_capacity', title: 'Years until full', blurb: 'When growth outgrows this hardware', icon: 'timeline' },
-  { value: 'max_agents', title: 'Max Elastic Agents', blurb: 'Fleet Server and hot-tier limits', icon: 'fleetApp' },
-  { value: 'max_vectors', title: 'Max vectors', blurb: 'Off-heap memory and disk limits', icon: 'logoVectorDB' },
-  { value: 'max_shards', title: 'Max shards', blurb: 'Shards and data streams', icon: 'indexManagementApp' },
-  { value: 'max_ml_jobs', title: 'Max ML jobs', blurb: 'Anomaly detection capacity', icon: 'machineLearningApp' },
+  { value: 'max_gb_day', title: 'Most data per day', blurb: 'How many GB a day this hardware can keep', icon: 'storage' },
+  { value: 'max_retention', title: 'Longest retention', blurb: 'How many days of data it can keep', icon: 'clock' },
+  { value: 'years_to_capacity', title: 'Years until full', blurb: 'When growing data will fill this hardware', icon: 'timeline' },
+  { value: 'max_agents', title: 'Most Elastic Agents', blurb: 'How many data-collecting agents it can manage', icon: 'fleetApp' },
+  { value: 'max_vectors', title: 'Most vectors', blurb: 'How many AI search fingerprints fit', icon: 'logoVectorDB' },
+  { value: 'max_shards', title: 'Most shards', blurb: 'How many slices of data (shards) it can hold', icon: 'indexManagementApp' },
+  { value: 'max_ml_jobs', title: 'Most machine learning jobs', blurb: 'How many jobs that spot unusual activity it can run', icon: 'machineLearningApp' },
 ];
 
 /** Workload kinds that can be the subject of each reverse question. Empty = hardware-only question. */
@@ -288,9 +288,9 @@ export interface MultiSiteState {
 }
 
 export const RELATIONSHIPS: { value: SiteRelationship; title: string; blurb: string }[] = [
-  { value: 'independent', title: 'Independent', blurb: 'Each site keeps only what it ingests' },
-  { value: 'dr', title: 'Disaster recovery', blurb: 'One site ingests; standbys hold a copy' },
-  { value: 'active_active', title: 'Active-active', blurb: 'Every site holds every site\'s data' },
+  { value: 'independent', title: 'Independent', blurb: 'Each site keeps only its own data' },
+  { value: 'dr', title: 'Disaster recovery', blurb: 'One site takes in data. Standby sites keep a copy and take over if it fails.' },
+  { value: 'active_active', title: 'Active-active', blurb: 'Every site serves users and holds all the data' },
 ];
 
 export function siteName(i: number): string {
@@ -367,21 +367,21 @@ export const HOST_MODEL_VALUES: DeploymentModel[] = ['self_managed', 'eck', 'ece
  */
 export function modelOptionsFor(mode: Mode): ModelOption[] {
   const cloud: ModelOption[] = [
-    { value: 'ech', text: 'Elastic Cloud Hosted (coming in v2)', disabled: true },
-    { value: 'serverless', text: 'Serverless (coming in v2)', disabled: true },
+    { value: 'ech', text: 'Elastic Cloud Hosted (coming later)', disabled: true },
+    { value: 'serverless', text: 'Serverless (coming later)', disabled: true },
   ];
   if (mode === 'multisite' || mode === 'models') {
     return [
       { value: 'self_managed', text: 'Self-managed' },
       { value: 'eck', text: 'ECK (Kubernetes)' },
       { value: 'ece', text: 'ECE' },
-      ...cloud.map((o) => ({ ...o, text: o.text.replace('(coming in v2)', '(cloud; not on these servers)') })),
+      ...cloud.map((o) => ({ ...o, text: o.text.replace('(coming later)', "(Elastic's cloud, not your servers)") })),
     ];
   }
   return [
     { value: 'self_managed', text: 'Self-managed' },
-    { value: 'eck', text: 'ECK: compare on real servers →' },
-    { value: 'ece', text: 'ECE: compare on real servers →' },
+    { value: 'eck', text: 'ECK (Kubernetes): compare on your servers →' },
+    { value: 'ece', text: 'ECE (private cloud): compare on your servers →' },
     ...cloud,
   ];
 }

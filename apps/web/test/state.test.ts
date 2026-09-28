@@ -42,10 +42,10 @@ describe('Plan for growth folding', () => {
     const { growthSummary, isDefaultGrowth } = await import('../src/state.ts');
     const f = defaultState().forward;
     expect(isDefaultGrowth(f)).toBe(true);
-    expect(growthSummary(defaultConstants, f)).toMatch(/No growth rates set/);
+    expect(growthSummary(defaultConstants, f)).toMatch(/No growth set/);
     const grown = { ...f, workloads: [{ ...f.workloads[0]!, growthPctPerYear: 20 }], options: { ...f.options, growthHorizonYears: 3 } };
     expect(isDefaultGrowth(grown)).toBe(false);
-    expect(growthSummary(defaultConstants, grown)).toBe(`Sized for 3 years · ${f.workloads[0]!.id} 20%/yr`);
+    expect(growthSummary(defaultConstants, grown)).toBe(`Sized for 3 years · ${f.workloads[0]!.id} 20% a year`);
   });
 });
 

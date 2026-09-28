@@ -1,6 +1,8 @@
 import type { ConstantSet } from '@sizing/constants';
 import { forward, reverse, type MathStep, type SizingResult, type Tier } from '@sizing/engine';
 import { fmtMoney, fmtNum } from './format.ts';
+
+const DISK_NAME: Record<string, string> = { nvme: 'NVMe', ssd: 'SSD', hdd: 'HDD' };
 import { defaultDiskType, type AppState } from './state.ts';
 
 /** Local disk kinds that carry a price. Legacy 'object' node disks count as SSD (D26). */
@@ -85,7 +87,7 @@ export function subscriptionCost(r: SizingResult, rates: CostRates, discountPct?
   const pct = validDiscount(discountPct);
   const label = pct ? `Elastic subscription (${fmtNum(pct, 2)}% discount)` : 'Elastic subscription';
   if (r.licenseFloor === 'basic') return { part: 'subscription', label, annual: 0, math: [step('subscription (Basic)', 'no licensed features, no ERUs to buy', 0)] };
-  if (rates.eruPerYear === undefined) return { part: 'subscription', label, math: [], missing: 'price per ERU per year' };
+  if (rates.eruPerYear === undefined) return { part: 'subscription', label, math: [], missing: 'subscription price per ERU' };
   const eru = r.allSites.licenseUnits;
   const list = eru * rates.eruPerYear;
   const math = [step('subscription per year at list (Enterprise)', `${fmtNum(eru, 0)} ERU × ${fmtMoney(rates.eruPerYear)}`, list)];
@@ -100,12 +102,12 @@ export function subscriptionCost(r: SizingResult, rates: CostRates, discountPct?
 }
 
 function hardwareCost(nodes: NodeLine[], sites: number, rates: CostRates): CostLine {
-  const label = 'Hardware (amortized)';
+  const label = 'Hardware (spread over its life)';
   const types = [...new Set(nodes.filter((n) => n.diskGb > 0).map((n) => n.diskType))];
   const unpricedDisk = types.filter((t) => rates.diskPerTb?.[t] === undefined);
   if (rates.serverPerGbRam === undefined || !rates.amortYears || unpricedDisk.length) {
-    const need = [rates.serverPerGbRam === undefined && 'server price per GB RAM', !rates.amortYears && 'amortization years',
-      ...unpricedDisk.map((t) => `${t.toUpperCase()} price per TB`)].filter(Boolean);
+    const need = [rates.serverPerGbRam === undefined && 'server price per GB of memory', !rates.amortYears && 'hardware life in years',
+      ...unpricedDisk.map((t) => `${DISK_NAME[t]} disk price per TB`)].filter(Boolean);
     return { part: 'hardware', label, math: [], missing: need.join(', ') };
   }
   const ramGb = nodes.reduce((s, n) => s + n.count * n.ramGb, 0) * sites;
@@ -116,7 +118,7 @@ function hardwareCost(nodes: NodeLine[], sites: number, rates: CostRates): CostL
     const tb = nodes.filter((n) => n.diskType === t).reduce((s, n) => s + n.count * n.diskGb, 0) * sites / 1000;
     const cost = tb * rates.diskPerTb![t]!;
     disks += cost;
-    math.push(step(`${t.toUpperCase()} disks`, `${fmtNum(tb, 1)} TB × ${fmtMoney(rates.diskPerTb![t]!)}`, cost));
+    math.push(step(`${DISK_NAME[t]} disks`, `${fmtNum(tb, 1)} TB × ${fmtMoney(rates.diskPerTb![t]!)}`, cost));
   }
   const annual = (servers + disks) / rates.amortYears;
   math.push(step('hardware per year', `(${fmtMoney(servers)} + ${fmtMoney(disks)}) / ${rates.amortYears} years`, annual));
@@ -127,14 +129,14 @@ function objectCost(r: SizingResult, rates: CostRates): CostLine {
   const label = 'Object storage';
   const gb = (r.objectStorage?.gb ?? 0) * r.sites;
   if (gb === 0) return { part: 'object', label, annual: 0, math: [step('object storage', 'no cold or frozen data', 0)] };
-  if (rates.objectPerTbMonth === undefined) return { part: 'object', label, math: [], missing: 'object storage price per TB-month' };
+  if (rates.objectPerTbMonth === undefined) return { part: 'object', label, math: [], missing: 'object storage price per TB per month' };
   const annual = (gb / 1000) * rates.objectPerTbMonth * 12;
   return { part: 'object', label, annual, math: [step('object storage per year', `${fmtNum(gb / 1000, 1)} TB × ${fmtMoney(rates.objectPerTbMonth)} × 12 months`, annual)] };
 }
 
 function hostingCost(nodes: NodeLine[], sites: number, rates: CostRates): CostLine {
   const label = 'Hosting, power and rack';
-  if (rates.hostingPerNodeMonth === undefined) return { part: 'hosting', label, math: [], missing: 'hosting price per node-month' };
+  if (rates.hostingPerNodeMonth === undefined) return { part: 'hosting', label, math: [], missing: 'hosting price per node per month' };
   const count = nodes.reduce((s, n) => s + n.count, 0) * sites;
   const annual = count * rates.hostingPerNodeMonth * 12;
   return { part: 'hosting', label, annual, math: [step('hosting per year', `${count} nodes × ${fmtMoney(rates.hostingPerNodeMonth)} × 12 months`, annual)] };
@@ -143,10 +145,10 @@ function hostingCost(nodes: NodeLine[], sites: number, rates: CostRates): CostLi
 function opsCost(rates: CostRates): CostLine {
   const label = 'Operations staff';
   if (rates.opsFte === undefined || rates.opsCostPerFte === undefined) {
-    return { part: 'ops', label, math: [], missing: [rates.opsFte === undefined && 'FTEs', rates.opsCostPerFte === undefined && 'cost per FTE'].filter(Boolean).join(', ') };
+    return { part: 'ops', label, math: [], missing: [rates.opsFte === undefined && 'number of operations staff', rates.opsCostPerFte === undefined && 'cost per person'].filter(Boolean).join(', ') };
   }
   const annual = rates.opsFte * rates.opsCostPerFte;
-  return { part: 'ops', label, annual, math: [step('operations per year', `${fmtNum(rates.opsFte)} FTE × ${fmtMoney(rates.opsCostPerFte)}`, annual)] };
+  return { part: 'ops', label, annual, math: [step('operations per year', `${fmtNum(rates.opsFte)} people × ${fmtMoney(rates.opsCostPerFte)}`, annual)] };
 }
 
 /** One year of platform cost for a sized cluster. */

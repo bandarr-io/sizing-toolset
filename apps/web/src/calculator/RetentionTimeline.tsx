@@ -1,6 +1,6 @@
 import {
   EuiButtonEmpty, EuiButtonIcon, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldNumber, EuiFlexGroup, EuiFlexItem, EuiFormRow,
-  EuiPopover, EuiSpacer, EuiText,
+  EuiIcon, EuiPopover, EuiSpacer, EuiText, EuiToolTip,
 } from '@elastic/eui';
 import type { Tier } from '@sizing/engine';
 import { useState } from 'react';
@@ -11,12 +11,12 @@ const ORDER: Tier[] = ['hot', 'warm', 'cold', 'frozen'];
 const ADD_DAYS: Record<Tier, number> = { hot: 7, warm: 30, cold: 60, frozen: 335, content: 0 };
 
 const PRESETS: { label: string; value: Retention }[] = [
-  { label: '7 d hot', value: { hot: 7 } },
-  { label: '30 d hot', value: { hot: 30 } },
-  { label: '7 d hot, 83 d frozen (90 d)', value: { hot: 7, frozen: 83 } },
-  { label: '3 d hot, 27 d cold, 335 d frozen (1 year)', value: { hot: 3, cold: 27, frozen: 335 } },
-  { label: '7 d hot, 23 d cold, 335 d frozen (1 year)', value: { hot: 7, cold: 23, frozen: 335 } },
-  { label: '30 d hot, 335 d frozen (1 year)', value: { hot: 30, frozen: 335 } },
+  { label: '7 days hot', value: { hot: 7 } },
+  { label: '30 days hot', value: { hot: 30 } },
+  { label: '7 days hot, 83 days frozen (90 days)', value: { hot: 7, frozen: 83 } },
+  { label: '3 days hot, 27 days cold, 335 days frozen (1 year)', value: { hot: 3, cold: 27, frozen: 335 } },
+  { label: '7 days hot, 23 days cold, 335 days frozen (1 year)', value: { hot: 7, cold: 23, frozen: 335 } },
+  { label: '30 days hot, 335 days frozen (1 year)', value: { hot: 30, frozen: 335 } },
 ];
 
 export function humanDays(days: number): string {
@@ -37,7 +37,7 @@ export function RetentionStrip({ value }: { value: Retention }) {
   if (tiers.length === 0) return null;
   return (
     <div style={{ display: 'flex', height: 8, width: 120, borderRadius: 4, overflow: 'hidden', gap: 1 }}
-      title={tiers.map((t) => `${TIER_LABEL[t]} ${value[t]} d`).join(', ')}>
+      title={tiers.map((t) => `${TIER_LABEL[t]} ${value[t]} days`).join(', ')}>
       {tiers.map((t) => <div key={t} style={{ flexGrow: visualWeight(value[t]!), flexBasis: 0, background: TIER_COLOR[t] }} />)}
     </div>
   );
@@ -69,12 +69,12 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
     <div>
       <EuiFlexGroup alignItems="center" justifyContent="spaceBetween" responsive={false} gutterSize="s">
         <EuiFlexItem grow={false}>
-          <EuiText size="xs"><strong>Retention</strong>{known > 0 && <span style={{ opacity: 0.75 }}> · {known} days{humanDays(known) !== `${known} days` ? ` (${humanDays(known)})` : ''}{solving ? ' + solved tier' : ''}</span>}</EuiText>
+          <EuiText size="xs"><EuiToolTip content="Data moves along these shelves (tiers) as it ages. Hot keeps the newest data on fast disks. Warm uses cheaper disks. Cold and frozen keep older data in cheap object storage, which is slower to search."><strong>How long data is kept <EuiIcon type="question" size="s" /></strong></EuiToolTip>{known > 0 && <span style={{ opacity: 0.75 }}> · {known} days{humanDays(known) !== `${known} days` ? ` (${humanDays(known)})` : ''}{solving ? ' + the tier being worked out' : ''}</span>}</EuiText>
         </EuiFlexItem>
         <EuiFlexItem grow={false}>
           <EuiPopover
             isOpen={presetsOpen} closePopover={() => setPresetsOpen(false)} panelPaddingSize="none" anchorPosition="downRight"
-            button={<EuiButtonEmpty size="xs" iconType="clock" iconSide="left" onClick={() => setPresetsOpen(!presetsOpen)}>Presets</EuiButtonEmpty>}
+            button={<EuiButtonEmpty size="xs" iconType="clock" iconSide="left" onClick={() => setPresetsOpen(!presetsOpen)}>Common setups</EuiButtonEmpty>}
           >
             <EuiContextMenuPanel items={PRESETS.map((p) => (
               <EuiContextMenuItem key={p.label} onClick={() => { onChange(p.value); setPresetsOpen(false); }}>{p.label}</EuiContextMenuItem>
@@ -85,13 +85,13 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
       <EuiSpacer size="xs" />
 
       <div style={{ display: 'flex', height: 30, borderRadius: 6, overflow: 'hidden', gap: 2 }} role="img"
-        aria-label={enabled.map((t) => `${TIER_LABEL[t]} ${t === solving ? 'solved' : `${value[t] ?? 0} days`}`).join(', ')}>
+        aria-label={enabled.map((t) => `${TIER_LABEL[t]} ${t === solving ? 'is the answer' : `${value[t] ?? 0} days`}`).join(', ')}>
         {enabled.map((t) => {
           const days = value[t] ?? 0;
           const isSolving = t === solving;
           const weight = isSolving ? (knownWeight > 0 ? knownWeight * 0.5 : 1) : visualWeight(days);
           return (
-            <div key={t} title={`${TIER_LABEL[t]} · ${isSolving ? 'solved' : `${days} days`}`} style={{
+            <div key={t} title={`${TIER_LABEL[t]} · ${isSolving ? 'this is the answer' : `${days} days`}`} style={{
               flexGrow: weight, flexShrink: 1, flexBasis: 'auto', minWidth: 0, boxSizing: 'border-box',
               padding: '0 12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#fff', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -118,7 +118,7 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
               : undefined}
           >
             {t === solving
-              ? <EuiFieldNumber fullWidth disabled value="" placeholder="solved" append="days" aria-label={`${t} days (solved)`} />
+              ? <EuiFieldNumber fullWidth disabled value="" placeholder="answer" append="days" aria-label={`${t} days (the answer)`} />
               : <EuiFieldNumber fullWidth value={value[t] ?? ''} min={t === 'hot' ? 1 : 0} append="days" aria-label={`${t} days`}
                   onChange={(e) => set(t, e.target.value === '' ? undefined : Number(e.target.value))} />}
           </EuiFormRow>
@@ -129,13 +129,13 @@ export function RetentionTimeline({ value, onChange, solving, onSolvingChange }:
       <EuiFlexGroup gutterSize="s" alignItems="center" wrap responsive={false}>
         {missing.map((t) => (
           <EuiFlexItem grow={false} key={t}>
-            <EuiButtonEmpty size="xs" iconType="plusCircle" onClick={() => set(t, ADD_DAYS[t])}>{TIER_LABEL[t]} tier</EuiButtonEmpty>
+            <EuiButtonEmpty size="xs" iconType="plusCircle" onClick={() => set(t, ADD_DAYS[t])}>Add {TIER_LABEL[t].toLowerCase()} tier</EuiButtonEmpty>
           </EuiFlexItem>
         ))}
         {onSolvingChange && enabled.length > 1 && (
           <EuiFlexItem grow={false}>
             <EuiText size="xs" color="subdued">
-              Solving for:{' '}
+              Work out the days for:{' '}
               {ORDER.filter((t) => t === solving || enabled.includes(t)).map((t) => (
                 <EuiButtonEmpty key={t} size="xs" color={t === solving ? 'primary' : 'text'} isSelected={t === solving}
                   onClick={() => onSolvingChange(t)} style={{ fontWeight: t === solving ? 700 : 400 }}>

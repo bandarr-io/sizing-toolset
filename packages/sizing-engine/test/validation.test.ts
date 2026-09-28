@@ -37,7 +37,7 @@ describe('§5.7 hardware validation', () => {
   it('HV4: mem:disk outside the tier band warns with the effective ratio', () => {
     const w = run({ groups: [hot(3, { diskGb: 64 * 50 })] });
     expect(ids(w)).toContain('HV4/warn');
-    expect(w.find((x) => x.id === 'HV4')!.message).toMatch(/1:50/);
+    expect(w.find((x) => x.id === 'HV4')!.message).toMatch(/looks after 50 GB of disk/);
     const warm: NodeGroup = { role: 'warm', count: 2, ramGb: 64, diskGb: 64 * 90, diskType: 'ssd', vcpu: 8 };
     expect(ids(run({ groups: [hot(3), warm] }))).toContain('HV4/warn');
   });
@@ -79,7 +79,7 @@ describe('§5.7 hardware validation', () => {
     const big = { indices: 1, nonFrozenShards: 2, frozenShards: 0, shardSizes: [{ profileId: 'x', tier: 'hot' as const, shardGb: 300, primaries: 1, basis: 'fixed' as const }], math: [] };
     const w = run({ shards: big });
     expect(ids(w)).toContain('HV8/warn');
-    expect(w.find((x) => x.id === 'HV8')!.message).toMatch(/≥ 6 primaries/);
+    expect(w.find((x) => x.id === 'HV8')!.message).toMatch(/at least 6 primary shards/);
   });
 
   it('HV9: single node per tier with replicas ≥ 1 is an error', () => {

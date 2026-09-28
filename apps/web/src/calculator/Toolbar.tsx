@@ -7,6 +7,10 @@ import { migrate } from '../migrate.ts';
 import type { AppState, Mode } from '../state.ts';
 import { deleteNamed, listSaved, saveNamed, type SavedScenario } from '../storage.ts';
 
+const MODE_LABEL: Record<Mode, string> = {
+  forward: 'Size a workload', reverse: 'Test hardware limits', multisite: 'Multiple sites', models: 'Compare models',
+};
+
 export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, onExportJson, canExport }: {
   state: AppState;
   onMode: (m: Mode) => void;
@@ -30,7 +34,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
     try {
       const parsed = JSON.parse(await f.text()) as { scenario?: unknown };
       const s = migrate(parsed.scenario ?? parsed);
-      if (s) { onLoad(s); say(`Imported "${s.name}"`); } else say('Not a scenario export');
+      if (s) { onLoad(s); say(`Imported "${s.name}"`); } else say('That file is not a saved scenario');
     } catch {
       say('Could not read that file');
     }
@@ -43,10 +47,10 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
         <EuiButtonGroup
           legend="What are you doing?" buttonSize="m" color="primary" idSelected={state.mode} onChange={(id) => onMode(id as Mode)}
           options={[
-            { id: 'forward', label: 'Size a workload', iconType: 'logoElasticsearch' },
-            { id: 'reverse', label: 'Test hardware limits', iconType: 'compute' },
-            { id: 'multisite', label: 'Multiple sites', iconType: 'globe' },
-            { id: 'models', label: 'Compare models', iconType: 'cluster' },
+            { id: 'forward', label: MODE_LABEL.forward, iconType: 'logoElasticsearch' },
+            { id: 'reverse', label: MODE_LABEL.reverse, iconType: 'compute' },
+            { id: 'multisite', label: MODE_LABEL.multisite, iconType: 'globe' },
+            { id: 'models', label: MODE_LABEL.models, iconType: 'cluster' },
           ]}
         />
       </EuiFlexItem>
@@ -69,7 +73,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
                   <EuiFlexGroup key={s.name} gutterSize="xs" alignItems="center" responsive={false} style={{ padding: '6px 12px' }}>
                     <EuiFlexItem>
                       <EuiButtonEmpty size="s" flush="left" onClick={() => { onLoad(s.state); setOpenList(false); }}>{s.name}</EuiButtonEmpty>
-                      <EuiText size="xs" color="subdued">{s.savedAt.slice(0, 16).replace('T', ' ')} · {s.state.mode === 'forward' ? 'sizing' : 'hardware limits'}</EuiText>
+                      <EuiText size="xs" color="subdued">{s.savedAt.slice(0, 16).replace('T', ' ')} · {MODE_LABEL[s.state.mode]}</EuiText>
                     </EuiFlexItem>
                     <EuiFlexItem grow={false}>
                       <EuiButtonIcon iconType="trash" color="danger" aria-label={`Delete ${s.name}`} onClick={() => setSaved(deleteNamed(s.name))} />
@@ -83,8 +87,8 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
             <EuiPopover isOpen={openExport} closePopover={() => setOpenExport(false)} panelPaddingSize="none" anchorPosition="downRight"
               button={<EuiButtonEmpty size="s" iconType="export" isDisabled={!canExport} onClick={() => setOpenExport(!openExport)}>Export</EuiButtonEmpty>}>
               <EuiContextMenuPanel items={[
-                <EuiContextMenuItem key="md" icon="document" onClick={() => { onExportMd(); setOpenExport(false); }}>Markdown (customer-ready)</EuiContextMenuItem>,
-                <EuiContextMenuItem key="json" icon="export" onClick={() => { onExportJson(); setOpenExport(false); }}>JSON (reproducible)</EuiContextMenuItem>,
+                <EuiContextMenuItem key="md" icon="document" onClick={() => { onExportMd(); setOpenExport(false); }}>Document for the customer (Markdown)</EuiContextMenuItem>,
+                <EuiContextMenuItem key="json" icon="export" onClick={() => { onExportJson(); setOpenExport(false); }}>Data file that reloads exactly (JSON)</EuiContextMenuItem>,
               ]} />
             </EuiPopover>
           </EuiFlexItem>
@@ -92,7 +96,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
             <EuiPopover isOpen={openMore} closePopover={() => setOpenMore(false)} panelPaddingSize="none" anchorPosition="downRight"
               button={<EuiToolTip content="More"><EuiButtonIcon iconType="boxesVertical" aria-label="More scenario actions" onClick={() => setOpenMore(!openMore)} /></EuiToolTip>}>
               <EuiContextMenuPanel items={[
-                <EuiContextMenuItem key="imp" icon="upload" onClick={() => { file.current?.click(); setOpenMore(false); }}>Import JSON…</EuiContextMenuItem>,
+                <EuiContextMenuItem key="imp" icon="upload" onClick={() => { file.current?.click(); setOpenMore(false); }}>Import a data file (JSON)…</EuiContextMenuItem>,
                 <EuiContextMenuItem key="reset" icon="refresh" onClick={() => { onReset(); setOpenMore(false); }}>Start over with defaults</EuiContextMenuItem>,
               ]} />
             </EuiPopover>

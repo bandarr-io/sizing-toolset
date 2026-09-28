@@ -3,11 +3,12 @@ import {
 } from '@elastic/eui';
 import { nodesPerServer, type DiskType, type NodeGroup, type ServerGroup } from '@sizing/engine';
 import { useState } from 'react';
+import { num } from '@sizing/constants';
 import { useConstants } from '../constantsStore.tsx';
 import { fmtNum } from '../format.ts';
 import { GROUP_DEFAULTS } from '../state.ts';
 import { ROLE_LABEL, roleColor } from '../ui/tiers.ts';
-import { DISK_TYPES } from './NodeSizes.tsx';
+import { DISK_TYPES, DISK_TYPES_HELP } from './NodeSizes.tsx';
 
 const ROLES: NodeGroup['role'][] = ['hot', 'warm', 'cold', 'frozen', 'content', 'master', 'ml', 'coordinating', 'kibana', 'fleet', 'apm'];
 const cell = { padding: '6px 4px', verticalAlign: 'middle' as const };
@@ -47,8 +48,8 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
           </colgroup>
           <thead>
             <tr>
-              <th style={head}>Role</th><th style={head}>Servers</th><th style={head}>RAM (GB)</th><th style={head}>Disk (GB)</th>
-              <th style={head}>Disk type</th><th style={head}>vCPU</th><th style={head}>Nodes / server</th><th />
+              <th style={head}>Role</th><th style={head}>Servers</th><th style={head}>Memory (GB)</th><th style={head}>Disk (GB)</th>
+              <th style={head}>Disk type</th><th style={head}>Cores</th><th style={head}>Nodes / server</th><th />
             </tr>
           </thead>
           <tbody>
@@ -66,10 +67,10 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
                     </div>
                   </td>
                   <td style={cell}><EuiFieldNumber compressed aria-label="Servers" min={0} value={g.count} onChange={(e) => set(i, { count: n(e.target.value) })} /></td>
-                  <td style={cell}><EuiFieldNumber compressed aria-label="Server RAM GB" value={g.ramGb} onChange={(e) => set(i, { ramGb: n(e.target.value) })} /></td>
+                  <td style={cell}><EuiFieldNumber compressed aria-label="Server memory GB" value={g.ramGb} onChange={(e) => set(i, { ramGb: n(e.target.value) })} /></td>
                   <td style={cell}><EuiFieldNumber compressed aria-label="Server disk GB" value={g.diskGb} onChange={(e) => set(i, { diskGb: n(e.target.value) })} /></td>
                   <td style={cell}><EuiSelect compressed aria-label="Disk type" options={DISK_TYPES} value={g.diskType} onChange={(e) => set(i, { diskType: e.target.value as DiskType })} /></td>
-                  <td style={cell}><EuiFieldNumber compressed aria-label="Server vCPU" value={g.vcpu} onChange={(e) => set(i, { vcpu: n(e.target.value) })} /></td>
+                  <td style={cell}><EuiFieldNumber compressed aria-label="Server CPU cores" value={g.vcpu} onChange={(e) => set(i, { vcpu: n(e.target.value) })} /></td>
                   <td style={cell}>
                     <EuiFieldNumber compressed aria-label="Nodes per server" min={1} step={1} placeholder={`auto ${auto}`}
                       value={g.nodesPerServer ?? ''} isInvalid={!valid}
@@ -89,7 +90,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
                   <td />
                   <td colSpan={7} style={{ padding: '0 6px 8px' }}>
                     <EuiText size="xs" color="subdued">
-                      {ok ? `${g.count * nps} nodes: ${nps} per server of ${fmtNum(g.ramGb / nps)} GB RAM, ${fmtNum(g.diskGb / nps, 0)} GB disk, ${fmtNum(g.vcpu / nps, 1)} vCPU` : 'Nodes per server must be a whole number of at least 1'}
+                      {ok ? `${g.count * nps} nodes: ${nps} per server of ${fmtNum(g.ramGb / nps)} GB memory, ${fmtNum(g.diskGb / nps, 0)} GB disk, ${fmtNum(g.vcpu / nps, 1)} cores` : 'Nodes per server must be a whole number of at least 1'}
                     </EuiText>
                   </td>
                 </tr>
@@ -110,7 +111,7 @@ export function ServerGroups({ servers, onChange }: { servers: ServerGroup[]; on
           ))} />
         </EuiPopover>
         <EuiText size="xs" color="subdued">
-          {total} servers. Nodes per server defaults to RAM ÷ 64 GB for data servers; masters, frozen, ML, Kibana, Fleet and APM run one per server. Failover reserves a whole server per tier.
+          {total} servers. A node is one running copy of Elasticsearch. Data servers get one node per {num(c, 'node_ram_practical_max_gb')} GB of memory. Master, frozen, machine learning, Kibana, Fleet and APM servers run one node each. One whole server per tier is kept spare in case another fails. {DISK_TYPES_HELP}
         </EuiText>
       </div>
     </>

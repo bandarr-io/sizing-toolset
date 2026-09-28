@@ -159,15 +159,15 @@ export function serverLayout(c: ConstantSet, g: ServerGroup, model: HostModel = 
 }
 
 const MODEL_TEXT: Record<HostModel, (c: ConstantSet) => string> = {
-  self_managed: (c) => `Self-managed: data servers split into nodes of at most ${num(c, 'node_ram_practical_max_gb')} GB; frozen, ML, masters, Kibana, Fleet and APM run one node per server unless nodes per server is set.`,
-  eck: (c) => `ECK: each server keeps ${num(c, 'eck.k8s_reserve_ram_gb')} GB RAM and ${num(c, 'eck.k8s_reserve_vcpu')} vCPU for Kubernetes; the rest is split into pods of at most ${num(c, 'node_ram_practical_max_gb')} GB. The Kubernetes control plane is not counted.`,
-  ece: (c) => `ECE: master-role servers are the ${num(c, 'ece.control_plane_hosts')} control-plane hosts (${num(c, 'ece.control_plane_ram_gb')} GB each for coordinator, director and proxy); allocators are planned to ${num(c, 'ece.allocator_planning_fraction') * 100}% of RAM with instances of at most ${num(c, 'node_ram_practical_max_gb')} GB.`,
+  self_managed: (c) => `Self-managed (installed directly on the servers): each data server runs nodes of up to ${num(c, 'node_ram_practical_max_gb')} GB of memory. Frozen, machine learning, master, Kibana, Fleet and APM servers run one node each, unless you set nodes per server.`,
+  eck: (c) => `ECK (Elasticsearch in containers managed by Kubernetes): each server keeps ${num(c, 'eck.k8s_reserve_ram_gb')} GB of memory and ${num(c, 'eck.k8s_reserve_vcpu')} core for Kubernetes. The rest is split into containers of up to ${num(c, 'node_ram_practical_max_gb')} GB. The servers that run Kubernetes itself are not counted.`,
+  ece: (c) => `ECE (Elastic's private-cloud platform): the master servers become the ${num(c, 'ece.control_plane_hosts')} control-plane hosts that run ECE itself, needing ${num(c, 'ece.control_plane_ram_gb')} GB of memory each. The other servers host Elasticsearch, filled to ${num(c, 'ece.allocator_planning_fraction') * 100}% of their memory with nodes of up to ${num(c, 'node_ram_practical_max_gb')} GB.`,
 };
 
 const RELATIONSHIP_TEXT: Record<SiteRelationship, string> = {
-  independent: 'Independent clusters: each site holds only the data it ingests.',
-  dr: 'Disaster recovery: the primary site ingests; each standby follows it with cross-cluster replication and holds the same data.',
-  active_active: 'Active-active: each site ingests its own data and follows the others, so every site holds all sites\' data.',
+  independent: 'Independent clusters: each site keeps only the data it takes in.',
+  dr: 'Disaster recovery: the main site takes in data. Each standby site keeps a copy, ready to take over if the main site fails.',
+  active_active: 'Active-active: each site takes in its own data and copies the others, so every site holds all the data.',
 };
 
 /** The workloads whose data a site must hold, with followed data labelled by its source site. */
@@ -428,24 +428,24 @@ export const HOST_MODELS: HostModel[] = ['self_managed', 'eck', 'ece'];
 function requirementsFor(c: ConstantSet, model: HostModel): string[] {
   if (model === 'eck') {
     return [
-      'Needs a Kubernetes platform and the skills to run it; the Kubernetes control plane is not counted here.',
-      `Keeps ${num(c, 'eck.k8s_reserve_ram_gb')} GB RAM and ${num(c, 'eck.k8s_reserve_vcpu')} vCPU per server for Kubernetes, plus ${num(c, 'eck.operator_ram_gb')} GB for the operator.`,
-      'Licenses pod memory limits (GiB); Elastic Agent and Beats pods are free.',
-      'Works air-gapped with a private image registry.',
+      'Needs Kubernetes and a team that knows how to run it. The servers that run Kubernetes itself are not counted here.',
+      `Keeps ${num(c, 'eck.k8s_reserve_ram_gb')} GB of memory and ${num(c, 'eck.k8s_reserve_vcpu')} core per server for Kubernetes, plus ${num(c, 'eck.operator_ram_gb')} GB for the ECK manager.`,
+      'The license counts the memory given to each Elasticsearch container. Elastic Agent and Beats containers are free.',
+      'Works without internet if you keep a private copy of the container images.',
     ];
   }
   if (model === 'ece') {
     return [
-      `Needs ${num(c, 'ece.control_plane_hosts')} control-plane hosts with at least ${num(c, 'ece.control_plane_ram_gb')} GB RAM each.`,
-      'Licenses the full RAM of every allocator host used, busy or not.',
-      `Plans allocators to ${num(c, 'ece.allocator_planning_fraction') * 100}% of RAM; gives a UI and API for many clusters, upgrades and snapshots.`,
-      'Works air-gapped with an offline install.',
+      `Needs ${num(c, 'ece.control_plane_hosts')} control-plane hosts (servers that run ECE itself) with at least ${num(c, 'ece.control_plane_ram_gb')} GB of memory each.`,
+      'The license counts all the memory of every server hosting Elasticsearch, busy or not.',
+      `Fills those servers to ${num(c, 'ece.allocator_planning_fraction') * 100}% of their memory. Gives one screen to run many clusters, upgrades and backups.`,
+      'Works without internet using an offline install.',
     ];
   }
   return [
     'You install, upgrade, secure and scale Elasticsearch yourself.',
-    'Least overhead per server; licenses node RAM of Elasticsearch, Kibana and APM.',
-    'Works air-gapped.',
+    'Uses the least of each server for itself. The license counts the memory of Elasticsearch, Kibana and APM nodes.',
+    'Works without internet.',
   ];
 }
 

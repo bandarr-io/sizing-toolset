@@ -89,7 +89,7 @@ function ValueEditor({ keyName, value, onChange }: { keyName: string; value: unk
     <EuiFormRow label="Value (JSON)" isInvalid={!!jsonError} error={jsonError} fullWidth>
       <EuiTextArea fullWidth rows={10} value={json} isInvalid={!!jsonError} onChange={(e) => {
         setJson(e.target.value);
-        try { onChange(JSON.parse(e.target.value)); setJsonError(undefined); } catch { setJsonError('Not valid JSON'); }
+        try { onChange(JSON.parse(e.target.value)); setJsonError(undefined); } catch { setJsonError('This is not valid JSON, the data format used for this value'); }
       }} />
     </EuiFormRow>
   );
@@ -126,7 +126,7 @@ export function ConstantEditor({ shipped, current, onSave, onClose }: {
       <EuiFlyoutHeader hasBorder>
         <EuiTitle size="s"><h2 id="edit-constant-title">Edit <EuiCode>{shipped.key}</EuiCode></h2></EuiTitle>
         <EuiText size="s" color="subdued">
-          <p>Shipped value: <strong>{formatValue(shipped.value)}</strong> {shipped.unit} · as of {shipped.as_of_date}</p>
+          <p>Original value: <strong>{formatValue(shipped.value)}</strong> {shipped.unit} · checked {shipped.as_of_date}</p>
         </EuiText>
       </EuiFlyoutHeader>
       <EuiFlyoutBody>
@@ -134,32 +134,32 @@ export function ConstantEditor({ shipped, current, onSave, onClose }: {
         <EuiSpacer size="s" />
         <ValueEditor keyName={shipped.key} value={draft.value} onChange={setValue} />
         <EuiSpacer size="l" />
-        <EuiTitle size="xxs"><h3>Provenance</h3></EuiTitle>
-        <EuiText size="xs" color="subdued"><p>Required for every change. These fields are what CI checks and what "show the math" cites.</p></EuiText>
+        <EuiTitle size="xxs"><h3>Where this value comes from</h3></EuiTitle>
+        <EuiText size="xs" color="subdued"><p>Required for every change. The automated checks read these fields, and "Show the math" quotes them.</p></EuiText>
         <EuiSpacer size="s" />
-        <EuiFormRow label="Source URL" helpText="https link that supports this value" fullWidth>
+        <EuiFormRow label="Source link" helpText="A web link (https) to the page that supports this value" fullWidth>
           <EuiFieldText fullWidth value={draft.source_url} onChange={(e) => set({ source_url: e.target.value.trim() })} />
         </EuiFormRow>
         <EuiFlexGroup gutterSize="m">
           <EuiFlexItem>
-            <EuiFormRow label="As of date" helpText="Must be within the last 12 months">
+            <EuiFormRow label="Checked on" helpText="The day you checked the source, within the last 12 months">
               <EuiFieldText type="date" value={draft.as_of_date} max={today} onChange={(e) => { setDateTouched(true); set({ as_of_date: e.target.value }); }} />
             </EuiFormRow>
           </EuiFlexItem>
           <EuiFlexItem>
-            <EuiFormRow label="Confidence">
+            <EuiFormRow label="Confidence" helpText="How much to trust this value">
               <EuiSelect value={draft.confidence} onChange={(e) => set({ confidence: e.target.value as Confidence })}
                 options={[{ value: 'high', text: 'High' }, { value: 'medium', text: 'Medium' }, { value: 'low', text: 'Low' }]} />
             </EuiFormRow>
           </EuiFlexItem>
           <EuiFlexItem>
-            <EuiFormRow label="Stack version">
+            <EuiFormRow label="Elastic version">
               <EuiFieldText value={draft.stack_version} onChange={(e) => set({ stack_version: e.target.value })} />
             </EuiFormRow>
           </EuiFlexItem>
         </EuiFlexGroup>
         <EuiFormRow hasEmptyLabelSpace={false}>
-          <EuiSwitch label="Carried forward (not re-verified against the source)" checked={draft.carried_forward ?? false}
+          <EuiSwitch label="Not re-checked against the source (carried forward)" checked={draft.carried_forward ?? false}
             onChange={(e) => set({ carried_forward: e.target.checked })} />
         </EuiFormRow>
         <EuiFormRow label="Notes" fullWidth>

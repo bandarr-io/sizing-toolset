@@ -10,18 +10,18 @@ import { MODEL_NAMES } from '../state.ts';
 import { PIN_TOP, useFitsViewport } from './ResultsPanel.tsx';
 import { FitRow } from './TopologyPanel.tsx';
 
-const BEST_TEXT: Record<BestOn, string> = { eru: 'fewest license units', headroom: 'most headroom', servers: 'fewest servers' };
+const BEST_TEXT: Record<BestOn, string> = { eru: 'fewest license units', headroom: 'most spare room', servers: 'fewest servers' };
 
 /** Under ECE the master-role servers are the control-plane hosts. */
 const roleText = (r: ModelRow) => {
   const role = r.topology.headroom?.binding?.role ?? '';
-  return r.model === 'ece' && role === 'master' ? 'the control-plane hosts' : role;
+  return r.model === 'ece' && role === 'master' ? 'the ECE management servers' : role;
 };
 
 const headroomText = (r: ModelRow) => {
   const s = r.topology.headroom?.scale;
   if (s === undefined) return '–';
-  if (s === 0) return 'blocked';
+  if (s === 0) return 'does not fit';
   return Number.isFinite(s) ? `${fmtNum(s, 2)}×` : 'unlimited';
 };
 
@@ -44,8 +44,8 @@ export function ModelsPanel({ rows }: { rows: ModelRow[] }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ fontSize: 12, opacity: 0.75, textAlign: 'left' }}>
-              <th style={cell}>Model</th><th style={cell}>Fits</th><th style={{ ...cell, textAlign: 'right' }}>Headroom</th>
-              <th style={{ ...cell, textAlign: 'right' }}>Servers</th><th style={{ ...cell, textAlign: 'right' }}>ERU</th>
+              <th style={cell}>Model</th><th style={cell}>Fits</th><th style={{ ...cell, textAlign: 'right' }}>Spare room</th>
+              <th style={{ ...cell, textAlign: 'right' }}>Servers</th><th style={{ ...cell, textAlign: 'right' }}>License units</th>
             </tr>
           </thead>
           <tbody>
@@ -66,7 +66,8 @@ export function ModelsPanel({ rows }: { rows: ModelRow[] }) {
         </table>
         <EuiSpacer size="s" />
         <EuiText size="xs" color="subdued">
-          <EuiIcon type="starFilled" color="success" size="s" /> best on that measure among models that fit. No single winner: weigh license cost, headroom and what each model asks of the team.
+          <EuiIcon type="starFilled" color="success" size="s" /> marks the best on that measure among the models that fit. There is no single winner: weigh license cost, spare room and what each model asks of your team.
+          <br />Self-managed installs Elasticsearch directly on the servers. ECK runs it in containers managed by Kubernetes. ECE is Elastic's private-cloud platform, installed on your servers.
         </EuiText>
       </EuiPanel>
 
@@ -77,13 +78,13 @@ export function ModelsPanel({ rows }: { rows: ModelRow[] }) {
           {row.best.map((b) => <EuiFlexItem key={b} grow={false}><EuiBadge color="success">{BEST_TEXT[b]}</EuiBadge></EuiFlexItem>)}
         </EuiFlexGroup>
         <EuiText size="xs" color="subdued">
-          {hot ? `${hot.nodesPerServer} Elasticsearch node${hot.nodesPerServer === 1 ? '' : 's'} per hot server · ` : ''}
+          {hot ? `${hot.nodesPerServer} Elasticsearch node${hot.nodesPerServer === 1 ? '' : 's'} per server for the newest (hot) data · ` : ''}
           {row.topology.headroom?.binding
             ? row.topology.headroom.scale === 0
-              ? `blocked by ${roleText(row)} at any volume · `
+              ? `${roleText(row)} cannot fit at any data volume · `
               : `${roleText(row)} runs out first · `
             : ''}
-          {fmtNum(site.result.totalRamGb)} GB RAM needed
+          {fmtNum(site.result.totalRamGb)} GB memory needed
         </EuiText>
         <EuiSpacer size="s" />
         {site.fit.map((f) => <FitRow key={f.role} f={f} />)}
@@ -99,7 +100,7 @@ export function ModelsPanel({ rows }: { rows: ModelRow[] }) {
       <EuiSpacer size="s" />
       <EuiPanel color="warning" paddingSize="s" hasShadow={false}>
         <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-          <EuiFlexItem><EuiText size="xs"><strong>Estimate, not benchmark.</strong> ECK and ECE overheads are cautious defaults; adjust them in Configurations.</EuiText></EuiFlexItem>
+          <EuiFlexItem><EuiText size="xs"><strong>Estimate, not benchmark.</strong> ECK and ECE need some servers and memory for themselves. Those amounts are cautious defaults; change them in Configurations.</EuiText></EuiFlexItem>
           <EuiFlexItem grow={false}><EuiButtonEmpty size="xs" onClick={() => setAssumptionsOpen(true)}>Assumptions</EuiButtonEmpty></EuiFlexItem>
         </EuiFlexGroup>
       </EuiPanel>

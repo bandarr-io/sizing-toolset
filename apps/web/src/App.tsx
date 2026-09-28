@@ -41,7 +41,7 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
     if (overriddenKeys.length) {
       out.result = {
         ...out.result,
-        assumptions: [`Custom constants in use (${overriddenKeys.length}, changed in this browser): ${overriddenKeys.join(', ')}.`, ...out.result.assumptions],
+        assumptions: [`Settings changed in this browser (${overriddenKeys.length}): ${overriddenKeys.join(', ')}.`, ...out.result.assumptions],
       };
     }
     return out;
@@ -80,12 +80,12 @@ export function App() {
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
           ]}
           rightSideItems={[
-            <EuiToolTip key="v" content={`Constants hash ${constants.hash}`}>
-              <EuiBadge color="hollow">engine {ENGINE_VERSION} · constants {constants.hash.slice(0, 8)}</EuiBadge>
+            <EuiToolTip key="v" content={`Fingerprint of the settings used: ${constants.hash}`}>
+              <EuiBadge color="hollow">version {ENGINE_VERSION} · settings {constants.hash.slice(0, 8)}</EuiBadge>
             </EuiToolTip>,
             ...(overriddenKeys.length
               ? [<EuiToolTip key="c" content={overriddenKeys.join(', ')}>
-                  <EuiBadge color="warning" onClick={() => go('config')} onClickAriaLabel="Open configurations">custom constants ({overriddenKeys.length})</EuiBadge>
+                  <EuiBadge color="warning" onClick={() => go('config')} onClickAriaLabel="Open configurations">changed settings ({overriddenKeys.length})</EuiBadge>
                 </EuiToolTip>]
               : []),
           ]}
@@ -190,15 +190,15 @@ function ModelsCalculator({ state, setState, constants }: { state: AppState; set
       <EuiSpacer size="l" />
       <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
         <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
-          <Section step={1} title="What will the cluster hold?" description="The same workloads are sized under every model." summary={workloadsSummary(m.workloads)}>
+          <Section step={1} title="What will the cluster hold?" description="Each way of running Elastic is sized for the same data." summary={workloadsSummary(m.workloads)}>
             <WorkloadList workloads={m.workloads} onChange={(workloads) => setModels({ ...m, workloads })} />
           </Section>
           <Gap />
-          <Section step={2} title="What servers do they have?" description="One row per group of identical servers. Each model carves them up differently; master servers become the ECE control plane." summary={groupsSummary(m.servers)}>
+          <Section step={2} title="What servers do they have?" description="Add one row for each group of identical servers. Each option splits them up differently. With ECE, the master servers run the platform itself." summary={groupsSummary(m.servers)}>
             <ServerGroups servers={m.servers} onChange={(servers) => setModels({ ...m, servers })} />
           </Section>
           <Gap />
-          <Section step={3} title="Deployment" description="Requirements shared by every model." summary={requirementsSummary(deploymentOfForward(m.options))}>
+          <Section step={3} title="Requirements" description="These apply to every option." summary={requirementsSummary(deploymentOfForward(m.options))}>
             <DeploymentSettings hideSites hideModel value={deploymentOfForward(m.options)}
               onChange={(d) => setModels({ ...m, options: withForwardDeployment(m.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
           </Section>
@@ -269,7 +269,7 @@ function MultiSiteCalculator({ state, setState, constants }: { state: AppState; 
 }
 
 /** Folded-step summary text for a CPU throughput override. */
-const cpuThroughputExtra = (ev: number | undefined) => (ev !== undefined ? `CPU ${ev.toLocaleString('en-US')} ev/s/vCPU` : '');
+const cpuThroughputExtra = (ev: number | undefined) => (ev !== undefined ? `${ev.toLocaleString('en-US')} events per second per core` : '');
 
 function ForwardInputs({ state, setState, objectStorage }: { state: AppState; setState: Setter; objectStorage?: SizingResult['objectStorage'] }) {
   const f = state.forward;
@@ -294,7 +294,7 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
             <>
               <EuiFlexItem>
                 <NumField label="Coordinating nodes" value={f.options.coordinatingNodes} optional step={1} placeholder="0"
-                  helpText="Dedicated query routers; add for heavy search or aggregation load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
+                  helpText="Nodes that only route searches and combine results. Add them for heavy search or reporting load." onChange={(coordinatingNodes) => setForward({ ...f, options: { ...f.options, coordinatingNodes } })} />
               </EuiFlexItem>
               <EuiFlexItem>
                 <CpuThroughputField value={f.options.eventsPerSecondPerVcpu}
@@ -305,17 +305,17 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
         />
       </Section>
       <Gap />
-      <Section step={2} title="What will the cluster hold?" description="Add every workload that will share the cluster. Results update as you type." summary={workloadsSummary(f.workloads)}>
+      <Section step={2} title="What will the cluster hold?" description="Add each kind of data the cluster will store. The cluster is the group of servers running Elasticsearch. Results update as you type." summary={workloadsSummary(f.workloads)}>
         <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
       </Section>
       <Gap />
       <Section step={3} title="Node sizes and ratios"
-        description="Defaults suit most sizings. Change a tier's node size, mem:disk ratio or frozen cache for this scenario only; Configurations holds the defaults."
+        description="The defaults suit most cases. A node is one running copy of Elasticsearch. Change a tier's node size, disk per GB of memory or frozen cache here, for this scenario only. The Configurations page holds the defaults."
         summary={nodeSizesSummary(c, tiers as Tier[], objectStorage)} startCollapsed={isDefaultNodeSizes(f.options)}>
         <NodeSizes tiers={tiers as Tier[]} value={f.options} onChange={(options) => setForward({ ...f, options })} objectStorage={objectStorage} />
       </Section>
       <Gap />
-      <Section step={4} title="Plan for growth" description="Size for where each workload will be, not only where it is today."
+      <Section step={4} title="Plan for growth" description="Size for how much data you will have in a few years, not only today."
         summary={growthSummary(c, f)} startCollapsed={isDefaultGrowth(f)}>
         <GrowthPlanner value={f} onChange={setForward} />
       </Section>
@@ -351,7 +351,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
         <SolvePicker value={r.solve} onChange={(solve) => setState((s) => ({ ...s, reverse: withSolve(s.reverse, solve) }))} />
       </Section>
       <Gap />
-      <Section step={step++} title="What hardware do they have?" description="One row per group of identical nodes." summary={groupsSummary(r.hardware.groups, 'nodes')}>
+      <Section step={step++} title="What hardware do they have?" description="Add one row for each group of identical nodes. A node is one running copy of Elasticsearch." summary={groupsSummary(r.hardware.groups, 'nodes')}>
         <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
           ratios={r.hardware.memDiskRatio ?? {}}
           onRatios={(memDiskRatio) => {
@@ -367,7 +367,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
       <Gap />
       {target && (
         <>
-          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "Today's volume and how fast it grows." : 'Fixed parameters for the workload being solved.'} summary={workloadsSummary(r.fixed)}>
+          <Section step={step++} title="What will it run?" description={r.solve === 'years_to_capacity' ? "How much data arrives today and how fast it grows." : 'Describe the data you want the answer for.'} summary={workloadsSummary(r.fixed)}>
             <WorkloadCard
               p={target} kindChoices={kinds} showGrowth={r.solve === 'years_to_capacity'}
               role={{ kind: 'reverse-target', solve: r.solve, targetTier, onTargetTier: (t) => setReverse({ ...r, targetTier: t }) }}

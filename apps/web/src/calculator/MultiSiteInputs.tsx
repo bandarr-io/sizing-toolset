@@ -80,14 +80,14 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
   const leaderOptions = ms.sites.map((s, i) => ({ value: String(i), text: s.name }));
 
   const ingestNote = dr
-    ? `Only the primary (${ms.sites[ms.leader]?.name}) ingests; standbys hold a copy of its data.`
+    ? `Only the main site (${ms.sites[ms.leader]?.name}) takes in data. Standby sites keep a copy of it.`
     : ms.relationship === 'active_active'
-      ? 'Each site ingests this and also holds every other site\'s data.'
-      : 'Each site ingests and keeps only its own data.';
+      ? 'Each site takes in this data and also keeps a copy of every other site\'s data.'
+      : 'Each site takes in and keeps only its own data.';
 
   return (
     <>
-      <Section step={1} title="How are the sites set up?" description="Pick how the clusters relate. Turn on Compare to see all three side by side." summary={setupSummary(ms)}>
+      <Section step={1} title="How are the sites set up?" description="Pick how the sites work together. Each site runs its own cluster, a group of servers running Elasticsearch. Turn on Compare to see all three setups side by side." summary={setupSummary(ms)}>
         <RelationshipCards value={ms.relationship} onChange={(relationship) => set({ ...ms, relationship })} />
         <EuiSpacer size="m" />
         <EuiFlexGroup gutterSize="l" alignItems="flexEnd" wrap>
@@ -96,7 +96,7 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
           </EuiFlexItem>
           {dr && (
             <EuiFlexItem grow={false} style={{ width: 180 }}>
-              <SelectField label="Primary site" value={String(ms.leader)} options={leaderOptions} onChange={(v) => set({ ...ms, leader: Number(v) })} />
+              <SelectField label="Main site" value={String(ms.leader)} options={leaderOptions} onChange={(v) => set({ ...ms, leader: Number(v) })} />
             </EuiFlexItem>
           )}
           <EuiFlexItem grow={false}>
@@ -120,7 +120,7 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
             </EuiFlexItem>
           ))}
         </EuiFlexGroup>
-        <EuiText size="xs" color="subdued"><p>{ms.identical ? 'One set of servers and workloads is used for every site.' : 'Each site has its own servers and workloads.'}</p></EuiText>
+        <EuiText size="xs" color="subdued"><p>{ms.identical ? 'Every site uses the same servers and data.' : 'Each site has its own servers and data.'}</p></EuiText>
       </Section>
       <Gap />
 
@@ -131,7 +131,7 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
             <PerSite ms={ms} render={(site, i) => (
               <>
                 {dr && i !== ms.leader && (
-                  <><EuiCallOut size="s" iconType="info" title={`Standby: holds a copy of ${ms.sites[ms.leader]?.name}. Add workloads here only if it also ingests its own data.`} /><EuiSpacer size="m" /></>
+                  <><EuiCallOut size="s" iconType="info" title={`Standby site: keeps a copy of ${ms.sites[ms.leader]?.name}. Add data here only if this site also takes in its own.`} /><EuiSpacer size="m" /></>
                 )}
                 <WorkloadList key={i} workloads={site.workloads} onChange={(workloads) => setSite(i, { workloads })} />
               </>
@@ -140,14 +140,14 @@ export function MultiSiteInputs({ ms, setState }: { ms: MultiSiteState; setState
       </Section>
       <Gap />
 
-      <Section step={3} title="What servers does each site have?" description="One row per group of identical physical servers. The calculator works out the Elasticsearch nodes on each." summary={perSite(ms, (site) => groupsSummary(site.servers))}>
+      <Section step={3} title="What servers does each site have?" description="Add one row for each group of identical servers. The calculator works out how many nodes (running copies of Elasticsearch) fit on each." summary={perSite(ms, (site) => groupsSummary(site.servers))}>
         {ms.identical
           ? <ServerGroups servers={ms.sites[0]!.servers} onChange={(servers) => setSite(0, { servers })} />
           : <PerSite ms={ms} render={(site, i) => <ServerGroups key={i} servers={site.servers} onChange={(servers) => setSite(i, { servers })} />} />}
       </Section>
       <Gap />
 
-      <Section step={4} title="Deployment" description="Shared by every site. Self-managed, ECK and ECE each carve the servers differently." summary={requirementsSummary(deploymentOfForward(ms.options), [], true)}>
+      <Section step={4} title="Deployment" description="These apply to every site. Each deployment model splits the servers up differently." summary={requirementsSummary(deploymentOfForward(ms.options), [], true)}>
         <DeploymentSettings hideSites modelOptions={modelOptionsFor('multisite')} value={deploymentOfForward(ms.options)}
           onChange={(d) => set({ ...ms, options: withForwardDeployment(ms.options, { ...d, sites: 1, ccrMode: 'none' }) })} />
       </Section>

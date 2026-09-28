@@ -13,7 +13,7 @@ describe('validateDraft', () => {
   });
   it('requires a new date or source when the value changes', () => {
     const d = { ...base('mem_disk.hot'), value: 32 };
-    expect(validateDraft(base('mem_disk.hot'), d, TODAY).join()).toMatch(/new as_of_date or a new source_url/);
+    expect(validateDraft(base('mem_disk.hot'), d, TODAY).join()).toMatch(/new checked date or a new source link/);
   });
   it('applies the CI rules: https source, date within 12 months, not in the future', () => {
     const b = base('mem_disk.hot');

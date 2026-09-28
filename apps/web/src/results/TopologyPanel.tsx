@@ -13,7 +13,7 @@ import { PIN_TOP, useFitsViewport } from './ResultsPanel.tsx';
 
 const STATUS: Record<RoleFit['status'], { color: string; text: string }> = {
   ok: { color: 'success', text: 'fits' },
-  short: { color: 'danger', text: 'short' },
+  short: { color: 'danger', text: 'not enough' },
   missing: { color: 'danger', text: 'no servers' },
   unplaced: { color: 'hollow', text: 'not placed' },
   idle: { color: 'hollow', text: 'unused' },
@@ -21,7 +21,7 @@ const STATUS: Record<RoleFit['status'], { color: string; text: string }> = {
 
 function scaleText(scale: number): string {
   if (!Number.isFinite(scale)) return 'Not limited by these servers';
-  if (scale === 0) return 'Does not fit at any volume';
+  if (scale === 0) return 'Does not fit, whatever the data volume';
   if (scale >= 1) return `Room for ${fmtNum(scale, 2)}× today's data volume`;
   return `Holds ${fmtNum(scale * 100, 0)}% of today's data volume`;
 }
@@ -59,11 +59,11 @@ function SiteCard({ s, onDetails }: { s: SiteResult; onDetails: () => void }) {
     <EuiPanel hasBorder paddingSize="m">
       <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
         <EuiFlexItem><EuiTitle size="xs"><h3>{s.name}</h3></EuiTitle></EuiFlexItem>
-        <EuiFlexItem grow={false}><EuiBadge color={s.fits ? 'success' : 'danger'}>{s.fits ? 'fits' : 'short of servers'}</EuiBadge></EuiFlexItem>
+        <EuiFlexItem grow={false}><EuiBadge color={s.fits ? 'success' : 'danger'}>{s.fits ? 'fits' : 'needs more servers'}</EuiBadge></EuiFlexItem>
         <EuiFlexItem grow={false}><EuiButtonEmpty size="xs" onClick={onDetails}>Details</EuiButtonEmpty></EuiFlexItem>
       </EuiFlexGroup>
       <EuiText size="xs" color="subdued">
-        Holds {s.holds.length ? s.holds.join(', ') : 'no data'}{followed.length ? ` (${followed.length} followed from another site)` : ''} · {fmtNum(s.result.totalRamGb)} GB RAM needed · {s.license.eru} ERU
+        Holds {s.holds.length ? s.holds.join(', ') : 'no data'}{followed.length ? ` (${followed.length} copied from another site)` : ''} · {fmtNum(s.result.totalRamGb)} GB memory needed · {s.license.eru} license units
       </EuiText>
       <EuiSpacer size="s" />
       {s.fit.map((f) => <FitRow key={f.role} f={f} />)}
@@ -91,7 +91,7 @@ export function TopologyPanel({ result, compare, onPick, modelName }: {
         <EuiText size="s" color="subdued">{RELATIONSHIPS.find((r) => r.value === result.relationship)?.title} · {result.sites.length} sites{modelName ? ` · ${modelName}` : ''}</EuiText>
         <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
           <EuiFlexItem grow={false}><EuiIcon type={result.fitsAll ? 'checkCircleFill' : 'error'} color={result.fitsAll ? 'success' : 'danger'} size="l" /></EuiFlexItem>
-          <EuiFlexItem><EuiTitle size="m"><h2>{result.fitsAll ? 'Fits on these servers' : 'Short of servers'}</h2></EuiTitle></EuiFlexItem>
+          <EuiFlexItem><EuiTitle size="m"><h2>{result.fitsAll ? 'Fits on these servers' : 'Needs more servers'}</h2></EuiTitle></EuiFlexItem>
         </EuiFlexGroup>
         {h && (
           <EuiFlexGroup gutterSize="xs" alignItems="center" responsive={false}>
@@ -104,10 +104,10 @@ export function TopologyPanel({ result, compare, onPick, modelName }: {
         <EuiHorizontalRule margin="m" />
         <EuiFlexGroup gutterSize="l" wrap responsive={false}>
           {[
-            ['Servers needed', `${result.totals.neededServers} of ${result.totals.availableServers}`, 'Data-tier and placed-role servers across all sites, failover included'],
-            ['RAM needed', `${fmtNum(result.totals.ramGb)} GB`, 'Sum of every site'],
-            ['License units', `${result.totals.eru} ERU`, 'Each cluster licensed separately; summed per site'],
-            ...(result.totals.objectStorageGb > 0 ? [['Object storage', fmtStorage(result.totals.objectStorageGb), 'Snapshot repositories for cold and frozen, all sites']] : []),
+            ['Servers needed', `${result.totals.neededServers} of ${result.totals.availableServers}`, 'Servers used across all sites. This includes one spare per role, in case a server fails.'],
+            ['Memory needed', `${fmtNum(result.totals.ramGb)} GB`, 'Total across every site'],
+            ['License units', `${result.totals.eru} ERU`, 'An ERU (Enterprise Resource Unit) is the unit Elastic licenses by, a block of memory. Each site is a separate cluster with its own license; this is the total.'],
+            ...(result.totals.objectStorageGb > 0 ? [['Object storage', fmtStorage(result.totals.objectStorageGb), 'Cheap bulk storage (such as S3) holding the cold and frozen data, all sites']] : []),
           ].map(([label, value, hint]) => (
             <EuiFlexItem key={label} style={{ minWidth: 110 }}>
               <EuiText size="xs" color="subdued">{label}</EuiText>
@@ -121,12 +121,12 @@ export function TopologyPanel({ result, compare, onPick, modelName }: {
         <>
           <EuiSpacer size="s" />
           <EuiPanel hasBorder paddingSize="m">
-            <EuiTitle size="xxs"><h3>Compare relationships</h3></EuiTitle>
+            <EuiTitle size="xxs"><h3>Compare site setups</h3></EuiTitle>
             <EuiSpacer size="s" />
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ fontSize: 12, opacity: 0.75, textAlign: 'left' }}>
-                  <th style={{ padding: 4 }}>Relationship</th><th style={{ padding: 4 }}>Fits</th><th style={{ padding: 4 }}>Headroom</th><th style={{ padding: 4, textAlign: 'right' }}>Servers</th><th style={{ padding: 4, textAlign: 'right' }}>ERU</th>
+                  <th style={{ padding: 4 }}>Setup</th><th style={{ padding: 4 }}>Fits</th><th style={{ padding: 4 }}>Spare room</th><th style={{ padding: 4, textAlign: 'right' }}>Servers</th><th style={{ padding: 4, textAlign: 'right' }}>License units</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,7 +156,7 @@ export function TopologyPanel({ result, compare, onPick, modelName }: {
       <EuiSpacer size="s" />
       <EuiPanel color="warning" paddingSize="s" hasShadow={false}>
         <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-          <EuiFlexItem><EuiText size="xs"><strong>Estimate, not benchmark.</strong> Storage math is reliable; CPU, query latency and ML are not. Validate with Rally.</EuiText></EuiFlexItem>
+          <EuiFlexItem><EuiText size="xs"><strong>Estimate, not benchmark.</strong> Disk space figures are dependable. Processor, search speed and machine learning figures are rough, so test them with Rally, Elastic's benchmarking tool.</EuiText></EuiFlexItem>
           <EuiFlexItem grow={false}><EuiButtonEmpty size="xs" onClick={() => setAssumptionsOpen(true)}>{result.assumptions.length} assumptions</EuiButtonEmpty></EuiFlexItem>
         </EuiFlexGroup>
       </EuiPanel>
@@ -169,7 +169,7 @@ export function TopologyPanel({ result, compare, onPick, modelName }: {
             <EuiSpacer size="s" />
             <NodeTable r={site.result} />
             <EuiSpacer size="l" />
-            <EuiTitle size="xxs"><h3>Utilization</h3></EuiTitle>
+            <EuiTitle size="xxs"><h3>How full each resource is</h3></EuiTitle>
             <EuiSpacer size="s" />
             <ConstraintPanel r={site.result} />
             <EuiSpacer size="l" />
