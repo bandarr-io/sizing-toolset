@@ -106,6 +106,15 @@ describe('§11.2 reverse regression', () => {
 });
 
 describe('§5.3 reverse details', () => {
+  it('a tier with retention but no nodes gives 0 and says why (HV7 error)', () => {
+    const r = reverse(req([hot(3)], [logs({ indexMode: 'logsdb', retentionDays: { hot: 7, frozen: 83 } })], 'max_gb_day'));
+    expect(r.answer!.value).toBe(0);
+    const hv7 = r.warnings.filter((w) => w.id === 'HV7');
+    expect(hv7).toHaveLength(1);
+    expect(hv7[0]).toMatchObject({ severity: 'error' });
+    expect(hv7[0]!.message).toMatch(/frozen tier for 83 days, but there are no frozen nodes/);
+  });
+
   it('reports headroom on every other constraint', () => {
     const r = reverse(req([hot(3, { diskGb: 2000 })], [logs({ indexMode: 'standard' })], 'max_gb_day'));
     const nonBinding = r.constraints.filter((k) => !k.binding && k.maxValue !== undefined && Number.isFinite(k.maxValue));

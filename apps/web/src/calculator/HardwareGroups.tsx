@@ -20,8 +20,10 @@ const ROLE_SHORT: Partial<Record<NodeGroup['role'], string>> = { fleet: 'Fleet',
 const head = { ...cell, textAlign: 'left' as const, fontWeight: 600, fontSize: 12, opacity: 0.75, whiteSpace: 'nowrap' as const };
 
 /** Node groups as an editable table, with prompts for the group the chosen question depends on. */
-export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cacheFraction, onCacheFraction }: {
+export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cacheFraction, onCacheFraction, dataTiers = [] }: {
   groups: NodeGroup[];
+  /** Tiers the workloads keep data on; any without nodes makes the answer 0, so prompt to add them. */
+  dataTiers?: Tier[];
   onChange: (g: NodeGroup[]) => void;
   solve: Solve;
   /** D25: per-tier mem:disk ratio for this scenario; blank = constants. Frozen uses the cache fraction instead (D27). */
@@ -61,6 +63,14 @@ export function HardwareGroups({ groups, onChange, solve, ratios, onRatios, cach
   return (
     <>
       <AutoMastersNote change={autoMasters} threshold={masterThreshold(val<MasterSizingRow[]>(c, 'masters.sizing'))} onDismiss={() => setAutoMasters(undefined)} />
+      {dataTiers.filter((t) => !has(t)).map((t) => (
+        <div key={t}>
+          <EuiCallOut size="s" color="warning" iconType="warning" title={`The workload keeps data on the ${TIER_LABEL[t].toLowerCase()} tier, but there are no ${TIER_LABEL[t].toLowerCase()} nodes, so the answer is 0.`}>
+            <EuiButton size="s" onClick={() => add(t)}>Add {TIER_LABEL[t].toLowerCase()} nodes</EuiButton>
+          </EuiCallOut>
+          <EuiSpacer size="m" />
+        </div>
+      ))}
       {solve === 'max_agents' && !has('fleet') && (
         <><EuiCallOut size="s" iconType="info" title="This question needs Fleet Servers, which manage Elastic Agents."><EuiButton size="s" onClick={() => add('fleet')}>Add Fleet Servers</EuiButton></EuiCallOut><EuiSpacer size="m" /></>
       )}

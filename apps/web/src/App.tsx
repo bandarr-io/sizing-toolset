@@ -352,7 +352,7 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
       </Section>
       <Gap />
       <Section step={step++} title="What hardware do they have?" description="Add one row for each group of identical nodes. A node is one running copy of Elasticsearch." summary={groupsSummary(r.hardware.groups, 'nodes')}>
-        <HardwareGroups groups={r.hardware.groups} solve={r.solve} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
+        <HardwareGroups groups={r.hardware.groups} solve={r.solve} dataTiers={target ? tiersInUse({ workloads: r.fixed, options: { model: 'self_managed' } }) : []} onChange={(groups) => setReverse({ ...r, hardware: { ...r.hardware, groups } })}
           ratios={r.hardware.memDiskRatio ?? {}}
           onRatios={(memDiskRatio) => {
             const { memDiskRatio: _drop, ...hw } = r.hardware;
