@@ -1,8 +1,9 @@
 import {
-  EuiBadge, EuiBasicTable, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiPanel, EuiProgress, EuiSpacer, EuiText,
+  EuiBadge, EuiBasicTable, EuiButtonEmpty, EuiCallOut, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiPanel, EuiProgress, EuiSpacer, EuiText,
   type EuiBasicTableColumn,
 } from '@elastic/eui';
 import type { Constraint, MathStep, SizingResult, Warning } from '@sizing/engine';
+import { useState } from 'react';
 import { constraintLabel } from '../export.ts';
 import { fmtCompact, fmtNum, fmtStorage } from '../format.ts';
 import { byRoleOrder } from '../ui/tiers.ts';
@@ -144,24 +145,6 @@ const SEVERITY: Record<Warning['severity'], { color: 'danger' | 'warning' | 'pri
   info: { color: 'primary', icon: 'info', title: 'Notes', rank: 2 },
 };
 
-/** The most severe findings as one-line sentences, for the results column. */
-export function FindingsSummary({ warnings, max = 2 }: { warnings: readonly Warning[]; max?: number }) {
-  const findings = groupFindings(warnings.filter((w) => w.severity !== 'info')).sort((a, b) => SEVERITY[a.severity].rank - SEVERITY[b.severity].rank);
-  if (findings.length === 0) {
-    return <EuiText size="xs" color="subdued"><EuiIcon type="check" color="success" size="s" /> No hardware problems found</EuiText>;
-  }
-  return (
-    <>
-      {findings.slice(0, max).map((f, i) => (
-        <EuiFlexGroup key={i} gutterSize="s" alignItems="flexStart" responsive={false}>
-          <EuiFlexItem grow={false}><EuiIcon type={SEVERITY[f.severity].icon} color={SEVERITY[f.severity].color} size="s" style={{ marginTop: 3 }} /></EuiFlexItem>
-          <EuiFlexItem><EuiText size="xs">{f.message}</EuiText></EuiFlexItem>
-        </EuiFlexGroup>
-      ))}
-    </>
-  );
-}
-
 export function WarningsPanel({ warnings }: { warnings: Warning[] }) {
   if (warnings.length === 0) {
     return <EuiCallOut size="s" color="success" iconType="check" title="No hardware problems found." />;
@@ -182,5 +165,51 @@ export function WarningsPanel({ warnings }: { warnings: Warning[] }) {
         );
       })}
     </>
+  );
+}
+
+/**
+ * Findings grouped by severity, each with a count: problems and "worth a look" shown (up to `max` each),
+ * notes folded behind a toggle. Takes engine warnings (grouped first) or plain sentences.
+ */
+export function SeverityGroups({ items, max = 3, onMore, emptyText = 'No hardware problems found' }: {
+  items: readonly { severity: Warning['severity']; message: string }[]; max?: number; onMore?: () => void; emptyText?: string;
+}) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const by = (sev: Warning['severity']) => items.filter((x) => x.severity === sev);
+  const notes = by('info');
+  const serious = by('error').length + by('warn').length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {serious === 0 && <EuiText size="xs" color="subdued"><EuiIcon type="check" color="success" size="s" /> {emptyText}</EuiText>}
+      {(['error', 'warn'] as const).map((sev) => {
+        const list = by(sev);
+        if (!list.length) return null;
+        const s = SEVERITY[sev];
+        return (
+          <div key={sev}>
+            <EuiText size="xs"><EuiIcon type={s.icon} color={s.color} size="s" /> <strong>{s.title} ({list.length})</strong></EuiText>
+            <ul style={{ margin: '4px 0 0 0', paddingLeft: 20 }}>
+              {list.slice(0, max).map((f, i) => <li key={i}><EuiText size="xs">{f.message}</EuiText></li>)}
+            </ul>
+            {list.length > max && (onMore
+              ? <EuiButtonEmpty size="xs" flush="left" onClick={onMore}>and {list.length - max} more</EuiButtonEmpty>
+              : <EuiText size="xs" color="subdued">and {list.length - max} more</EuiText>)}
+          </div>
+        );
+      })}
+      {notes.length > 0 && (
+        <div>
+          <EuiButtonEmpty size="xs" flush="left" iconType={notesOpen ? 'chevronSingleDown' : 'chevronSingleRight'} onClick={() => setNotesOpen(!notesOpen)}>
+            {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+          </EuiButtonEmpty>
+          {notesOpen && (
+            <ul style={{ margin: '2px 0 0 0', paddingLeft: 20 }}>
+              {notes.map((f, i) => <li key={i}><EuiText size="xs" color="subdued">{f.message}</EuiText></li>)}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
