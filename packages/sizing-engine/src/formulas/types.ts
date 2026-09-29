@@ -4,7 +4,7 @@
  */
 export type FormulaArea =
   | 'Size a workload' | 'Test hardware limits' | 'Hardware checks' | 'Multiple sites' | 'Compare models'
-  | 'Elastic Cloud' | 'Total cost';
+  | 'Elastic Cloud' | 'Total cost' | 'Validation';
 
 export interface Formula {
   /** Stable id, e.g. 'forward.hot_nodes'. */

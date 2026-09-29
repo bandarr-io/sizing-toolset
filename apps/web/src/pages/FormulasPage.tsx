@@ -6,9 +6,10 @@ import { useMemo, useState } from 'react';
 import { formatValue, UNCONFIRMED, UNCONFIRMED_HELP } from '../components/constantFormat.ts';
 import { useConstants } from '../constantsStore.tsx';
 import { WEB_FORMULAS } from '../formulas/cost.ts';
+import { VALIDATION_FORMULAS } from '../formulas/validation.ts';
 
-const AREAS: FormulaArea[] = ['Size a workload', 'Test hardware limits', 'Hardware checks', 'Multiple sites', 'Compare models', 'Elastic Cloud', 'Total cost'];
-const ALL: readonly Formula[] = [...ENGINE_FORMULAS, ...WEB_FORMULAS];
+const AREAS: FormulaArea[] = ['Size a workload', 'Test hardware limits', 'Hardware checks', 'Multiple sites', 'Compare models', 'Elastic Cloud', 'Total cost', 'Validation'];
+const ALL: readonly Formula[] = [...ENGINE_FORMULAS, ...WEB_FORMULAS, ...VALIDATION_FORMULAS];
 
 function matches(f: Formula, q: string): boolean {
   if (!q) return true;

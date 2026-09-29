@@ -22,6 +22,7 @@ Alongside the modes:
 - **Confidence and bottleneck:** each result says what limits it (disk, RAM, CPU, shards) and how confident the estimate is.
 - **Cluster map:** a flyout drawing of the nodes per tier and server.
 - **Total cost:** annual and term costs for hardware and the Elastic subscription, with an optional subscription discount.
+- **Validation:** record real deals next to the cluster the customer runs, and see how close the estimates are, deal by deal and overall. Export as CSV or JSON; import other people's files to pool results.
 - **Formulas:** every formula the calculator uses, in plain words, with the settings each one reads and their current values. A test fails if a setting that feeds a calculation is not covered.
 - **Configurations:** view and edit the underlying constants. In `pnpm dev`, edits are written back to `packages/constants/data`.
 - **Scenarios:** named scenarios saved in the browser, exported as Markdown or JSON. JSON exports reproduce the result when loaded again.
