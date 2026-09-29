@@ -37,13 +37,51 @@ export interface ScenarioServices {
   lines: ServiceLine[];
 }
 
-/** Starting catalog: the services named so far, with no prices or descriptions yet. */
+// Wording from past ROMs (Dan, 2026-09-29); a starting point to edit in the catalog.
+const PSE_DESCRIPTION = 'DESCRIPTION\nProfessional services engagements are available for the defined number of consulting days outlined above. Time within the engagement may be allocated to allow consultative or deployment services within a varied scope according to customer need.\n\nCUSTOMER PROFILE\nOur professional services are engineered to deliver end-to-end success across the entire Elastic ecosystem, including Enterprise Search, Observability, and Security. Whether deploying a greenfield environment or optimizing a legacy architecture, our project-based engagements ensure your Elastic Stack or Elastic Cloud implementation is scalable, secure, and aligned with your business objectives.\n\nCOMMON TASKS WITHIN THE ENGAGEMENT\nOperational, implementation, and deployment services:\n- Installation and configuration\n- Pipeline / ingestion recommendations and patterns\n- Data modeling / mapping\n- Visualizations / dashboards\n\nINCLUDED IN SCOPE\nIncludes travel and expenses for 1 onsite visit every 4 Consulting Days within the engagement\n\nNOT INCLUDED IN SCOPE\nRecommendations, handling or administration of third-party software, software data, or systems';
+const TRAINING_DESCRIPTION = 'TRAINING OBJECTIVES\nIncreased Skills, continual advanced insights for Operators and Analysts through training, Improving time to insight.\n\nElastic training subscriptions are an all-access pass to our extensive library of training courses. Get a season ticket to solution-based curriculum, hands-on labs, and much more. We recommend the optional:\nProfessional Training Subscriptions that includes:\n- All on-demand courses\n- Hands-on labs\n- PDF course materials\n- One practice exam attempt per certification path\n- One exam attempt per certification path\n- Ask-the-Instructor sessions\n- All instructor-led, virtual courses\n- Guaranteed slot in all virtual courses\n- First access to new courses\n\nRecommended Courses:\n- Elasticsearch Engineer\n- Data Analysis with Kibana\n- Elasticsearch Observability Engineer';
+
+/** Starting catalog: the services named so far. Prices are blank; descriptions only where standard wording exists. */
 export const SEED_CATALOG: ServiceItem[] = [
   { id: 'flex-consulting', name: 'Flex Consulting', mpn: '', unit: 'hour', billing: 'one_time', description: '', dated: false },
   { id: 'dedicated-support-engineer', name: 'Dedicated Support Engineer', mpn: '', unit: 'year', billing: 'annual', description: '', dated: true },
   { id: 'on-demand-training', name: 'On-Demand Training Subscription', mpn: '', unit: 'seat', billing: 'annual', description: '', dated: true },
   { id: 'private-training', name: 'Private Training', mpn: '', unit: 'package', billing: 'one_time', description: '', dated: true },
+  { id: 'professional-services-engagement', name: 'Professional Services Engagement', mpn: '', unit: 'day', billing: 'one_time', description: PSE_DESCRIPTION, dated: false },
+  { id: 'professional-training-subscription', name: 'Professional Training Subscription', mpn: '', unit: 'seat', billing: 'annual', description: TRAINING_DESCRIPTION, dated: true },
 ];
+
+/** Standard services this catalog is missing (removed, or added to the standard list after it was created). */
+export function missingStandardServices(catalog: readonly ServiceItem[]): ServiceItem[] {
+  const ids = new Set(catalog.map((x) => x.id));
+  return SEED_CATALOG.filter((x) => !ids.has(x.id));
+}
+
+export type DescriptionBlock = { kind: 'heading'; text: string } | { kind: 'paragraph'; text: string } | { kind: 'list'; items: string[] };
+
+/**
+ * How a service description prints in the ROM. Every line is its own paragraph, so text pasted from a document
+ * keeps its breaks; a line in capitals is a heading (DESCRIPTION, INCLUDED IN SCOPE); a line starting with -, * or •
+ * is a bullet, and bullets in a row form one list.
+ */
+export function parseDescription(text: string): DescriptionBlock[] {
+  const out: DescriptionBlock[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const bullet = /^[-*•]\s+(.*)$/.exec(line);
+    const last = out[out.length - 1];
+    if (bullet) {
+      if (last?.kind === 'list') last.items.push(bullet[1]!);
+      else out.push({ kind: 'list', items: [bullet[1]!] });
+    } else if (/[A-Z]/.test(line) && line === line.toUpperCase() && line.length <= 80) {
+      out.push({ kind: 'heading', text: line });
+    } else {
+      out.push({ kind: 'paragraph', text: line });
+    }
+  }
+  return out;
+}
 
 export const BILLING_LABEL: Record<ServiceBilling, string> = { one_time: 'Once', annual: 'Every year' };
 

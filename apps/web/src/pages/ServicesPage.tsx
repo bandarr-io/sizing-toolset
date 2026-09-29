@@ -6,7 +6,7 @@ import { useRef, useState } from 'react';
 import { download, slug } from '../export.ts';
 import { fmtMoney } from '../format.ts';
 import {
-  BILLING_LABEL, newServiceId, parseCatalog, priceLines, type ScenarioServices, type ServiceBilling, type ServiceItem, type ServiceLine,
+  BILLING_LABEL, missingStandardServices, newServiceId, parseCatalog, priceLines, type ScenarioServices, type ServiceBilling, type ServiceItem, type ServiceLine,
 } from '../services.ts';
 import { useServiceCatalog } from '../servicesStore.tsx';
 import type { AppState } from '../state.ts';
@@ -84,6 +84,7 @@ function Catalog({ catalog, setCatalog, scenarioName }: { catalog: ServiceItem[]
   const file = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | undefined>();
   const [open, setOpen] = useState<string | undefined>();
+  const missing = missingStandardServices(catalog);
   const set = (i: number, patch: Partial<ServiceItem>) => setCatalog(catalog.map((x, j) => {
     if (j !== i) return x;
     const next = { ...x, ...patch };
@@ -133,8 +134,9 @@ function Catalog({ catalog, setCatalog, scenarioName }: { catalog: ServiceItem[]
                 <EuiFieldText compressed aria-label="Service name" value={x.name} onChange={(e) => set(i, { name: e.target.value })} />
                 {open === x.id && (
                   <div style={{ marginTop: 6 }}>
-                    <EuiTextArea compressed fullWidth rows={3} aria-label={`${x.name} description`} placeholder="Description printed in the Budgetary ROM"
+                    <EuiTextArea compressed fullWidth rows={10} aria-label={`${x.name} description`} placeholder="Description printed in the Budgetary ROM"
                       value={x.description} onChange={(e) => set(i, { description: e.target.value })} />
+                    <EuiText size="xs" color="subdued"><p>Printed on the ROM's Service Descriptions page. Each line is a paragraph; a line in CAPITALS is a heading; lines starting with - are bullets.</p></EuiText>
                   </div>
                 )}
               </td>
@@ -163,6 +165,11 @@ function Catalog({ catalog, setCatalog, scenarioName }: { catalog: ServiceItem[]
         const id = newServiceId('New service', catalog.map((c) => c.id));
         setCatalog([...catalog, { id, name: 'New service', mpn: '', unit: 'hour', billing: 'one_time', description: '', dated: false }]);
       }}>Add a service to the catalog</EuiButton>
+      {missing.length > 0 && (
+        <EuiButtonEmpty size="s" iconType="plusCircle" style={{ marginLeft: 8 }} onClick={() => setCatalog([...catalog, ...missing])}>
+          Add standard services ({missing.map((m) => m.name).join(', ')})
+        </EuiButtonEmpty>
+      )}
     </EuiPanel>
   );
 }

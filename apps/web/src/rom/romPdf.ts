@@ -1,5 +1,6 @@
 import type { Content, ContentText, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { fmtMoney, fmtNum } from '../format.ts';
+import { parseDescription } from '../services.ts';
 import { BRAND } from './brand.ts';
 import {
   ASSUMPTIONS_INTRO, dataLines, describedServices, echConfig, RETENTION_INTRO, scenarioEcu, scenarioServices, SCOPE_ECH, SCOPE_SELF_MANAGED,
@@ -150,7 +151,9 @@ function serviceDescriptions(input: RomInput): Content[] {
   const items = describedServices(input);
   if (items.length === 0) return [];
   return [h2('SERVICE DESCRIPTIONS', { pageBreak: 'before' }), ...items.map((x): Content => ({
-    unbreakable: true, stack: [h3(x.name), ...x.description.trim().split(/\n\s*\n/).map((para) => p(para.trim()))],
+    stack: [{ ...h3(x.name), fontSize: 13, color: HEAD }, ...parseDescription(x.description).map((b): Content => (b.kind === 'heading'
+      ? { text: b.text, bold: true, fontSize: 9.5, characterSpacing: 0.4, color: BLUE, margin: [0, 9, 0, 3], headlineLevel: 1 }
+      : b.kind === 'list' ? { ul: b.items, margin: [0, 0, 0, 7] } : p(b.text)))],
   }))];
 }
 

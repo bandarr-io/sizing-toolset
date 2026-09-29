@@ -2,7 +2,7 @@ import type { EchData, EchLine, SizingResult, Tier, WorkloadProfile } from '@siz
 import { escapeHtml } from '../customerSummary.ts';
 import { useCaseLabel, type EchItem, type EchOutcome, type EchState } from '../ech/state.ts';
 import { fmtMoney, fmtNum } from '../format.ts';
-import type { PricedServiceLine, ServiceItem } from '../services.ts';
+import { parseDescription, type PricedServiceLine, type ServiceItem } from '../services.ts';
 import { byRoleOrder } from '../ui/tiers.ts';
 import { BRAND } from './brand.ts';
 
@@ -252,7 +252,7 @@ export function describedServices(input: RomInput): ServiceItem[] {
 function serviceDescriptions(input: RomInput): string {
   const items = describedServices(input);
   if (items.length === 0) return '';
-  return `<section class="page"><h2>SERVICE DESCRIPTIONS</h2>${items.map((x) => `<div class="keep"><h3>${e(x.name)}</h3>${x.description.trim().split(/\n\s*\n/).map((para) => `<p>${e(para.trim())}</p>`).join('')}</div>`).join('')}</section>`;
+  return `<section class="page"><h2>SERVICE DESCRIPTIONS</h2>${items.map((x) => `<div class="svc"><h3 class="svc">${e(x.name)}</h3>${parseDescription(x.description).map((b) => (b.kind === 'heading' ? `<h4 class="svc">${e(b.text)}</h4>` : b.kind === 'list' ? `<ul class="svc">${b.items.map((i) => `<li>${e(i)}</li>`).join('')}</ul>` : `<p>${e(b.text)}</p>`)).join('')}</div>`).join('')}</section>`;
 }
 
 function scenarioPage(s: RomScenario): string {
@@ -321,6 +321,9 @@ p.sub { font-weight: 700; margin: 0.08in 0 0.02in; }
 u.accent { color: ${BRAND.blue}; }
 .team { display: flex; gap: 0.5in; }
 .team .who { color: ${BRAND.blue}; font-weight: 700; font-size: 12pt; }
+h3.svc { font-size: 13pt; color: #3a3f4a; }
+h4.svc { font-size: 9.5pt; letter-spacing: 0.04em; color: ${BRAND.blue}; margin: 0.14in 0 0.04in; }
+ul.svc { margin: 0.02in 0 0.1in; }
 ul.volume, ul.tiers { font-weight: 700; margin: 0.04in 0 0.1in; }
 .note { color: ${BRAND.blue}; font-style: italic; }
 table { width: 100%; border-collapse: collapse; margin: 0.12in 0 0.3in; font-size: 9.5pt; break-inside: avoid; }

@@ -5,7 +5,7 @@ import { costReport } from '../src/cost.ts';
 import { customerSummaryHtml } from '../src/customerSummary.ts';
 import { toMarkdown } from '../src/export.ts';
 import { romHtml } from '../src/rom/rom.ts';
-import { newServiceId, parseCatalog, priceLines, SEED_CATALOG, servicesForYear, type ServiceItem, type ServiceLine } from '../src/services.ts';
+import { missingStandardServices, newServiceId, parseCatalog, parseDescription, priceLines, SEED_CATALOG, servicesForYear, type ServiceItem, type ServiceLine } from '../src/services.ts';
 import { defaultState, type AppState } from '../src/state.ts';
 
 const catalog: ServiceItem[] = [
@@ -79,7 +79,7 @@ describe('D46 services', () => {
     expect(html).toMatch(/<td>One-time<\/td><td>SV-FLEX<\/td><td>Flex Consulting<\/td><td class="accent"><\/td><td class="accent"><\/td><td>40<\/td><td>\$300\.00<\/td><td>\$12,000<\/td>/);
     expect(html).toMatch(/<td>Yr\. 1<\/td><td>SV-DSE<\/td><td>Dedicated Support Engineer<\/td><td class="accent">10\/01\/2026<\/td><td class="accent">09\/30\/2027<\/td>/);
     expect(html).toMatch(/<td>\[MPN\]<\/td><td>Private Training<\/td>[\s\S]*?<td>\[PRICE\]<\/td><td>\[PRICE\]<\/td>/);
-    expect(html).toContain('<h2>SERVICE DESCRIPTIONS</h2><div class="keep"><h3>Flex Consulting</h3><p>Hands-on help.</p><p>Billed by the hour.</p></div></section>');
+    expect(html).toContain('<h2>SERVICE DESCRIPTIONS</h2><div class="svc"><h3 class="svc">Flex Consulting</h3><p>Hands-on help.</p><p>Billed by the hour.</p></div></section>');
     expect(html).toContain('<li class="main">SERVICE DESCRIPTIONS</li>');
   });
 
@@ -87,5 +87,35 @@ describe('D46 services', () => {
     const state = defaultState();
     const html = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [{ kind: 'self_managed', title: 'Main', workloads: state.forward.workloads, result: forward(state.forward, c) }] });
     expect(html).not.toMatch(/Services:|SERVICE DESCRIPTIONS/);
+  });
+});
+
+describe('D48 service descriptions', () => {
+  it('reads capitals as headings, dashes as one list, and every other line as a paragraph', () => {
+    expect(parseDescription('DESCRIPTION\nFirst line.\nSecond line.\n\nCOMMON TASKS\nServices:\n- Install\n• Map data\n\nNOT INCLUDED IN SCOPE')).toEqual([
+      { kind: 'heading', text: 'DESCRIPTION' }, { kind: 'paragraph', text: 'First line.' }, { kind: 'paragraph', text: 'Second line.' },
+      { kind: 'heading', text: 'COMMON TASKS' }, { kind: 'paragraph', text: 'Services:' }, { kind: 'list', items: ['Install', 'Map data'] },
+      { kind: 'heading', text: 'NOT INCLUDED IN SCOPE' },
+    ]);
+  });
+
+  it('seeds the Professional Services Engagement and Professional Training Subscription wording', () => {
+    const pse = SEED_CATALOG.find((x) => x.id === 'professional-services-engagement')!;
+    const heads = parseDescription(pse.description).filter((b) => b.kind === 'heading').map((b) => (b as { text: string }).text);
+    expect(heads).toEqual(['DESCRIPTION', 'CUSTOMER PROFILE', 'COMMON TASKS WITHIN THE ENGAGEMENT', 'INCLUDED IN SCOPE', 'NOT INCLUDED IN SCOPE']);
+    const training = SEED_CATALOG.find((x) => x.id === 'professional-training-subscription')!;
+    expect(training.billing).toBe('annual');
+    expect(parseDescription(training.description).filter((b) => b.kind === 'list').map((b) => (b as { items: string[] }).items.length)).toEqual([9, 3]);
+  });
+
+  it('offers the standard services a catalog is missing', () => {
+    expect(missingStandardServices(SEED_CATALOG.slice(0, 4)).map((x) => x.id)).toEqual(['professional-services-engagement', 'professional-training-subscription']);
+    expect(missingStandardServices(SEED_CATALOG)).toEqual([]);
+  });
+
+  it('prints headings and bullets in the ROM', () => {
+    const state = withServices([{ serviceId: 'professional-services-engagement', quantity: 8 }]);
+    const html = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [{ kind: 'self_managed', title: 'Main', services: priceLines(SEED_CATALOG, state.services), workloads: state.forward.workloads, result: forward(state.forward, c) }] });
+    expect(html).toContain('<h4 class="svc">COMMON TASKS WITHIN THE ENGAGEMENT</h4><p>Operational, implementation, and deployment services:</p><ul class="svc"><li>Installation and configuration</li>');
   });
 });
