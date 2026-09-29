@@ -483,6 +483,8 @@ export function modelOptionsFor(mode: Mode): ModelOption[] {
       ...cloud.map((o) => ({ ...o, disabled: true, text: `${o.value === 'ech' ? 'Elastic Cloud Hosted' : 'Serverless'} (Elastic's cloud, not your servers)` })),
     ];
   }
+  // D44: Size a workload offers self-managed and Elastic Cloud only for now; ECK and ECE stay in Compare models.
+  if (mode === 'forward') return [{ value: 'self_managed', text: 'Self-managed' }, ...cloud];
   return [
     { value: 'self_managed', text: 'Self-managed' },
     { value: 'eck', text: 'ECK (Kubernetes): compare on your servers →' },
