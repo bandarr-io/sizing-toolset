@@ -2,7 +2,7 @@ import {
   EuiButtonEmpty, EuiButtonIcon, EuiContextMenuItem, EuiContextMenuPanel, EuiFieldText, EuiFlexGrid, EuiFlexGroup, EuiFlexItem,
   EuiIcon, EuiPanel, EuiPopover, EuiSpacer, EuiText, EuiTitle,
 } from '@elastic/eui';
-import type { EchData, EchPlacement, EchUseCase } from '@sizing/engine';
+import { echDefaultSku, type EchData, type EchPlacement, type EchUseCase } from '@sizing/engine';
 import { useState, type ReactNode } from 'react';
 import { NumField, SelectField, SwitchField } from '../components/Fields.tsx';
 import {
@@ -99,29 +99,36 @@ ROLE_TYPES.metrics = ROLE_TYPES.logs;
 ROLE_TYPES.endpoint = ROLE_TYPES.siem;
 ROLE_TYPES.apm = [...ROLE_TYPES.logs, ['apm', 'APM Server', 'apm']];
 
+/** Instance options for a role type, the default marked; picking the default clears the override so it follows the cloud. */
+function skuOptions(data: EchData, placement: EchPlacement, type: string, def: string | undefined) {
+  const opts = skusFor(data, placement, type).map((o) => ({ value: o.id, text: `${o.id}${o.id === def ? ' (default)' : ''}${o.offered ? '' : ' (not offered here)'}` }));
+  return def && !opts.some((o) => o.value === def) ? [{ value: def, text: `${def} (default)` }, ...opts] : opts;
+}
+
 function InstanceTypes({ data, placement, item, onChange }: { data: EchData; placement: EchPlacement; item: EchItem; onChange: (next: EchItem) => void }) {
   if (item.useCase === 'vector') {
-    const opts = skusFor(data, placement, 'data_hot');
+    const def = echDefaultSku(data, placement, 'vector', 'data');
     return (
       <EuiFlexGrid columns={2} gutterSize="m">
-        {col(<SelectField label="Data instance type" value={item.req.sku ?? ''}
-          options={[{ value: '', text: 'The spreadsheet’s default' }, ...opts.map((o) => ({ value: o.id, text: `${o.id}${o.offered ? '' : ' (not offered here)'}` }))]}
-          onChange={(sku) => { const { sku: _drop, ...rest } = item.req; onChange({ ...item, req: sku ? { ...rest, sku } : rest }); }} />)}
+        {col(<SelectField label="Data instance type" value={item.req.sku ?? def ?? ''}
+          options={skuOptions(data, placement, 'data_hot', def)}
+          onChange={(sku) => { const { sku: _drop, ...rest } = item.req; onChange({ ...item, req: sku && sku !== def ? { ...rest, sku } : rest }); }} />)}
       </EuiFlexGrid>
     );
   }
   const skus = (item.req.skus ?? {}) as Record<string, string | undefined>;
-  const setSku = (role: string, id: string) => {
+  const setSku = (role: string, id: string, def: string | undefined) => {
     const { [role]: _drop, ...rest } = skus;
-    onChange({ ...item, req: { ...item.req, skus: id ? { ...rest, [role]: id } : rest } } as EchItem);
+    onChange({ ...item, req: { ...item.req, skus: id && id !== def ? { ...rest, [role]: id } : rest } } as EchItem);
   };
   return (
     <EuiFlexGrid columns={2} gutterSize="m">
-      {ROLE_TYPES[item.useCase].map(([role, label, type]) => col(
-        <SelectField label={label} value={skus[role] ?? ''}
-          options={[{ value: '', text: 'The spreadsheet’s default' }, ...skusFor(data, placement, type).map((o) => ({ value: o.id, text: `${o.id}${o.offered ? '' : ' (not offered here)'}` }))]}
-          onChange={(id) => setSku(role, id)} />, role,
-      ))}
+      {ROLE_TYPES[item.useCase].map(([role, label, type]) => {
+        const def = echDefaultSku(data, placement, item.useCase, role);
+        return col(
+          <SelectField label={label} value={skus[role] ?? def ?? ''} options={skuOptions(data, placement, type, def)} onChange={(id) => setSku(role, id, def)} />, role,
+        );
+      })}
     </EuiFlexGrid>
   );
 }
@@ -241,7 +248,7 @@ function EchItemCard({ data, placement, item, onChange, onRemove }: {
         <>
           <EuiSpacer size="s" />
           <EuiTitle size="xxs"><h4>Instance types</h4></EuiTitle>
-          <EuiText size="xs" color="subdued"><p>The hardware each part runs on. Blank uses the spreadsheet’s choice for this cloud.</p></EuiText>
+          <EuiText size="xs" color="subdued"><p>The hardware each part runs on. The one marked (default) is the spreadsheet’s choice for this cloud.</p></EuiText>
           <EuiSpacer size="s" />
           <InstanceTypes data={data} placement={placement} item={item} onChange={onChange} />
         </>

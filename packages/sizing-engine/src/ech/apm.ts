@@ -254,3 +254,8 @@ export function echApm(c: ConstantSet, data: EchData, req: EchApmRequest): EchRe
     ],
   };
 }
+
+/** The instance the APM sheet uses for a role when none is chosen (for the instance pickers). */
+export function apmDefaultSku(data: EchData, p: EchPlacement, role: ApmRole): string {
+  return defaultSku(data, extrasOf(data), p, role);
+}

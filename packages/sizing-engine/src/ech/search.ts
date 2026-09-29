@@ -383,3 +383,17 @@ function diskBbqSize(
     ],
   };
 }
+
+/** The instance the Search sheet uses for a role when none is chosen (for the instance pickers). */
+export function searchDefaultSku(data: EchData, p: EchPlacement, role: 'data' | 'enterpriseSearch' | Fixed): string {
+  if (role === 'data') return firstWithSelection(data, p, 'Hot_in_Production');
+  if (role === 'enterpriseSearch') return firstWithSelection(data, p, 'Enterprisesearch_in_Production');
+  return firstWithSelection(data, p, FIXED_SELECTION[role]);
+}
+
+/** The instance the Vector sheet uses when none is chosen: the provider's first vector-profile instance. */
+export function vectorDefaultSku(data: EchData, p: EchPlacement): string {
+  const s = data.skus.find((x) => x.provider === p.provider && isVectorProfile(x));
+  if (!s) throw new EchUnavailable(`No vector-profile instance type for ${p.provider}.`);
+  return s.id;
+}
