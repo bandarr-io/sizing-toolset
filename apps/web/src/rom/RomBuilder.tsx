@@ -14,7 +14,8 @@ import { defaultEch, runEch } from '../ech/state.ts';
 import { download, slug } from '../export.ts';
 import type { AppState } from '../state.ts';
 import { listSaved } from '../storage.ts';
-import { romHtml, type RomScenario, type RomTeamMember } from './rom.ts';
+import { romHtml, type RomInput, type RomScenario, type RomTeamMember } from './rom.ts';
+import { downloadRomPdf } from './romPdfDownload.ts';
 
 const TEAM_KEY = 'sizing.rom-team.v1';
 const readTeam = (): RomTeamMember[] => {
@@ -48,7 +49,9 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
   const [picked, setPicked] = useState<Record<string, { title: string; notes: string }>>({ current: { title: current.name, notes: '' } });
   const [error, setError] = useState<string | undefined>();
 
-  const build = (): string | undefined => {
+  const [busy, setBusy] = useState(false);
+
+  const buildInput = (): RomInput | undefined => {
     const scenarios: RomScenario[] = [];
     for (const o of options) {
       const p = picked[o.id];
@@ -72,8 +75,9 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     }
     if (scenarios.length === 0) { setError('Pick at least one scenario.'); return undefined; }
     setError(undefined);
-    return romHtml({ customer: customer.trim(), date, termStart, team: team.filter((m) => m.name.trim()), scenarios });
+    return { customer: customer.trim(), date, termStart, team: team.filter((m) => m.name.trim()), scenarios };
   };
+  const build = (): string | undefined => { const input = buildInput(); return input && romHtml(input); };
 
   const fileName = `Sizing Summary - ${customer.trim() || 'Customer'} - ${date}`;
   const openPrintable = () => {
@@ -85,6 +89,12 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     w.document.write(html.replace('</body>', '<script>document.fonts.ready.then(() => setTimeout(() => window.print(), 300));</script></body>'));
     w.document.close();
   };
+  const downloadPdf = async () => {
+    const input = buildInput();
+    if (!input) return;
+    setBusy(true);
+    try { await downloadRomPdf(input, fileName); } catch (x) { setError(`The PDF could not be made: ${x instanceof Error ? x.message : String(x)}`); } finally { setBusy(false); }
+  };
   const downloadHtml = () => { const html = build(); if (html) download(`${slug(fileName)}.html`, html, 'text/html'); };
 
   const setMember = (i: number, patch: Partial<RomTeamMember>) => setTeam(team.map((m, j) => (j === i ? { ...m, ...patch } : m)));
@@ -93,7 +103,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     <EuiFlyout onClose={onClose} size="m" ownFocus aria-labelledby="rom-title">
       <EuiFlyoutHeader hasBorder>
         <EuiTitle size="s"><h2 id="rom-title">Budgetary ROM</h2></EuiTitle>
-        <EuiText size="s" color="subdued"><p>A branded rough order of magnitude for the customer: caveats, team, licensing and one section per scenario. It opens ready to save as PDF.</p></EuiText>
+        <EuiText size="s" color="subdued"><p>A branded rough order of magnitude for the customer: caveats, team, licensing and one section per scenario. Download it as a PDF, or open the print version.</p></EuiText>
       </EuiFlyoutHeader>
       <EuiFlyoutBody>
         <EuiFlexGrid columns={3} gutterSize="m">
@@ -151,8 +161,9 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
           <EuiFlexItem grow={false}><EuiButtonEmpty onClick={onClose}>Cancel</EuiButtonEmpty></EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiFlexGroup gutterSize="s" responsive={false}>
-              <EuiFlexItem grow={false}><EuiButtonEmpty iconType="download" onClick={downloadHtml}>Download HTML</EuiButtonEmpty></EuiFlexItem>
-              <EuiFlexItem grow={false}><EuiButton fill iconType="document" onClick={openPrintable}>Open and save as PDF</EuiButton></EuiFlexItem>
+              <EuiFlexItem grow={false}><EuiButtonEmpty iconType="download" onClick={downloadHtml}>HTML</EuiButtonEmpty></EuiFlexItem>
+              <EuiFlexItem grow={false}><EuiButtonEmpty iconType="document" onClick={openPrintable}>Print version</EuiButtonEmpty></EuiFlexItem>
+              <EuiFlexItem grow={false}><EuiButton fill iconType="download" isLoading={busy} onClick={() => void downloadPdf()}>Download PDF</EuiButton></EuiFlexItem>
             </EuiFlexGroup>
           </EuiFlexItem>
         </EuiFlexGroup>

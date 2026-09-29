@@ -31,19 +31,19 @@ export interface RomInput {
 }
 
 const e = escapeHtml;
-const usDate = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split('-'); return `${m}/${d}/${y}`; };
-function termEnd(iso: string): string {
+export const usDate = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split('-'); return `${m}/${d}/${y}`; };
+export function termEnd(iso: string): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   d.setUTCFullYear(d.getUTCFullYear() + 1);
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
-const tb = (gb: number) => `${fmtNum(gb / 1000, 2)} TB`;
-const gbText = (gb: number) => `${fmtNum(gb, gb < 10 ? 1 : 0)} GB`;
+export const tb = (gb: number) => `${fmtNum(gb / 1000, 2)} TB`;
+export const gbText = (gb: number) => `${fmtNum(gb, gb < 10 ? 1 : 0)} GB`;
 
 // ---- Fixed wording from the template ----------------------------------------------------------------
 
-const CAVEATS = `
+export const CAVEATS = `
 <p>The recommendations provided <strong><em><u>serve as a starting point</u></em></strong>, subject to adjustments based on actual system configurations and evolving business needs. They offer guidance for optimal configurations but should be adapted as necessary.</p>
 <p><strong><em>Sizing parameters are dynamic and may vary due to hardware/software factors.</em></strong> Regular reassessment is crucial to ensure alignment with changing requirements.</p>
 <p>Recommendations should be tailored to meet specific business objectives. Engaging with account representatives ensures solutions are aligned with organizational goals. Stakeholders are encouraged to seek clarification from representatives for a deeper understanding of recommendations and informed decision-making.</p>
@@ -51,19 +51,19 @@ const CAVEATS = `
 <p><strong><em>It's important to note that sizings <u class="accent">should not</u> be considered facts and will require an adjustment period and staged implementation plan to achieve optimal results.</em></strong></p>
 <p>In summary, while the recommendations offer valuable initial guidance, stakeholders should remain adaptable, align solutions with business goals, consult representatives for clarity, and continuously adapt sizing strategies to changing needs.</p>`;
 
-const SCOPE_ECH = `This sizing estimate is for an ECH-Commercial Cloud deployment based upon a subscription for pre-paid Committed Enterprise Cloud Units (ECU). ECUs are based upon the amount of projected RAM, Data Transfer, and Storage to be consumed for the term. The cost of the underlying environment, virtual machines and supporting back-end network, is included in the ECU subscription costs. It is also inclusive of Elastic support for customers and the platform operational maintenance and ongoing service operations. Please see https://www.elastic.co/cloud/shared-responsibility.`;
+export const SCOPE_ECH = `This sizing estimate is for an ECH-Commercial Cloud deployment based upon a subscription for pre-paid Committed Enterprise Cloud Units (ECU). ECUs are based upon the amount of projected RAM, Data Transfer, and Storage to be consumed for the term. The cost of the underlying environment, virtual machines and supporting back-end network, is included in the ECU subscription costs. It is also inclusive of Elastic support for customers and the platform operational maintenance and ongoing service operations. Please see https://www.elastic.co/cloud/shared-responsibility.`;
 
 // Not in the template: written for self-managed scenarios in the same voice. Review before sending.
-const SCOPE_SELF_MANAGED = `This sizing estimate is for a self-managed deployment of the Elastic Stack on infrastructure you provide and operate, based upon an Enterprise subscription licensed by Enterprise Resource Units (ERU). ERUs are based upon the amount of memory allocated to various components of the deployment. The cost of the underlying servers, storage, network and their operation is not included in the subscription. The subscription includes Elastic support for your deployment.`;
+export const SCOPE_SELF_MANAGED = `This sizing estimate is for a self-managed deployment of the Elastic Stack on infrastructure you provide and operate, based upon an Enterprise subscription licensed by Enterprise Resource Units (ERU). ERUs are based upon the amount of memory allocated to various components of the deployment. The cost of the underlying servers, storage, network and their operation is not included in the subscription. The subscription includes Elastic support for your deployment.`;
 
-const ASSUMPTIONS_INTRO = 'The following assumptions have been made about your environment based on the information available at the time of this estimate:';
-const RETENTION_INTRO = 'Generally, Elastic recommends a multi-tier data architecture. This allows for optimization of data storage based on the relative importance of the data as it changes over time, allowing for more cost-effective data management. With this in mind, this sizing estimation recommends the following data tiering strategy for each network:';
-const SNAPSHOTS = 'As a best practice, Elastic recommends routine snapshots of the indices within your cluster. This would require additional object-compatible (e.g., NFS/MinIO/Amazon S3) storage space to snapshot the entirety of your data (this is required if utilizing the Frozen Tier).';
+export const ASSUMPTIONS_INTRO = 'The following assumptions have been made about your environment based on the information available at the time of this estimate:';
+export const RETENTION_INTRO = 'Generally, Elastic recommends a multi-tier data architecture. This allows for optimization of data storage based on the relative importance of the data as it changes over time, allowing for more cost-effective data management. With this in mind, this sizing estimation recommends the following data tiering strategy for each network:';
+export const SNAPSHOTS = 'As a best practice, Elastic recommends routine snapshots of the indices within your cluster. This would require additional object-compatible (e.g., NFS/MinIO/Amazon S3) storage space to snapshot the entirety of your data (this is required if utilizing the Frozen Tier).';
 
 // ---- What each scenario holds ----------------------------------------------------------------------
 
-type Tiers = Partial<Record<Tier, number>>;
-interface DataLine { name: string; gbPerDay?: number; volume?: string; tiers?: Tiers }
+export type Tiers = Partial<Record<Tier, number>>;
+export interface DataLine { name: string; gbPerDay?: number; volume?: string; tiers?: Tiers }
 
 /** SIEM and Endpoint on Elastic Cloud: 1 day hot, 6 days cold, the rest frozen (ECH front ends). */
 function securityTiers(totalDays: number): Tiers {
@@ -94,19 +94,24 @@ function workloadData(w: WorkloadProfile): DataLine {
   return { name: w.id, ...(w.rawGbPerDay !== undefined ? { gbPerDay: w.rawGbPerDay } : {}), ...(volume ? { volume } : {}), ...(Object.keys(w.retentionDays).length ? { tiers: w.retentionDays } : {}) };
 }
 
-function dataLines(s: RomScenario): DataLine[] {
+export function dataLines(s: RomScenario): DataLine[] {
   return s.kind === 'ech' ? s.ech.items.map(echData) : s.workloads.map(workloadData);
 }
 
-const totalDays = (t: Tiers | undefined) => (['hot', 'warm', 'cold', 'frozen'] as Tier[]).reduce((sum, k) => sum + (t?.[k] ?? 0), 0);
+export const totalDays = (t: Tiers | undefined) => (['hot', 'warm', 'cold', 'frozen'] as Tier[]).reduce((sum, k) => sum + (t?.[k] ?? 0), 0);
 
 /** The heading the template puts on a licensing table: "106GB / Day (365 Days Retention)". */
-function volumeHeading(s: RomScenario): string {
+export function volumeParts(s: RomScenario): { volume: string; retention: string } | undefined {
   const lines = dataLines(s).filter((d) => d.gbPerDay !== undefined);
-  if (lines.length === 0) return e(s.title);
+  if (lines.length === 0) return undefined;
   const gb = lines.reduce((sum, d) => sum + (d.gbPerDay ?? 0), 0);
   const days = Math.max(...lines.map((d) => totalDays(d.tiers)));
-  return `${fmtNum(gb, 0)}GB / Day <strong>(${fmtNum(days, 0)} Days Retention)</strong>`;
+  return { volume: `${fmtNum(gb, 0)}GB / Day`, retention: `(${fmtNum(days, 0)} Days Retention)` };
+}
+
+function volumeHeading(s: RomScenario): string {
+  const v = volumeParts(s);
+  return v ? `${v.volume} <strong>${v.retention}</strong>` : e(s.title);
 }
 
 // ---- Numbers --------------------------------------------------------------------------------------
@@ -116,32 +121,57 @@ export function scenarioEcu(s: Extract<RomScenario, { kind: 'ech' }>): number {
   return s.outcomes.reduce((sum, o) => sum + ('result' in o ? o.result.totalRounded : 0), 0);
 }
 
-const TIER_ROW: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold', frozen: 'Frozen', master: 'Master', coordinating: 'Coordinating', ml: 'ML', kibana: 'Kibana', apm: 'APM Server', data: 'Data', enterprisesearch: 'Crawlers and connectors' };
+export const TIER_ROW: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold', frozen: 'Frozen', master: 'Master', coordinating: 'Coordinating', ml: 'ML', kibana: 'Kibana', apm: 'APM Server', data: 'Data', enterprisesearch: 'Crawlers and connectors' };
 
-function echConfigTable(lines: readonly EchLine[]): string {
+/** One row of a cluster configuration table; `storage` undefined prints as a blank (blue) cell on Elastic Cloud. */
+export interface ConfigTable {
+  head: string[];
+  rows: { tier: string; cells: (string | undefined)[]; blobTb?: string }[];
+  /** Columns the footer labels span. */
+  labelSpan: number;
+  ram: string;
+  storage: string;
+}
+
+export function echConfig(lines: readonly EchLine[]): ConfigTable {
   const rows = lines.filter((l) => l.key !== 'transfer' && l.key !== 'storage');
   const disk = rows.reduce((s, l) => s + (l.diskGb ?? 0), 0);
   const blob = rows.reduce((s, l) => s + (l.blobGb ?? 0), 0);
   const ram = rows.reduce((s, l) => s + (l.ramGb ?? 0), 0);
-  const body = rows.map((l) => {
-    const storage = l.diskGb === undefined ? '<td class="blank"></td>' : `<td>${tb(l.diskGb)}${l.blobGb ? `, <strong>Blob Storage:</strong> ${tb(l.blobGb)}` : ''}</td>`;
-    return `<tr><th scope="row">${e(TIER_ROW[l.key] ?? l.label)}</th><td>${l.zones ?? ''}</td><td>${l.error ? 'n/a' : gbText(l.ramGb ?? 0)}</td>${storage}<td>${e(l.sku ?? '')}</td></tr>`;
-  }).join('');
-  return `<table class="config"><thead><tr><th>Tier</th><th>Availability Zones</th><th>Total RAM</th><th>Storage</th><th>Instance Type</th></tr></thead><tbody>${body}</tbody>
-<tfoot><tr><th colspan="2">Total Calculated RAM</th><td colspan="3" class="accent">${gbText(ram)}</td></tr>
-<tr><th colspan="2">Total Calculated Storage</th><td colspan="3" class="accent">${tb(disk)}${blob ? `, Blob: ${tb(blob)}` : ''}</td></tr></tfoot></table>`;
+  return {
+    head: ['Tier', 'Availability Zones', 'Total RAM', 'Storage', 'Instance Type'],
+    rows: rows.map((l) => ({
+      tier: TIER_ROW[l.key] ?? l.label,
+      cells: [l.zones === undefined ? '' : String(l.zones), l.error ? 'n/a' : gbText(l.ramGb ?? 0), l.diskGb === undefined ? undefined : tb(l.diskGb), l.sku ?? ''],
+      ...(l.diskGb !== undefined && l.blobGb ? { blobTb: tb(l.blobGb) } : {}),
+    })),
+    labelSpan: 2,
+    ram: gbText(ram),
+    storage: `${tb(disk)}${blob ? `, Blob: ${tb(blob)}` : ''}`,
+  };
 }
 
-function selfManagedConfigTable(r: SizingResult): string {
+export function selfManagedConfig(r: SizingResult): ConfigTable {
   const rows = byRoleOrder([
     ...r.tiers.map((t) => ({ role: t.tier as string, n: t.nodes, ram: t.ramGb, disk: t.diskGb })),
     ...r.overhead.filter((o) => o.count > 0).map((o) => ({ role: o.role as string, n: o.count, ram: o.ramGb, disk: o.diskGb })),
   ]);
-  const body = rows.map((x) => `<tr><th scope="row">${e(TIER_ROW[x.role] ?? x.role)}</th><td>${x.n}</td><td>${gbText(x.ram)}</td><td>${gbText(x.n * x.ram)}</td><td>${x.disk ? tb(x.disk) : ''}</td><td>${x.disk ? tb(x.n * x.disk) : ''}</td></tr>`).join('');
   const disk = rows.reduce((s, x) => s + x.n * (x.disk ?? 0), 0);
-  return `<table class="config"><thead><tr><th>Tier</th><th>Nodes</th><th>RAM per node</th><th>Total RAM</th><th>Storage per node</th><th>Total storage</th></tr></thead><tbody>${body}</tbody>
-<tfoot><tr><th colspan="3">Total Calculated RAM</th><td colspan="3" class="accent">${gbText(r.totalRamGb)}</td></tr>
-<tr><th colspan="3">Total Calculated Storage</th><td colspan="3" class="accent">${tb(disk)}${r.objectStorage ? `, Object storage: ${tb(r.objectStorage.gb)}` : ''}</td></tr></tfoot></table>`;
+  return {
+    head: ['Tier', 'Nodes', 'RAM per node', 'Total RAM', 'Storage per node', 'Total storage'],
+    rows: rows.map((x) => ({ tier: TIER_ROW[x.role] ?? x.role, cells: [String(x.n), gbText(x.ram), gbText(x.n * x.ram), x.disk ? tb(x.disk) : '', x.disk ? tb(x.n * x.disk) : ''] })),
+    labelSpan: 3,
+    ram: gbText(r.totalRamGb),
+    storage: `${tb(disk)}${r.objectStorage ? `, Object storage: ${tb(r.objectStorage.gb)}` : ''}`,
+  };
+}
+
+function configTable(t: ConfigTable): string {
+  const cols = t.head.length;
+  const body = t.rows.map((r) => `<tr><th scope="row">${e(r.tier)}</th>${r.cells.map((c, i) => (c === undefined ? '<td class="blank"></td>' : `<td>${e(c)}${r.blobTb && i === 2 ? `, <strong>Blob Storage:</strong> ${r.blobTb}` : ''}</td>`)).join('')}</tr>`).join('');
+  return `<table class="config"><thead><tr>${t.head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody>
+<tfoot><tr><th colspan="${t.labelSpan}">Total Calculated RAM</th><td colspan="${cols - t.labelSpan}" class="accent">${t.ram}</td></tr>
+<tr><th colspan="${t.labelSpan}">Total Calculated Storage</th><td colspan="${cols - t.labelSpan}" class="accent">${t.storage}</td></tr></tfoot></table>`;
 }
 
 // ---- Pages ----------------------------------------------------------------------------------------
@@ -196,7 +226,7 @@ function licensing(input: RomInput): string {
   return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}</section>`;
 }
 
-const scenarioServices = (s: RomScenario) => (s.services ?? []).filter((p): p is PricedServiceLine & { item: ServiceItem } => !!p.item);
+export const scenarioServices = (s: RomScenario) => (s.services ?? []).filter((p): p is PricedServiceLine & { item: ServiceItem } => !!p.item);
 
 /** D46: the scenario's services, laid out like the licensing tables. Dates only on services marked as dated. */
 function servicesTable(s: RomScenario, start: string, end: string): string {
@@ -213,7 +243,7 @@ function servicesTable(s: RomScenario, start: string, end: string): string {
 }
 
 /** Every service used in the ROM that has a description, once each, in first-use order. */
-function describedServices(input: RomInput): ServiceItem[] {
+export function describedServices(input: RomInput): ServiceItem[] {
   const seen = new Map<string, ServiceItem>();
   for (const s of input.scenarios) for (const p of scenarioServices(s)) if (p.item.description.trim() && !seen.has(p.item.id)) seen.set(p.item.id, p.item);
   return [...seen.values()];
@@ -235,10 +265,10 @@ function scenarioPage(s: RomScenario): string {
     config = s.outcomes.map((o) => {
       if ('error' in o) return `<p><strong>${e(o.item.name)}:</strong> could not be priced: ${e(o.error)}</p>`;
       const ecu = o.result.totalRounded;
-      return `${s.outcomes.length > 1 ? `<h4>${e(o.item.name)}</h4>` : ''}<p>Based on the information and assumptions above, we have estimated the cost of your deployment to be <strong>${fmtNum(ecu, 0)}</strong> ECUs, and configured as follows:</p>${echConfigTable(o.result.lines)}`;
+      return `${s.outcomes.length > 1 ? `<h4>${e(o.item.name)}</h4>` : ''}<p>Based on the information and assumptions above, we have estimated the cost of your deployment to be <strong>${fmtNum(ecu, 0)}</strong> ECUs, and configured as follows:</p>${configTable(echConfig(o.result.lines))}`;
     }).join('');
   } else {
-    config = `<p>Based on the information and assumptions above, we have estimated your deployment to need <strong>${fmtNum(s.result.licenseUnits.value, 0)}</strong> Enterprise Resource Units (ERU), configured as follows:</p>${selfManagedConfigTable(s.result)}`;
+    config = `<p>Based on the information and assumptions above, we have estimated your deployment to need <strong>${fmtNum(s.result.licenseUnits.value, 0)}</strong> Enterprise Resource Units (ERU), configured as follows:</p>${configTable(selfManagedConfig(s.result))}`;
   }
 
   return `<section class="page">
