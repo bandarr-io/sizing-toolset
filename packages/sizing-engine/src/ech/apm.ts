@@ -167,11 +167,13 @@ export function echApm(c: ConstantSet, data: EchData, req: EchApmRequest): EchRe
     const z = zones(t);
     const math: MathStep[] = [...ingestMath, oneCopyStep(t)];
     let need: number;
+    let blobGb: number | undefined;
     let constraint: 'disk' | 'cpu' | undefined;
     if (t === 'frozen') {
       // K277:K278: blob = one copy × index factor; RAM = blob / 1,600. No replicas, no reserve.
       const ratio = req.frozenRamToBlob ?? num(c, 'ech.frozen_ram_to_blob');
       const blob = oneCopy(t) * idx;
+      blobGb = blob;
       need = blob / ratio;
       math.push(
         step('frozen snapshot data', `${fmt(oneCopy(t))} × ${fmt(idx)} index factor`, blob, idxKeys),
@@ -200,7 +202,7 @@ export function echApm(c: ConstantSet, data: EchData, req: EchApmRequest): EchRe
     const fit = fitToIncrements(need, z, sku.increments);
     math.push(fitStep(`${t} nodes`, need, fit));
     const ram = rounded ? fit.roundedGb : need;
-    priced(t, sku.id, ram, { nodesPerZone: fit.nodesPerZone, nodeSizeGb: fit.nodeSizeGb, zones: z, diskGb: ram * sku.ramDisk, ...(constraint ? { constraint } : {}) }, math);
+    priced(t, sku.id, ram, { nodesPerZone: fit.nodesPerZone, nodeSizeGb: fit.nodeSizeGb, zones: z, diskGb: ram * sku.ramDisk, ...(blobGb !== undefined ? { blobGb } : {}), ...(constraint ? { constraint } : {}) }, math);
   }
 
   // APM Server (K148, J29): size from events/s. No zone multiplier (E109 is unused on the sheet).

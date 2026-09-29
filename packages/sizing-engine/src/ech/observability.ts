@@ -97,11 +97,13 @@ export function echObservability(c: ConstantSet, data: EchData, req: EchObservab
     const z = zones(t);
     const math: MathStep[] = [dailyStep, oneCopyStep(t)];
     let need: number;
+    let blobGb: number | undefined;
     let constraint: 'disk' | 'cpu' | undefined;
     if (t === 'frozen') {
       // K279:K280: blob = one copy × index factor; RAM = blob / 1,600.
       const ratio = req.frozenRamToBlob ?? num(c, 'ech.frozen_ram_to_blob');
       const blob = oneCopy(t) * idx;
+      blobGb = blob;
       need = blob / ratio;
       math.push(
         step('frozen snapshot data', `${fmt(oneCopy(t))} × ${fmt(idx)} index factor`, blob, idxKeys),
@@ -145,7 +147,7 @@ export function echObservability(c: ConstantSet, data: EchData, req: EchObservab
     math.push(fitStep(`${t} nodes`, need, fit));
     const ram = rounded ? fit.roundedGb : need;
     priced(t, TIER_LABEL[t], sku.id, ram, {
-      nodesPerZone: fit.nodesPerZone, nodeSizeGb: fit.nodeSizeGb, zones: z, diskGb: ram * sku.ramDisk, ...(constraint ? { constraint } : {}),
+      nodesPerZone: fit.nodesPerZone, nodeSizeGb: fit.nodeSizeGb, zones: z, diskGb: ram * sku.ramDisk, ...(blobGb !== undefined ? { blobGb } : {}), ...(constraint ? { constraint } : {}),
     }, math);
   }
 

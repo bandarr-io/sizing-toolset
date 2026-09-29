@@ -185,11 +185,13 @@ export function echSecurity(c: ConstantSet, data: EchData, req: EchSecurityReque
     const z = avail.zones[t];
     const math: MathStep[] = [dailyStep, retentionStep, oneCopyStep(t)];
     let need: number;
+    let blobGb: number | undefined;
     let constraint: 'disk' | 'cpu' | undefined;
     if (t === 'frozen') {
       // K276 blob = one copy × f (no replicas, no reserve); K277 RAM = blob / 1,600.
       const ratio = req.frozenRamToBlob ?? num(c, 'ech.frozen_ram_to_blob');
       const blob = oneCopy(t) * f;
+      blobGb = blob;
       need = blob / ratio;
       math.push(
         step('frozen snapshot data', `${fmt(oneCopy(t))} × ${fmt(f)} index factor`, blob, fKeys),
@@ -221,7 +223,7 @@ export function echSecurity(c: ConstantSet, data: EchData, req: EchSecurityReque
     math.push(fitStep(`${t} nodes`, need, fit));
     const ram = rounded ? fit.roundedGb : need;
     priced(t, LABEL[t], sku.id, ram, {
-      nodesPerZone: fit.nodesPerZone, nodeSizeGb: fit.nodeSizeGb, zones: z, diskGb: ram * sku.ramDisk, ...(constraint ? { constraint } : {}),
+      nodesPerZone: fit.nodesPerZone, nodeSizeGb: fit.nodeSizeGb, zones: z, diskGb: ram * sku.ramDisk, ...(blobGb !== undefined ? { blobGb } : {}), ...(constraint ? { constraint } : {}),
     }, math);
   }
 
