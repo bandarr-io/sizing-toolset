@@ -18,6 +18,7 @@ import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
 import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
 import { useCostDefaults } from './costStore.tsx';
+import { customerSummaryHtml } from './customerSummary.ts';
 import { download, modelsMarkdown, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
 import { ModelsPanel } from './results/ModelsPanel.tsx';
 import { ServerGroups } from './calculator/ServerGroups.tsx';
@@ -163,6 +164,13 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
     if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at, cost), 'text/markdown');
     else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
   };
+  // One-page customer summary: Size a workload only; cost appears when prices are set.
+  const exportSummary = state.mode === 'forward' && 'result' in outcome
+    ? () => {
+      const cost = costReport(state, constants, rates);
+      download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'self_managed', state, result: outcome.result, cost }, new Date().toISOString()), 'text/html');
+    }
+    : undefined;
 
   if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
   if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
@@ -179,6 +187,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
         onReset={() => setState((s) => ({ ...defaultState(), name: s.name, mode: s.mode }))}
         onExportMd={() => exportAs('md')}
         onExportJson={() => exportAs('json')}
+        {...(exportSummary ? { onExportSummary: exportSummary } : {})}
       />
       <EuiSpacer size="l" />
       <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>

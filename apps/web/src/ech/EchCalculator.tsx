@@ -3,6 +3,7 @@ import { ENGINE_VERSION } from '@sizing/engine';
 import type { ConstantSet } from '@sizing/constants';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Toolbar } from '../calculator/Toolbar.tsx';
+import { customerSummaryHtml } from '../customerSummary.ts';
 import { download, slug } from '../export.ts';
 import { SelectField } from '../components/Fields.tsx';
 import { modelOptionsFor, redirectToModels, type AppState } from '../state.ts';
@@ -48,6 +49,7 @@ export function EchCalculator({ state, setState, constants }: { state: AppState;
         onReset={() => setState((s) => ({ ...s, ech: defaultEch() }))}
         onExportMd={() => exportAs('md')}
         onExportJson={() => exportAs('json')}
+        {...(data ? { onExportSummary: () => download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'ech', state, ech: e, data, outcomes }, new Date().toISOString()), 'text/html') } : {})}
       />
       <EuiSpacer size="l" />
       {!data ? (

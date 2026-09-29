@@ -12,7 +12,7 @@ const MODE_LABEL: Record<Mode, string> = {
   forward: 'Size a workload', reverse: 'Test hardware limits', multisite: 'Multiple sites', models: 'Compare models'
 };
 
-export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, onExportJson, canExport }: {
+export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, onExportJson, onExportSummary, canExport }: {
   state: AppState;
   onMode: (m: Mode) => void;
   onRename: (name: string) => void;
@@ -20,6 +20,8 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
   onReset: () => void;
   onExportMd: () => void;
   onExportJson: () => void;
+  /** One-page customer summary (HTML); absent where it does not apply yet. */
+  onExportSummary?: () => void;
   canExport: boolean;
 }) {
   const [saved, setSaved] = useState<SavedScenario[]>(() => listSaved());
@@ -99,6 +101,9 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
               <EuiContextMenuPanel items={[
                 <EuiContextMenuItem key="md" icon="document" onClick={() => { onExportMd(); setOpenExport(false); }}>Document for the customer (Markdown)</EuiContextMenuItem>,
                 <EuiContextMenuItem key="json" icon="export" onClick={() => { onExportJson(); setOpenExport(false); }}>Data file that reloads exactly (JSON)</EuiContextMenuItem>,
+                <EuiContextMenuItem key="summary" icon="reportingApp" disabled={!onExportSummary}
+                  toolTipContent={onExportSummary ? undefined : 'Available in Size a workload, for self-managed and Elastic Cloud.'}
+                  onClick={() => { onExportSummary?.(); setOpenExport(false); }}>Customer summary (one page)</EuiContextMenuItem>,
               ]} />
             </EuiPopover>
           </EuiFlexItem>
