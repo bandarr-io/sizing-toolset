@@ -1,10 +1,10 @@
 import {
-  EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiKeyPadMenu, EuiKeyPadMenuItem, EuiPanel, EuiPopover, EuiSpacer, EuiText, EuiToolTip,
+  EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiContextMenuItem, EuiContextMenuPanel, EuiFlexGroup, EuiFlexItem, EuiIcon, EuiKeyPadMenu, EuiKeyPadMenuItem, EuiPanel, EuiPopover, EuiSpacer, EuiText, EuiToolTip,
 } from '@elastic/eui';
 import type { WorkloadKind, WorkloadProfile } from '@sizing/engine';
 import { useState } from 'react';
 import { useConstants } from '../constantsStore.tsx';
-import { KIND_ORDER, KINDS, newWorkload } from '../state.ts';
+import { applyTemplate, KIND_ORDER, KINDS, newWorkload, TEMPLATES } from '../state.ts';
 import { RetentionStrip } from './RetentionTimeline.tsx';
 import { summarize, WorkloadCard, type CardRole } from './WorkloadCard.tsx';
 
@@ -17,6 +17,22 @@ function KindPad({ onPick }: { onPick: (k: WorkloadKind) => void }) {
         </EuiKeyPadMenuItem>
       ))}
     </EuiKeyPadMenu>
+  );
+}
+
+/** Replace the workloads with a realistic starting point. */
+function TemplatePicker({ onPick }: { onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <EuiPopover isOpen={open} closePopover={() => setOpen(false)} anchorPosition="downLeft" panelPaddingSize="none"
+      button={<EuiButtonEmpty size="s" iconType="documents" onClick={() => setOpen(!open)}>Start from a template</EuiButtonEmpty>}>
+      <EuiContextMenuPanel title="Replaces the workloads above" items={TEMPLATES.map((t) => (
+        <EuiContextMenuItem key={t.id} icon={t.icon} onClick={() => { onPick(t.id); setOpen(false); }}>
+          <strong>{t.label}</strong>
+          <EuiText size="xs" color="subdued"><p>{t.blurb}</p></EuiText>
+        </EuiContextMenuItem>
+      ))} />
+    </EuiPopover>
   );
 }
 
@@ -44,8 +60,10 @@ function WorkloadRow({ p, onEdit, onRemove }: { p: WorkloadProfile; onEdit: () =
  * Workload cards plus an "add" picker. With several workloads only one card is open at a time; the rest fold to a line.
  * With no workloads the picker is shown inline as the call to action.
  */
-export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, addLabel = 'Add workload', showGrowth = false }: {
+export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, addLabel = 'Add workload', showGrowth = false, templates = false }: {
   workloads: WorkloadProfile[];
+  /** Offer "Start from a template" (Size a workload). */
+  templates?: boolean;
   onChange: (w: WorkloadProfile[]) => void;
   role?: CardRole;
   addLabel?: string;
@@ -64,7 +82,10 @@ export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, 
     if (i <= editing) setEditing(Math.max(0, editing - 1));
   };
 
-  if (workloads.length === 0) return <KindPad onPick={add} />;
+  const useTemplate = (id: string) => { onChange(applyTemplate(id, c)); setEditing(0); };
+  const picker = templates ? <TemplatePicker onPick={useTemplate} /> : null;
+
+  if (workloads.length === 0) return <><KindPad onPick={add} />{picker && <><EuiSpacer size="s" />{picker}</>}</>;
   const current = Math.min(editing, workloads.length - 1);
 
   return (
@@ -79,10 +100,15 @@ export function WorkloadList({ workloads, onChange, role = { kind: 'forward' }, 
           <EuiSpacer size="m" />
         </div>
       ))}
-      <EuiPopover isOpen={open} closePopover={() => setOpen(false)} anchorPosition="downLeft"
-        button={<EuiButton iconType="plusCircle" size="s" color="text" onClick={() => setOpen(!open)}>{addLabel}</EuiButton>}>
-        <KindPad onPick={add} />
-      </EuiPopover>
+      <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false} wrap>
+        <EuiFlexItem grow={false}>
+          <EuiPopover isOpen={open} closePopover={() => setOpen(false)} anchorPosition="downLeft"
+            button={<EuiButton iconType="plusCircle" size="s" color="text" onClick={() => setOpen(!open)}>{addLabel}</EuiButton>}>
+            <KindPad onPick={add} />
+          </EuiPopover>
+        </EuiFlexItem>
+        {picker && <EuiFlexItem grow={false}>{picker}</EuiFlexItem>}
+      </EuiFlexGroup>
     </>
   );
 }

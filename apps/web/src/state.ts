@@ -34,6 +34,43 @@ export function groupsSummary(groups: readonly { role: string; count: number; ra
   return `${total} ${noun}: ${groups.filter((g) => g.count > 0).map((g) => `${g.count} ${g.role} × ${fmt1(g.ramGb)} GB`).join(', ')}`;
 }
 
+/** A starting point for Size a workload: realistic workloads that replace the current list. */
+export interface WorkloadTemplate { id: string; label: string; blurb: string; icon: string; build: (c: ConstantSet) => WorkloadProfile[] }
+
+/** Built from newWorkload so settings-driven defaults (downsampling, vector compression) still apply. */
+export const TEMPLATES: WorkloadTemplate[] = [
+  {
+    id: 'siem', label: 'SIEM: 500 GB/day for a year', blurb: 'Security events in LogsDB, 30 days hot and the rest of the year frozen', icon: 'logoSecurity',
+    build: (c) => [{ ...newWorkload('siem', [], c), rawGbPerDay: 500, retentionDays: { hot: 30, frozen: 335 } }],
+  },
+  {
+    id: 'observability', label: 'Observability: logs, metrics and APM', blurb: 'Logs 200 GB/day, metrics 50 GB/day and traces 50 GB/day, kept 90 days', icon: 'logoObservability',
+    build: (c) => {
+      const logs = { ...newWorkload('logs', [], c), rawGbPerDay: 200 };
+      const metrics = { ...newWorkload('metrics', [logs.id], c), rawGbPerDay: 50 };
+      const apm = { ...newWorkload('apm', [logs.id, metrics.id], c), rawGbPerDay: 50 };
+      return [logs, metrics, apm];
+    },
+  },
+  {
+    id: 'search', label: 'Search app: 500 GB of documents', blurb: 'A catalog or knowledge base that does not age, with one spare copy', icon: 'search',
+    build: (c) => [{ ...newWorkload('search', [], c), totalGb: 500 }],
+  },
+  {
+    id: 'vector', label: 'Vector search: 10 million vectors', blurb: '1,024 dimensions, compressed with BBQ', icon: 'sparkles',
+    build: (c) => {
+      const w = newWorkload('vector', [], c);
+      return [{ ...w, vector: { ...w.vector!, count: 10_000_000, dims: 1024, quant: 'bbq' } }];
+    },
+  },
+];
+
+export function applyTemplate(id: string, c: ConstantSet = defaultConstants): WorkloadProfile[] {
+  const t = TEMPLATES.find((x) => x.id === id);
+  if (!t) throw new Error(`Unknown template: ${id}`);
+  return t.build(c);
+}
+
 /** True when no workload has a growth rate, so the Plan for growth step can start folded. */
 export function isDefaultGrowth(f: ForwardRequest): boolean {
   return !f.workloads.some((w) => (w.growthPctPerYear ?? 0) > 0);

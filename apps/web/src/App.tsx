@@ -323,7 +323,7 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
       </Section>
       <Gap />
       <Section step={2} title="What will the cluster hold?" description="Add each kind of data the cluster will store. The cluster is the group of servers running Elasticsearch. Results update as you type." summary={workloadsSummary(f.workloads)}>
-        <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
+        <WorkloadList templates workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
       </Section>
       <Gap />
       <Section step={3} title="Node sizes and ratios"

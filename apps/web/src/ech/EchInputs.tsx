@@ -4,9 +4,10 @@ import {
 } from '@elastic/eui';
 import { echDefaultSku, type EchData, type EchPlacement, type EchUseCase } from '@sizing/engine';
 import { useState, type ReactNode } from 'react';
+import { RetentionTimeline } from '../calculator/RetentionTimeline.tsx';
 import { NumField, SelectField, SwitchField } from '../components/Fields.tsx';
 import {
-  channelsFor, newEchItem, PROVIDERS, regionsFor, skusFor, tiersFor, USE_CASES, useCaseLabel, withPlacement,
+  applyEchTemplate, channelsFor, ECH_TEMPLATES, newEchItem, PROVIDERS, regionsFor, skusFor, tiersFor, USE_CASES, useCaseLabel, withPlacement,
   type EchItem, type EchState,
 } from './state.ts';
 
@@ -35,6 +36,7 @@ export function PlacementForm({ data, value, onChange }: { data: EchData; value:
 /** Use cases in the deployment; each is priced as its own deployment and the totals add up. */
 export function EchItemList({ data, state, onChange }: { data: EchData; state: EchState; onChange: (items: EchItem[]) => void }) {
   const [adding, setAdding] = useState(false);
+  const [templating, setTemplating] = useState(false);
   const items = state.items;
   const set = (i: number, next: EchItem) => onChange(items.map((x, j) => (j === i ? next : x)));
   return (
@@ -46,6 +48,8 @@ export function EchItemList({ data, state, onChange }: { data: EchData; state: E
           <EuiSpacer size="m" />
         </div>
       ))}
+      <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false} wrap>
+        <EuiFlexItem grow={false}>
       <EuiPopover isOpen={adding} closePopover={() => setAdding(false)} panelPaddingSize="none" anchorPosition="downLeft"
         button={<EuiButtonEmpty iconType="plusCircle" onClick={() => setAdding(!adding)}>Add a use case</EuiButtonEmpty>}>
         <EuiContextMenuPanel items={USE_CASES.map((u) => (
@@ -54,6 +58,19 @@ export function EchItemList({ data, state, onChange }: { data: EchData; state: E
           </EuiContextMenuItem>
         ))} />
       </EuiPopover>
+        </EuiFlexItem>
+        <EuiFlexItem grow={false}>
+          <EuiPopover isOpen={templating} closePopover={() => setTemplating(false)} panelPaddingSize="none" anchorPosition="downLeft"
+            button={<EuiButtonEmpty iconType="documents" onClick={() => setTemplating(!templating)}>Start from a template</EuiButtonEmpty>}>
+            <EuiContextMenuPanel title="Replaces the use cases above" items={ECH_TEMPLATES.map((t) => (
+              <EuiContextMenuItem key={t.id} icon={t.icon} onClick={() => { onChange(applyEchTemplate(t.id)); setTemplating(false); }}>
+                <strong>{t.label}</strong>
+                <EuiText size="xs" color="subdued"><p>{t.blurb}</p></EuiText>
+              </EuiContextMenuItem>
+            ))} />
+          </EuiPopover>
+        </EuiFlexItem>
+      </EuiFlexGroup>
     </>
   );
 }
@@ -73,17 +90,6 @@ const VECTOR_METHODS = [
 ] as const;
 const SEARCH_USE_CASES = [{ value: 'Custom Search', text: 'Custom search' }, { value: 'Ingest', text: 'Crawlers and connectors' }] as const;
 
-type Tier = 'hot' | 'warm' | 'cold' | 'frozen';
-function Retention({ value, tiers, onChange }: { value: Partial<Record<Tier, number>>; tiers: Tier[]; onChange: (v: Partial<Record<Tier, number>>) => void }) {
-  return (
-    <EuiFlexGrid columns={4} gutterSize="m">
-      {tiers.map((t) => col(
-        <NumField label={`${t[0]!.toUpperCase()}${t.slice(1)} days`} value={value[t]} optional min={0}
-          onChange={(v) => { const { [t]: _drop, ...rest } = value; onChange(v === undefined ? rest : { ...rest, [t]: v }); }} />, t,
-      ))}
-    </EuiFlexGrid>
-  );
-}
 
 /** Roles whose instance type the use case lets you choose, with the Specs type they draw from. */
 const ROLE_TYPES: Record<EchUseCase, [string, string, string][]> = {
@@ -153,7 +159,7 @@ function EchItemCard({ data, placement, item, onChange, onRemove }: {
               : col(<NumField label="Datapoints per second" value={r.datapointsPerSecond} step={1} onChange={(v) => req({ datapointsPerSecond: v ?? 0 })} helpText="Each datapoint is stored in about 5 bytes." />)}
           </EuiFlexGrid>
           <EuiSpacer size="m" />
-          <Retention value={r.retentionDays} tiers={['hot', 'warm', 'cold', 'frozen']} onChange={(retentionDays) => req({ retentionDays })} />
+          <RetentionTimeline value={r.retentionDays} onChange={(v) => req({ retentionDays: v as typeof r.retentionDays })} />
         </>
       );
       break;
@@ -199,7 +205,7 @@ function EchItemCard({ data, placement, item, onChange, onRemove }: {
             {col(<NumField label="Sampling rate" value={r.samplingRate} optional step={0.01} min={0} placeholder="0.07" onChange={(v) => req({ samplingRate: v })} helpText="Share of traces kept, 0 to 1." />)}
           </EuiFlexGrid>
           <EuiSpacer size="m" />
-          <Retention value={r.retentionDays} tiers={['hot', 'warm', 'cold', 'frozen']} onChange={(retentionDays) => req({ retentionDays })} />
+          <RetentionTimeline value={r.retentionDays} onChange={(v) => req({ retentionDays: v as typeof r.retentionDays })} />
         </>
       );
       break;

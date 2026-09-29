@@ -37,21 +37,61 @@ export const USE_CASES: { value: EchUseCase; label: string; blurb: string; icon:
 ];
 export const useCaseLabel = (u: EchUseCase) => USE_CASES.find((x) => x.value === u)?.label ?? u;
 
-/** The spreadsheet's own starting inputs for each use case (its worked examples). */
+/**
+ * Starting inputs for each use case: the spreadsheet's worked examples, except logs and metrics, which start with
+ * the same retention as Size a workload (7 days hot, 83 days frozen) instead of the sheet's 1 day hot.
+ */
 export function newEchItem(useCase: EchUseCase, taken: readonly string[] = []): EchItem {
   const base = useCaseLabel(useCase);
   let name = base;
   for (let i = 2; taken.includes(name); i++) name = `${base} ${i}`;
   const id = `${useCase}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   switch (useCase) {
-    case 'logs': return { id, name, useCase, req: { gbPerDay: 1000, retentionDays: { hot: 1, frozen: 29 } } };
-    case 'metrics': return { id, name, useCase, req: { datapointsPerSecond: 100_000, retentionDays: { hot: 1, frozen: 23 } } };
+    case 'logs': return { id, name, useCase, req: { gbPerDay: 1000, retentionDays: { hot: 7, frozen: 83 } } };
+    case 'metrics': return { id, name, useCase, req: { datapointsPerSecond: 100_000, retentionDays: { hot: 7, frozen: 83 } } };
     case 'siem': return { id, name, useCase, req: { siemUseCase: 'enterprise', gbPerDay: 500, totalDays: 30, logsdb: true, availability: 'high' } };
     case 'endpoint': return { id, name, useCase, req: { endpointUseCase: 'complete_edr', endpoints: 7500, windowsPct: 75, linuxMacPct: 25, totalDays: 7, logsdb: true, availability: 'high' } };
     case 'apm': return { id, name, useCase, req: { tracesPerMinute: 43_000, retentionDays: { hot: 1, warm: 23 } } };
     case 'search': return { id, name, useCase, req: { documents: 1_000_000, avgDocKb: 20, peakOpsPerSecond: 40 } };
     case 'vector': return { id, name, useCase, req: { method: 'bbq', documents: 18_000_000, vectorsPerDoc: 10, dims: 512 } };
   }
+}
+
+/** A starting point for the Elastic Cloud use-case list; it replaces the current list. */
+export interface EchTemplate { id: string; label: string; blurb: string; icon: string; build: () => EchItem[] }
+
+export const ECH_TEMPLATES: EchTemplate[] = [
+  {
+    id: 'siem', label: 'SIEM: 500 GB/day for 30 days', blurb: 'Security events with LogsDB and high availability', icon: 'logoSecurity',
+    build: () => [newEchItem('siem')],
+  },
+  {
+    id: 'observability', label: 'Observability: logs, metrics and APM', blurb: 'Logs 200 GB/day, 100,000 metric datapoints a second and 5,000 traces a minute', icon: 'logoObservability',
+    build: () => {
+      const logs = newEchItem('logs');
+      const metrics = newEchItem('metrics', [logs.name]);
+      const apm = newEchItem('apm', [logs.name, metrics.name]);
+      return [
+        logs.useCase === 'logs' ? { ...logs, req: { ...logs.req, gbPerDay: 200 } } : logs,
+        metrics,
+        apm.useCase === 'apm' ? { ...apm, req: { ...apm.req, tracesPerMinute: 5000, retentionDays: { hot: 7, frozen: 23 } } } : apm,
+      ];
+    },
+  },
+  {
+    id: 'search', label: 'Search app: 1 million documents', blurb: '20 KB documents, 40 searches and writes a second at peak', icon: 'search',
+    build: () => [newEchItem('search')],
+  },
+  {
+    id: 'vector', label: 'Vector search: 180 million vectors', blurb: '18 million documents with 10 vectors each, 512 dimensions, BBQ', icon: 'sparkles',
+    build: () => [newEchItem('vector')],
+  },
+];
+
+export function applyEchTemplate(id: string): EchItem[] {
+  const t = ECH_TEMPLATES.find((x) => x.id === id);
+  if (!t) throw new Error(`Unknown template: ${id}`);
+  return t.build();
 }
 
 export function defaultEch(): EchState {
