@@ -135,7 +135,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
 
   if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
   if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
-  if (state.mode === 'ech') return <EchCalculator state={state} setState={setState} constants={constants} />;
+  if (state.mode === 'forward' && state.sizeOn === 'ech') return <EchCalculator state={state} setState={setState} constants={constants} />;
 
   return (
     <>

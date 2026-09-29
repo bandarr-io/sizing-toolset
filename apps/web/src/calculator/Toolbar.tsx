@@ -8,7 +8,7 @@ import type { AppState, Mode } from '../state.ts';
 import { deleteNamed, listSaved, saveNamed, type SavedScenario } from '../storage.ts';
 
 const MODE_LABEL: Record<Mode, string> = {
-  forward: 'Size a workload', reverse: 'Test hardware limits', multisite: 'Multiple sites', models: 'Compare models', ech: 'Elastic Cloud',
+  forward: 'Size a workload', reverse: 'Test hardware limits', multisite: 'Multiple sites', models: 'Compare models'
 };
 
 export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, onExportJson, canExport }: {
@@ -51,7 +51,6 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
             { id: 'reverse', label: MODE_LABEL.reverse, iconType: 'compute' },
             { id: 'multisite', label: MODE_LABEL.multisite, iconType: 'globe' },
             { id: 'models', label: MODE_LABEL.models, iconType: 'cluster' },
-            { id: 'ech', label: MODE_LABEL.ech, iconType: 'cloud' },
           ]}
         />
       </EuiFlexItem>

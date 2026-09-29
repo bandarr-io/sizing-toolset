@@ -83,7 +83,10 @@ function withoutFullLogsdb(s: AppState): AppState {
 export function migrate(x: unknown): AppState | undefined {
   if (!x || typeof x !== 'object') return undefined;
   if (isV2(x as Partial<AppState>)) {
-    const s = withoutFullLogsdb(localDisksOnly(x as AppState));
+    const raw = x as AppState;
+    // D43: the Elastic Cloud mode became a choice inside Size a workload.
+    const unified: AppState = (raw.mode as string) === 'ech' ? { ...raw, mode: 'forward', sizeOn: 'ech' } : raw;
+    const s = withoutFullLogsdb(localDisksOnly(unified));
     // "Already running on this cluster" was removed: drop saved extra workloads so they cannot use capacity unseen.
     return { ...s, reverse: normalizeReverse(s.reverse) };
   }
