@@ -6,7 +6,7 @@ import { num, val, type ConstantSet } from '@sizing/constants';
 import { ceilEps, fmt, step } from '../math.ts';
 import type { MathStep } from '../types.ts';
 import {
-  checkPlacement, defaultSku, dtsPrice, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, roundLine, skuOf,
+  checkPlacement, defaultSku, dtsPrice, type EchPlacement, EchUnavailable, fitStep, fitToIncrements, monthlyPerGb, placementNotes, roundLine, skuOf,
 } from './common.ts';
 import type { EchData, EchLine, EchResult, EchRole } from './types.ts';
 
@@ -100,7 +100,7 @@ function fixedRam(c: ConstantSet, req: EchSecurityRequest): { ram: Record<Fixed,
 export function echSecurity(c: ConstantSet, data: EchData, req: EchSecurityRequest): EchResult {
   checkPlacement(data, req);
   const siem = req.kind === 'siem';
-  const warnings: string[] = [];
+  const warnings: string[] = placementNotes(c, req);
   const enterprise = req.tier === 'Enterprise';
 
   // Availability → zones and replicas (Data Validation B24:L26).

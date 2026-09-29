@@ -211,3 +211,13 @@ describe('automatic dedicated masters when data nodes cross the threshold', () =
     expect(r.groups.find((g) => g.role === 'master')).toMatchObject({ count: 3, ramGb: 16 });
   });
 });
+
+describe('new workloads read their defaults from settings (D41)', () => {
+  it('metrics downsample with downsample.default_factor; vectors use BBQ from knn.bbq_default_min_dims', async () => {
+    const { buildConstantSet, defaultConstants } = await import('@sizing/constants');
+    const set = (key: string, value: unknown) => buildConstantSet([...defaultConstants.byKey.values()].map((x) => (x.key === key ? { ...x, value } : x)));
+    expect(newWorkload('metrics', [], set('downsample.default_factor', 0.2)).downsampleFactor).toEqual({ frozen: 0.2 });
+    expect(newWorkload('vector').vector!.quant).toBe('bbq');
+    expect(newWorkload('vector', [], set('knn.bbq_default_min_dims', 2048)).vector!.quant).toBe('int8');
+  });
+});

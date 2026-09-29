@@ -134,3 +134,11 @@ export function vectorCost(c: ConstantSet, dims: number, quant: Quant, hnswM?: n
     keys,
   };
 }
+
+/** Settings behind the storage overhead: disk kept free below the watermark, plus a safety margin (SPEC §5.1). */
+export const OVERHEAD_KEYS = ['storage.watermark_headroom', 'storage.margin'];
+
+/** Storage overhead = 1 + watermark headroom + margin (1.25 by default), rounded to cancel floating-point noise. */
+export function storageOverhead(c: ConstantSet): number {
+  return Math.round((1 + num(c, 'storage.watermark_headroom') + num(c, 'storage.margin')) * 1e9) / 1e9;
+}

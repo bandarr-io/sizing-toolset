@@ -170,6 +170,6 @@ describe('§11.1 show-the-math', () => {
     expect(values).toContain(2160);
     expect(values).toContain(2700);
     const keys = hot.math.flatMap((s) => s.constantKeys);
-    expect(keys).toEqual(expect.arrayContaining(['index_ratio.standard', 'storage_overhead', 'mem_disk.hot', 'failover_nodes_per_tier']));
+    expect(keys).toEqual(expect.arrayContaining(['index_ratio.standard', 'storage.watermark_headroom', 'storage.margin', 'mem_disk.hot', 'failover_nodes_per_tier']));
   });
 });
