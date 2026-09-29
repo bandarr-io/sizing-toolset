@@ -100,7 +100,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
 
         <EuiSpacer size="l" />
         <EuiTitle size="xs"><h3>Scenarios</h3></EuiTitle>
-        <EuiText size="xs" color="subdued"><p>Each becomes its own section and licensing table, in this order. The title and note appear in the document.</p></EuiText>
+        <EuiText size="xs" color="subdued"><p>Each becomes its own section and licensing table, in this order. The section title heads that section; the note is printed inside it.</p></EuiText>
         <EuiSpacer size="s" />
         {options.map((o) => {
           const p = picked[o.id];
@@ -116,7 +116,8 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
                   <EuiFormRow label="Section title" fullWidth display="rowCompressed">
                     <EuiFieldText compressed fullWidth value={p.title} placeholder="Scenario - Hot, Cold, Frozen (365 DAYS)" onChange={(ev) => setPicked((prev) => ({ ...prev, [o.id]: { ...p, title: ev.target.value } }))} />
                   </EuiFormRow>
-                  <EuiFormRow label="Note (optional)" fullWidth display="rowCompressed">
+                  <EuiFormRow label="Note (optional)" fullWidth display="rowCompressed"
+                    helpText="Printed in this scenario's section, after the retention breakdown, as NOTE: … in blue italics. Leave empty to leave it out.">
                     <EuiTextArea compressed fullWidth rows={2} value={p.notes} onChange={(ev) => setPicked((prev) => ({ ...prev, [o.id]: { ...p, notes: ev.target.value } }))} />
                   </EuiFormRow>
                 </>

@@ -52,7 +52,7 @@ const CAVEATS = `
 const SCOPE_ECH = `This sizing estimate is for an ECH-Commercial Cloud deployment based upon a subscription for pre-paid Committed Enterprise Cloud Units (ECU). ECUs are based upon the amount of projected RAM, Data Transfer, and Storage to be consumed for the term. The cost of the underlying environment, virtual machines and supporting back-end network, is included in the ECU subscription costs. It is also inclusive of Elastic support for customers and the platform operational maintenance and ongoing service operations. Please see https://www.elastic.co/cloud/shared-responsibility.`;
 
 // Not in the template: written for self-managed scenarios in the same voice. Review before sending.
-const SCOPE_SELF_MANAGED = `This sizing estimate is for a self-managed deployment of the Elastic Stack on infrastructure you provide and operate, based upon an Enterprise subscription licensed by Enterprise Resource Units (ERU). ERUs are based upon the amount of memory allocated to the Elasticsearch, Kibana and APM nodes in the deployment. The cost of the underlying servers, storage, network and their operation is not included in the subscription. The subscription includes Elastic support for your deployment.`;
+const SCOPE_SELF_MANAGED = `This sizing estimate is for a self-managed deployment of the Elastic Stack on infrastructure you provide and operate, based upon an Enterprise subscription licensed by Enterprise Resource Units (ERU). ERUs are based upon the amount of memory allocated to various components of the deployment. The cost of the underlying servers, storage, network and their operation is not included in the subscription. The subscription includes Elastic support for your deployment.`;
 
 const ASSUMPTIONS_INTRO = 'The following assumptions have been made about your environment based on the information available at the time of this estimate:';
 const RETENTION_INTRO = 'Generally, Elastic recommends a multi-tier data architecture. This allows for optimization of data storage based on the relative importance of the data as it changes over time, allowing for more cost-effective data management. With this in mind, this sizing estimation recommends the following data tiering strategy for each network:';
@@ -224,22 +224,22 @@ function scenarioPage(s: RomScenario): string {
 }
 
 const CSS = `
-@page { size: letter; margin: 0.9in 0.6in 0.7in;
-  @top-left { content: 'ELASTIC BUDGETARY ROM'; font-family: Inter, 'Helvetica Neue', Arial, sans-serif; font-size: 7.5pt; font-weight: 700; color: #1d2330; vertical-align: bottom; padding-bottom: 0.25in; } }
+@page { size: letter; margin: 1in 0.5in 0.6in;
+  @top-left { content: 'ELASTIC BUDGETARY ROM'; font-family: Inter, 'Helvetica Neue', Arial, sans-serif; font-size: 7.5pt; font-weight: 700; color: #1d2330; vertical-align: top; padding-top: 0.47in; } }
 @page :first { margin: 0; @top-left { content: none; } @top-right { content: none; } }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; font-family: ${BRAND.fontStack}; color: #2b2f38; font-size: 10.5pt; line-height: 1.55; background: #ffffff; }
 .accent { color: ${BRAND.blue}; }
 section.page { break-before: page; }
-section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; overflow: hidden; background: ${BRAND.blue}; color: #ffffff; padding: 1.25in 1.15in; }
-.cover .logo { height: 0.9in; margin-bottom: 1.5in; }
+section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; overflow: hidden; background: ${BRAND.blue}; color: #ffffff; padding: 1.05in 1in; }
+.cover .logo { height: 0.9in; margin-bottom: 1.05in; }
 .cover .logo svg, .cover .logo img { height: 100%; width: auto; }
 .cover .placeholder { display: inline-flex; align-items: center; justify-content: center; height: 100%; padding: 0 0.4in; border: 2px dashed rgba(255,255,255,0.8); border-radius: 8px; font-weight: 600; }
 .cover h1 { font-size: 34pt; line-height: 1.1; margin: 0 0 0.2in; font-weight: 800; }
 .cover-kicker { font-size: 15pt; font-weight: 700; margin-bottom: 0.18in; }
 .cover-text { font-size: 12pt; line-height: 1.7; max-width: 6.2in; margin: 0; }
-.cover-site { position: absolute; left: 1.15in; top: 7.7in; font-weight: 700; }
+.cover-site { position: absolute; left: 1in; top: 7.05in; font-weight: 700; }
 .cover-art { position: absolute; right: -0.4in; bottom: -0.4in; width: 5.6in; opacity: 0.9; }
 .customer { color: ${BRAND.blue}; font-size: 17pt; font-weight: 700; margin-top: 0.1in; }
 .doc-title { font-size: 38pt; line-height: 1.1; margin: 0.6in 0 0.6in; font-weight: 800; color: #1d2330; }
@@ -270,7 +270,7 @@ table.config td, table.config tbody th { text-align: center; padding: 7px 6px; }
 table.config td.blank { background: ${BRAND.blue}; }
 table.config tfoot th { text-align: left; background: #eeeeee; padding: 7px 8px; border-top: 1px solid #ffffff; }
 table.config tfoot td { text-align: left; background: #eeeeee; font-weight: 700; border-top: 1px solid #ffffff; }
-@media screen { body { background: #d9dde4; } section.page, section.cover { background-clip: padding-box; } section.page { width: 8.5in; min-height: 11in; margin: 0.3in auto; padding: 0.9in 0.6in 0.7in; background: #ffffff; position: relative; } section.cover { margin: 0.3in auto 0; } }
+@media screen { body { background: #d9dde4; } section.page, section.cover { background-clip: padding-box; } section.page { width: 8.5in; min-height: 11in; margin: 0.3in auto; padding: 1in 0.5in 0.6in; background: #ffffff; position: relative; } section.cover { margin: 0.3in auto 0; } }
 `;
 
 export function romHtml(input: RomInput): string {
@@ -278,7 +278,7 @@ export function romHtml(input: RomInput): string {
 <html lang="en"><head><meta charset="utf-8"><title>Sizing Summary - ${e(input.customer || 'Customer')} - ${input.date.slice(0, 10)}</title>
 ${BRAND.fontLink}
 <style>${CSS}
-@page { @top-right { content: 'DATE: ${usDate(input.date)}'; font-family: ${BRAND.fontStack.replace(/"/g, "'")}; font-size: 7.5pt; font-weight: 700; color: #1d2330; vertical-align: bottom; padding-bottom: 0.25in; } }</style></head>
+@page { @top-right { content: 'DATE: ${usDate(input.date)}'; font-family: ${BRAND.fontStack.replace(/"/g, "'")}; font-size: 7.5pt; font-weight: 700; color: #1d2330; vertical-align: top; padding-top: 0.47in; } }</style></head>
 <body>
 ${cover(input)}
 ${contents(input)}
