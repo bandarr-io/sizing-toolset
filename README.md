@@ -14,6 +14,7 @@ The calculator has four modes, picked from the toolbar:
 | **Test hardware limits** | What can this hardware hold? Maximum GB/day, retention, vectors, ML jobs or agents, or how many years until it is full. |
 | **Multiple sites** | How do the same servers work across sites? Independent clusters, disaster recovery or active-active, identical or per-site. |
 | **Compare models** | Which deployment model fits these servers best? Self-managed, ECK and ECE side by side in a trade-off table. |
+| **Elastic Cloud** | What would this cost on Elastic Cloud Hosted? Logs, metrics, SIEM, endpoint security, APM, search and vector search, priced like the internal ECH Ballpark Estimator. |
 
 Alongside the modes:
 
@@ -22,6 +23,7 @@ Alongside the modes:
 - **Cluster map:** a flyout drawing of the nodes per tier and server.
 - **Total cost:** annual and term costs for hardware and the Elastic subscription, with an optional subscription discount.
 - **Validation:** record real deals next to the cluster the customer runs, and see how close the estimates are, deal by deal and overall. Export as CSV or JSON; import other people's files to pool results.
+- **Formulas:** every formula the calculator uses, in plain words, with the settings each one reads and their current values. A test fails if a setting that feeds a calculation is not covered.
 - **Configurations:** view and edit the underlying constants. In `pnpm dev`, edits are written back to `packages/constants/data`.
 - **Scenarios:** named scenarios saved in the browser, exported as Markdown or JSON. JSON exports reproduce the result when loaded again.
 
@@ -47,6 +49,16 @@ pnpm constants:check  # validate constants against the schema, sources and dates
 
 CI (`.github/workflows/ci.yml`) runs the constants check, typecheck, tests and build.
 
+## Elastic Cloud prices
+
+Elastic Cloud (ECH) estimates use the internal ECH Ballpark Estimator price list, which is not committed (D40). To load it:
+
+```bash
+node scripts/ech-import.mjs "<path to ECH Ballpark Estimator .xlsx>"
+```
+
+This writes `apps/web/public/ech-data.local.json` (git-ignored). The dev server serves it to the app; production builds leave it out. Without it, the Elastic Cloud mode offers to upload a converted file, which then stays in that browser. Parity tests against the spreadsheet (`*.local.test.ts`) are also local-only and run whenever the file exists.
+
 ## Repository layout
 
 ```
@@ -69,4 +81,4 @@ The engine has no I/O and no clock, so the same request and constants always giv
 
 ## Status
 
-This is the MVP: self-managed, ECK and ECE. Elastic Cloud Hosted and Serverless estimators are planned. There is no PDF export and no BigQuery integration.
+This is the MVP: self-managed, ECK, ECE and Elastic Cloud Hosted. A Serverless estimator is planned. There is no PDF export and no BigQuery integration.

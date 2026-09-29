@@ -6,7 +6,7 @@ import { licenseFloor, selfManagedEru } from './license.ts';
 import { fmt, floorEps, step } from './math.ts';
 import { fleetTable } from './overhead.ts';
 import {
-  describeOverrides, downsampleFor, frozenCacheFraction, growthFactor, heapGb, indexRatio, offheapBudgetGb, tierRatio, placementTier, replicasFor, retentionTiers, vectorCost,
+  describeOverrides, downsampleFor, frozenCacheFraction, growthFactor, heapGb, indexRatio, offheapBudgetGb, tierRatio, placementTier, replicasFor, retentionTiers, vectorCost, OVERHEAD_KEYS, storageOverhead
 } from './profiles.ts';
 import { buildAssumptions, commonWarnings, ENGINE_VERSION, objectStorageAssumption, objectStorageFor, totalsFor } from './result.ts';
 import type {
@@ -40,7 +40,7 @@ function sumExceptLargest(nodes: readonly Node[], f: (n: Node) => number): numbe
 interface TierCapacity {
   tier: Tier;
   count: number;
-  /** Non-frozen: Σ_{N−1} min(RAM × ratio, disk). Frozen (D27): Σ_{N−1} disk / storage_overhead / cache_fraction. */
+  /** Non-frozen: Σ_{N−1} min(RAM × ratio, disk). Frozen (D27): Σ_{N−1} disk / storage overhead / cache_fraction. */
   usableGb: number;
   diskBound: boolean;
   math: MathStep[];
@@ -51,7 +51,7 @@ function tierCapacity(c: ConstantSet, groups: readonly NodeGroup[], tier: Tier, 
   if (tier === 'frozen') {
     // D27: disk-cache model. Use the node's explicit diskGb if set; otherwise derive from RAM × local disk ratio.
     const localDiskRatio = num(c, 'frozen_local_disk_ratio');
-    const overhead = num(c, 'storage_overhead');
+    const overhead = storageOverhead(c);
     const cf = frozenCacheFraction(c, cacheFraction);
     const usableGb = sumExceptLargest(nodes, (n) => {
       const disk = n.diskGb > 0 ? n.diskGb : n.ramGb * localDiskRatio;
@@ -59,7 +59,7 @@ function tierCapacity(c: ConstantSet, groups: readonly NodeGroup[], tier: Tier, 
     });
     return {
       tier, count: nodes.length, usableGb, diskBound: false,
-      math: [step('frozen usable capacity (N−1)', `Σ_{${Math.max(0, nodes.length - 1)} nodes} disk / ${overhead} overhead / ${fmt(cf)} cache fraction`, usableGb, ['frozen_local_disk_ratio', 'frozen_cache_fraction', 'storage_overhead'])],
+      math: [step('frozen usable capacity (N−1)', `Σ_{${Math.max(0, nodes.length - 1)} nodes} disk / ${overhead} overhead / ${fmt(cf)} cache fraction`, usableGb, ['frozen_local_disk_ratio', 'frozen_cache_fraction', ...OVERHEAD_KEYS])],
     };
   }
   const r = tierRatio(c, tier, overrides);
@@ -116,7 +116,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
   const others = req.fixed.filter((p) => p !== target);
   const otherDemand = computeDemand(c, others, { growthYears, ccrMultiplier: 1 });
   const ratio = indexRatio(c, target);
-  const overhead = num(c, 'storage_overhead');
+  const overhead = storageOverhead(c);
   const constraints: Constraint[] = [];
 
   for (const tier of retentionTiers(target)) {
@@ -139,7 +139,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
       const free = maxData - used;
       const per = days * (rep + 1) * ratio.value * ds;
       max = Math.max(0, free / per);
-      math.push(step('max total data GB', `${fmt(cap.usableGb)} / ${overhead}`, maxData, ['storage_overhead']));
+      math.push(step('max total data GB', `${fmt(cap.usableGb)} / ${overhead}`, maxData, OVERHEAD_KEYS));
       if (used > 0) math.push(step('minus other workloads', `${fmt(maxData)} − ${fmt(used)}`, free, []));
       math.push(step(`max GB/day (${tier})`, `${fmt(free)} / (${fmt(days)} days × (${rep} + 1) × ${fmt(ratio.value)}${ds !== 1 ? ` × ${fmt(ds)}` : ''})`, max, ratio.keys));
       constraints.push(constraint(cap.diskBound ? 'disk' : 'storage', max, 'GB/day', math, { tier }));
@@ -161,6 +161,7 @@ function solveMaxGbDay(c: ConstantSet, req: ReverseRequest, growthYears = 0): So
     constraints.push(constraint('cpu_ingest', max, 'GB/day', [
       step('usable vCPU (N−1)', `Σ_{${ingestNodes.length - 1} nodes} vCPU`, usableVcpu, []),
       step('max GB/day (CPU)', `${fmt(usableVcpu)} × ${ev} × ${fmt(kb)} KB × 86,400 / 1e6 / (${rep} + 1)${derate.factor !== 1 ? ` × ${fmt(derate.factor)} (${derate.notes.join(', ')})` : ''}${othersEv > 0 ? ' after other workloads' : ''}`, max, ['ev_per_s_per_vcpu', 'ingest.default_avg_event_kb', ...derate.keys]),
+      ...cpuBand(c, req.eventsPerSecondPerVcpu, ev, max),
     ], { tier: ingestTier }));
   }
 
@@ -246,11 +247,11 @@ function solveMaxRetention(c: ConstantSet, req: ReverseRequest): Solved {
     math.push(step('max retention (frozen)', `floor(${fmt(free)} / (${fmt(gbDay)} × ${fmt(ratio.value)}${ds !== 1 ? ` × ${fmt(ds)}` : ''}))`, max, ratio.keys));
     constraints.push(constraint('frozen', max, 'days', math, { tier }));
   } else {
-    const overhead = num(c, 'storage_overhead');
+    const overhead = storageOverhead(c);
     const rep = replicasFor(target, tier);
     const free = cap.usableGb / overhead - used;
     const max = Math.max(0, floorEps(free / (gbDay * (rep + 1) * ratio.value * ds)));
-    math.push(step('max total data GB', `${fmt(cap.usableGb)} / ${overhead}${used > 0 ? ` − ${fmt(used)} other` : ''}`, free, ['storage_overhead']));
+    math.push(step('max total data GB', `${fmt(cap.usableGb)} / ${overhead}${used > 0 ? ` − ${fmt(used)} other` : ''}`, free, OVERHEAD_KEYS));
     math.push(step(`max retention (${tier})`, `floor(${fmt(free)} / (${fmt(gbDay)} × (${rep} + 1) × ${fmt(ratio.value)}${ds !== 1 ? ` × ${fmt(ds)}` : ''}))`, max, ratio.keys));
     constraints.push(constraint(cap.diskBound ? 'disk' : 'storage', max, 'days', math, { tier }));
 
@@ -323,7 +324,7 @@ function solveMaxVectors(c: ConstantSet, req: ReverseRequest): Solved {
   const sample = nodes[0];
 
   const cap = tierCapacity(c, groups, tier, req.hardware.memDiskRatio, req.frozenCacheFraction);
-  const overhead = num(c, 'storage_overhead');
+  const overhead = storageOverhead(c);
   const freeDisk = cap.usableGb / overhead - (otherDemand?.dataGb ?? 0);
   const byDisk = Math.max(0, floorEps((freeDisk * 1e9) / (cost.diskBytes * (rep + 1))));
 
@@ -335,7 +336,7 @@ function solveMaxVectors(c: ConstantSet, req: ReverseRequest): Solved {
     ], { tier, ...(v.quant === 'bbq_disk' ? { confidence: 'low' as const } : {}) }),
     constraint(cap.diskBound ? 'disk' : 'storage', byDisk, 'vectors', [
       ...cap.math,
-      step('max vectors (disk)', `${fmt(freeDisk)}e9 / (${fmt(cost.diskBytes)} × (${rep} + 1))`, byDisk, ['storage_overhead', ...cost.keys]),
+      step('max vectors (disk)', `${fmt(freeDisk)}e9 / (${fmt(cost.diskBytes)} × (${rep} + 1))`, byDisk, [...OVERHEAD_KEYS, ...cost.keys]),
     ], { tier }),
   ];
   return { value: Math.min(byOffheap, byDisk), unit: 'vectors', constraints, target };
@@ -503,6 +504,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
     ...validateHardware(c, {
       groups, airGapped, autoOps: req.hardware.autoOps ?? false, replicasByTier, agents,
       shards: estimateShards(c, atMax, 0), dataGbByTier, ratioOverrides: req.hardware.memDiskRatio ?? {},
+      profiles: atMax, ...(req.eventsPerSecondPerVcpu !== undefined ? { eventsPerSecondPerVcpu: req.eventsPerSecondPerVcpu } : {}),
     }),
     ...commonWarnings(req.hardware.model),
     ...tiersWithoutNodes(req.fixed, groups, dataGbByTier),
@@ -586,4 +588,18 @@ function tiersWithoutNodes(fixed: readonly WorkloadProfile[], groups: readonly N
     }
   }
   return out;
+}
+
+/**
+ * The processor ceiling at the ends of the usual processing-speed range (1,000 to 3,000 events/s per core),
+ * shown only when the default speed is used: the ceiling scales in proportion to the speed.
+ */
+function cpuBand(c: ConstantSet, override: number | undefined, ev: number, max: number): MathStep[] {
+  if (override !== undefined || !(ev > 0)) return [];
+  const lo = num(c, 'ev_per_s_per_vcpu.band_min');
+  const hi = num(c, 'ev_per_s_per_vcpu.band_max');
+  return [
+    step('max GB/day (CPU) at the low end of the usual range', `${fmt(max)} × ${fmt(lo, 0)} / ${fmt(ev, 0)}`, (max * lo) / ev, ['ev_per_s_per_vcpu.band_min']),
+    step('max GB/day (CPU) at the high end of the usual range', `${fmt(max)} × ${fmt(hi, 0)} / ${fmt(ev, 0)}`, (max * hi) / ev, ['ev_per_s_per_vcpu.band_max']),
+  ];
 }

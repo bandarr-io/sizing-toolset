@@ -10,8 +10,8 @@ const STORAGE_KEY = 'sizing.constants.overrides.v1';
 
 /** Constants the engine divides by; zero would produce ∞ or NaN node counts. */
 const POSITIVE = new Set([
-  'index_ratio.standard', 'index_ratio.logsdb', 'index_ratio.tsds', 'storage_overhead',
-  'mem_disk.hot', 'mem_disk.content', 'mem_disk.warm', 'mem_disk.cold', 'mem_disk.frozen',
+  'index_ratio.standard', 'index_ratio.logsdb', 'index_ratio.tsds',
+  'mem_disk.hot', 'mem_disk.content', 'mem_disk.warm', 'mem_disk.cold',
   'mem_disk.hot_min', 'mem_disk.hot_max', 'mem_disk.warm_min', 'mem_disk.warm_max',
   'heap_fraction', 'heap_cap_gb', 'node_ram_default_gb', 'node_ram_practical_max_gb', 'vcpu_per_ram_gb',
   'shard_size_gb_max', 'max_shards_per_nonfrozen_node', 'master_indices_per_gb_heap',

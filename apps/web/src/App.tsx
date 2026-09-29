@@ -25,9 +25,12 @@ import { TopologyPanel } from './results/TopologyPanel.tsx';
 import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ValidationPage } from './pages/ValidationPage.tsx';
+import { FormulasPage } from './pages/FormulasPage.tsx';
+import { EchCalculator } from './ech/EchCalculator.tsx';
+import { EchDataProvider } from './ech/EchData.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToEch, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -52,9 +55,9 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
   }
 }
 
-type Page = 'calculator' | 'tco' | 'validate' | 'config';
-const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', validate: '#/validate', config: '#/config' };
-const pageFromHash = (): Page => (['config', 'tco', 'validate'] as const).find((p) => window.location.hash.startsWith(HASH[p])) ?? 'calculator';
+type Page = 'calculator' | 'tco' | 'validate' | 'formulas' | 'config';
+const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', validate: '#/validate', formulas: '#/formulas', config: '#/config' };
+const pageFromHash = (): Page => (['config', 'tco', 'validate', 'formulas'] as const).find((p) => window.location.hash.startsWith(HASH[p])) ?? 'calculator';
 
 export function App() {
   const [page, setPage] = useState<Page>(pageFromHash);
@@ -73,6 +76,7 @@ export function App() {
 
   return (
     <MathProvider>
+      <EchDataProvider>
       <EuiPageTemplate panelled={false} restrictWidth={1600} grow>
         <EuiPageTemplate.Header
           pageTitle="Elastic Ballpark Editor"
@@ -80,6 +84,7 @@ export function App() {
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
             { label: 'Total cost', isSelected: page === 'tco', onClick: () => go('tco') },
             { label: 'Validation', isSelected: page === 'validate', onClick: () => go('validate') },
+            { label: 'Formulas', isSelected: page === 'formulas', onClick: () => go('formulas') },
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
           ]}
           rightSideItems={[
@@ -100,11 +105,13 @@ export function App() {
             <ValidationPage state={state} constants={constants}
               onOpen={(forward, name) => { setState((s) => ({ ...s, name, mode: 'forward', forward })); go('calculator'); }} />
           )}
+          {page === 'formulas' && <FormulasPage />}
           {page === 'calculator' && (
             <Calculator state={state} setState={setState} constants={constants} overriddenKeys={overriddenKeys} overrides={Object.values(overrides)} onOpenTco={() => go('tco')} />
           )}
         </EuiPageTemplate.Section>
       </EuiPageTemplate>
+      </EchDataProvider>
     </MathProvider>
   );
 }
@@ -128,6 +135,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
 
   if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
   if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
+  if (state.mode === 'ech') return <EchCalculator state={state} setState={setState} constants={constants} />;
 
   return (
     <>
@@ -294,9 +302,11 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
       <Section step={1} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings
           value={deployment} modelOptions={modelOptionsFor('forward')}
-          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
-            ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
-            : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
+          onChange={(d) => (d.model === 'ech'
+            ? setState((s) => redirectToEch(s, f.workloads))
+            : d.model === 'eck' || d.model === 'ece'
+              ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
+              : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
           more={
             <>
               <EuiFlexItem>
@@ -344,9 +354,11 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
     <>
       <Section step={step++} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings value={deployment} reverse modelOptions={modelOptionsFor('reverse')}
-          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
-            ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
-            : setReverse(withReverseDeployment(r, d)))}
+          onChange={(d) => (d.model === 'ech'
+            ? setState((s) => redirectToEch(s, r.fixed))
+            : d.model === 'eck' || d.model === 'ece'
+              ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
+              : setReverse(withReverseDeployment(r, d)))}
           more={
             <EuiFlexItem>
               <CpuThroughputField value={r.eventsPerSecondPerVcpu} onChange={(eventsPerSecondPerVcpu) => setReverse({ ...r, eventsPerSecondPerVcpu })} />

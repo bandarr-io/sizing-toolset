@@ -26,7 +26,8 @@ export interface WorkloadProfile {
   growthPctPerYear?: number;
   vector?: { count: number; dims: number; quant: Quant; hnswM?: number };
   ml?: { anomalyJobs: number; trainedModelsGb?: number };
-  fleet?: { agents: number; defend: boolean };
+  /** policies: agent policies in use (optional); HV12 compares them with one Fleet Server's limit. */
+  fleet?: { agents: number; defend: boolean; policies?: number };
   avgEventKb?: number;
   ingestPipelines?: boolean;
   airGapped?: boolean;

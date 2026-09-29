@@ -1,8 +1,9 @@
-import { num, type ConstantSet } from '@sizing/constants';
+import { num, val, type ConstantSet } from '@sizing/constants';
+import { avgEventKb } from './cpu.ts';
 import { fmt } from './math.ts';
 import { fleetRowFor, fleetRowForMemory } from './overhead.ts';
-import { heapGb, tierRatio, type RatioOverrides } from './profiles.ts';
-import type { NodeGroup, Tier, Warning } from './types.ts';
+import { heapGb, indexRatio, tierRatio, type RatioOverrides } from './profiles.ts';
+import type { NodeGroup, Tier, Warning, WorkloadProfile } from './types.ts';
 import type { ShardEstimate } from './demand.ts';
 
 const DATA_TIERS = new Set<string>(['hot', 'warm', 'cold', 'frozen', 'content']);
@@ -20,6 +21,10 @@ export interface ValidationInput {
   ratioOverrides?: RatioOverrides;
   /** Data GB (before overhead) per tier, for HV7. */
   dataGbByTier?: Partial<Record<Tier, number>>;
+  /** The workloads, for document counts per shard (HV8), vectors (HV13) and Fleet policies (HV12). */
+  profiles?: readonly WorkloadProfile[];
+  /** A custom processing speed, events/s per vCPU (HV14). */
+  eventsPerSecondPerVcpu?: number;
 }
 
 /** Display names for node roles in warning text. */
@@ -106,7 +111,12 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
     const largest = Math.max(0, ...gs.map((g) => g.diskGb));
     const usable = total - largest;
     const used = usable > 0 ? dataGb / usable : Infinity;
-    if (used > low) add('HV7', 'warn', `If one ${tier} node fails, the others would be ${fmt(used * 100, 1)}% full. Above ${low * 100}%, Elasticsearch stops placing new data on a node.`);
+    const high = num(c, 'watermark.high');
+    const flood = num(c, 'watermark.flood_stage');
+    const full = `If one ${tier} node fails, the others would be ${fmt(used * 100, 1)}% full.`;
+    if (used > flood) add('HV7', 'error', `${full} Above ${flood * 100}%, Elasticsearch makes indices read-only, so no new data can be written.`);
+    else if (used > high) add('HV7', 'warn', `${full} Above ${high * 100}%, Elasticsearch starts moving shards off the nodes, and above ${low * 100}% it stops placing new data on them.`);
+    else if (used > low) add('HV7', 'warn', `${full} Above ${low * 100}%, Elasticsearch stops placing new data on a node.`);
     else if (1 - used < num(c, 'storage.watermark_headroom')) add('HV7', 'warn', `If one ${tier} node fails, only ${fmt((1 - used) * 100, 1)}% of the ${tier} disk stays free. Keep at least 15% free.`);
   }
 
@@ -123,7 +133,15 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
       if (s.shardGb > hi) {
         const suggested = Math.ceil((s.shardGb * s.primaries) / hi);
         add('HV8', 'warn', `${s.profileId}: ${s.tier} shards (slices of the data) are ${fmt(s.shardGb, 1) === fmt(hi, 1) ? 'just over' : `about ${fmt(s.shardGb, 1)} GB each, more than`} ${hi} GB. Use at least ${suggested} primary shards, or start a fresh index sooner (roll over).`);
-      } else if (s.shardGb < lo && !(s.basis === 'age' && s.primaries === 1)) {
+      }
+      // Documents per shard: the raw data behind one shard ÷ the average event size.
+      const p = v.profiles?.find((x) => x.id === s.profileId);
+      if (p) {
+        const docs = ((s.shardGb / indexRatio(c, p).value) * 1e6) / avgEventKb(c, p);
+        const maxDocs = num(c, 'shard_docs_max');
+        if (docs > maxDocs) add('HV8', 'warn', `${s.profileId}: ${s.tier} shards hold about ${fmt(docs / 1e6, 0)} million documents each, more than ${fmt(maxDocs / 1e6, 0)} million. Use more primary shards, or start a fresh index sooner (roll over).`);
+      }
+      if (s.shardGb <= hi && s.shardGb < lo && !(s.basis === 'age' && s.primaries === 1)) {
         const fix = s.primaries > 1 ? 'Use fewer primary shards' : s.basis === 'fixed' ? 'Start a fresh index less often' : 'Use fewer primary shards or a longer maximum age';
         add('HV8', 'info', `${s.profileId}: ${s.tier} shards (slices of the data) are ${fmt(s.shardGb, 1) === fmt(lo, 1) ? 'just under' : `about ${fmt(s.shardGb, 1)} GB each, less than`} ${lo} GB. ${fix}.`);
       }
@@ -131,7 +149,7 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
   }
 
   // HV10
-  if (v.airGapped && v.autoOps) add('HV10', 'error', "The site has no internet connection (air-gapped), but AutoOps is selected. AutoOps is Elastic's monitoring service, and it needs internet.");
+  if (v.airGapped && v.autoOps && val<boolean>(c, 'autoops.requires_internet')) add('HV10', 'error', "The site has no internet connection (air-gapped), but AutoOps is selected. AutoOps is Elastic's monitoring service, and it needs internet.");
 
   // HV12
   if (v.agents > 0) {
@@ -148,9 +166,32 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
     if (hotRam < need.hotRamGb || hotVcpu < need.hotVcpu) {
       add('HV12', 'warn', `Elastic's Fleet guidance for ${fmt(need.agents, 0)} agents asks for ${need.hotRamGb} GB of memory and ${need.hotVcpu} processor cores on the hot tier. It has ${fmt(hotRam)} GB and ${fmt(hotVcpu)} cores.`);
     }
+    const policies = Math.max(0, ...(v.profiles ?? []).map((p) => p.fleet?.policies ?? 0));
+    const maxPolicies = num(c, 'fleet.max_policies_per_instance');
+    if (policies > maxPolicies) add('HV12', 'warn', `${fmt(policies, 0)} agent policies is more than one Fleet Server handles (${fmt(maxPolicies, 0)}). Merge policies, or plan for more Fleet Server instances.`);
+    const serverlessCap = num(c, 'fleet.serverless_max_agents');
+    if (v.agents > serverlessCap) add('HV12', 'info', `On Elastic Cloud Serverless, one project handles up to ${fmt(serverlessCap, 0)} agents, so ${fmt(v.agents, 0)} agents would need ${Math.ceil(v.agents / serverlessCap)} projects.`);
     if (v.agents >= num(c, 'fleet.api_key_cache_threshold_agents')) {
       add('HV12', 'info', `With ${fmt(num(c, 'fleet.api_key_cache_threshold_agents'), 0)} or more agents, Elasticsearch must remember more agent sign-in keys. Set xpack.security.authc.api_key.cache.max_keys to ${fmt(v.agents * num(c, 'fleet.api_key_cache_multiplier'), 0)}.`);
     }
   }
+
+  // HV13: BBQ is Elasticsearch's default vector compression from a number of dimensions up.
+  const bbqFrom = num(c, 'knn.bbq_default_min_dims');
+  for (const p of v.profiles ?? []) {
+    if (p.vector && p.vector.dims >= bbqFrom && p.vector.quant !== 'bbq') {
+      add('HV13', 'info', `${p.id}: Elasticsearch uses BBQ compression by default for vectors with ${bbqFrom} or more dimensions. This workload uses ${p.vector.quant}, which needs more memory.`);
+    }
+  }
+
+  // HV14: a custom processing speed outside the usual range.
+  if (v.eventsPerSecondPerVcpu !== undefined) {
+    const lo = num(c, 'ev_per_s_per_vcpu.band_min');
+    const hi = num(c, 'ev_per_s_per_vcpu.band_max');
+    if (v.eventsPerSecondPerVcpu < lo || v.eventsPerSecondPerVcpu > hi) {
+      add('HV14', 'info', `The processing speed of ${fmt(v.eventsPerSecondPerVcpu, 0)} events per second per core is outside the usual ${fmt(lo, 0)} to ${fmt(hi, 0)}. Confirm it with Rally on the customer's data.`);
+    }
+  }
+
   return w;
 }

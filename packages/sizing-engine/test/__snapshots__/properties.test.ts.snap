@@ -18,7 +18,7 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
     "Vector formulas can understate BBQ memory (GitHub #117877); keep a 20–25% buffer.",
     "Object storage (snapshot repository) for cold and frozen: 100,500 GB, one copy of the data. Not counted in RAM or ERU; excludes other snapshots and backups.",
   ],
-  "constantsHash": "076ceae2cf801e40312767efa7a71b5be005c573a772822d12be3f1d958be196",
+  "constantsHash": "dfb652fbeac9cdd0575ba87730626ebf49ecc5e575c5843e71a39c4887104fef",
   "constraints": [
     {
       "binding": true,
@@ -371,7 +371,8 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
         },
         {
           "constantKeys": [
-            "storage_overhead",
+            "storage.watermark_headroom",
+            "storage.margin",
           ],
           "expr": "18,000 × 1.25 (15% watermark + 10% margin)",
           "label": "total storage GB",
@@ -441,7 +442,8 @@ exports[`§11.3 properties > P4 determinism: same inputs + constants hash → sa
           "constantKeys": [
             "frozen_local_disk_ratio",
             "frozen_cache_fraction",
-            "storage_overhead",
+            "storage.watermark_headroom",
+            "storage.margin",
           ],
           "expr": "48,000 GB disk / 1.25 overhead / 0.1 cache fraction",
           "label": "frozen capacity per node",
