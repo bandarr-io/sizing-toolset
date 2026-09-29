@@ -5,7 +5,7 @@ import { costReport } from '../src/cost.ts';
 import { customerSummaryHtml } from '../src/customerSummary.ts';
 import { toMarkdown } from '../src/export.ts';
 import { romHtml } from '../src/rom/rom.ts';
-import { missingStandardServices, newServiceId, parseCatalog, parseDescription, priceLines, SEED_CATALOG, servicesForYear, type ServiceItem, type ServiceLine } from '../src/services.ts';
+import { fillDescription, joinWords, missingStandardServices, newServiceId, upgradeCatalog, upgradeServices, parseCatalog, parseDescription, priceLines, SEED_CATALOG, servicesForYear, type ServiceItem, type ServiceLine } from '../src/services.ts';
 import { defaultState, type AppState } from '../src/state.ts';
 
 const catalog: ServiceItem[] = [
@@ -99,17 +99,18 @@ describe('D48 service descriptions', () => {
     ]);
   });
 
-  it('seeds the Professional Services Engagement and Professional Training Subscription wording', () => {
+  it('seeds the Professional Services Engagement and training wording', () => {
     const pse = SEED_CATALOG.find((x) => x.id === 'professional-services-engagement')!;
     const heads = parseDescription(pse.description).filter((b) => b.kind === 'heading').map((b) => (b as { text: string }).text);
     expect(heads).toEqual(['DESCRIPTION', 'CUSTOMER PROFILE', 'COMMON TASKS WITHIN THE ENGAGEMENT', 'INCLUDED IN SCOPE', 'NOT INCLUDED IN SCOPE']);
-    const training = SEED_CATALOG.find((x) => x.id === 'professional-training-subscription')!;
-    expect(training.billing).toBe('annual');
-    expect(parseDescription(training.description).filter((b) => b.kind === 'list').map((b) => (b as { items: string[] }).items.length)).toEqual([9, 3]);
+    const training = SEED_CATALOG.find((x) => x.id === 'on-demand-training')!;
+    expect(training.title).toBe('Training Recommendations');
+    const filled = fillDescription(training, { serviceId: training.id, quantity: 5 }, { quantity: 5, unit: 'seat' });
+    expect(parseDescription(filled).filter((b) => b.kind === 'list').map((b) => (b as { items: string[] }).items.length)).toEqual([9, 3]);
   });
 
   it('offers the standard services a catalog is missing', () => {
-    expect(missingStandardServices(SEED_CATALOG.slice(0, 4)).map((x) => x.id)).toEqual(['professional-services-engagement', 'professional-training-subscription']);
+    expect(missingStandardServices(SEED_CATALOG.slice(0, 4)).map((x) => x.id)).toEqual(['professional-services-engagement']);
     expect(missingStandardServices(SEED_CATALOG)).toEqual([]);
   });
 
@@ -117,5 +118,65 @@ describe('D48 service descriptions', () => {
     const state = withServices([{ serviceId: 'professional-services-engagement', quantity: 8 }]);
     const html = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [{ kind: 'self_managed', title: 'Main', services: priceLines(SEED_CATALOG, state.services), workloads: state.forward.workloads, result: forward(state.forward, c) }] });
     expect(html).toContain('<h4 class="svc">COMMON TASKS WITHIN THE ENGAGEMENT</h4><p>Operational, implementation, and deployment services:</p><ul class="svc"><li>Installation and configuration</li>');
+  });
+});
+
+describe('D49 fill-in fields', () => {
+  const pse = SEED_CATALOG.find((x) => x.id === 'professional-services-engagement')!;
+  const training = SEED_CATALOG.find((x) => x.id === 'on-demand-training')!;
+
+  it('reproduces the past-ROM wording with the default values', () => {
+    const text = fillDescription(pse, { serviceId: pse.id, quantity: 8 }, { quantity: 8, unit: 'day' });
+    expect(text).toContain('including Enterprise Search, Observability, and Security. Whether');
+    expect(text).toContain('your Elastic Stack or Elastic Cloud implementation');
+    expect(text).toContain('Operational, implementation, and deployment services:\n- Installation and configuration\n- Pipeline / ingestion recommendations and patterns\n- Data modeling / mapping\n- Visualizations / dashboards');
+    expect(text).toContain('1 onsite visit every 4 Consulting Days');
+    expect(text).toContain('NOT INCLUDED IN SCOPE\nRecommendations, handling or administration of third-party software, software data, or systems');
+  });
+
+  it('uses the scenario values: picked courses become bullets, lists in a sentence read as words', () => {
+    const line = { serviceId: training.id, quantity: 5, values: { courses: ['Data Analysis with Kibana', 'Elastic Security for SIEM'], audience: ['Analysts'] } };
+    const text = fillDescription(training, line, { quantity: 5, unit: 'seat' });
+    expect(text).toContain('Recommended Courses:\n- Data Analysis with Kibana\n- Elastic Security for SIEM');
+    expect(text).not.toContain('Elasticsearch Engineer');
+    expect(text).toContain('insights for Analysts through training');
+    expect(fillDescription(training, { ...line, values: { courses: [] } }, { quantity: 5, unit: 'seat' })).toMatch(/Recommended Courses:$/);
+  });
+
+  it('fills the built-in fields and leaves unknown ones as typed', () => {
+    const item = { ...pse, description: '{quantity} {unit} for {customer} on {deployment}; {nope}', fields: [] };
+    expect(fillDescription(item, { serviceId: item.id, quantity: 8 }, { quantity: 8, unit: 'day', customer: 'Acme', deployment: 'Elastic Cloud' })).toBe('8 days for Acme on Elastic Cloud; {nope}');
+  });
+
+  it('joins words the way the template writes them', () => {
+    expect([joinWords(['A']), joinWords(['A', 'B']), joinWords(['A', 'B', 'C'])]).toEqual(['A', 'A and B', 'A, B, and C']);
+  });
+
+  it('merges the retired Professional Training Subscription into On-Demand Training Subscription', () => {
+    const old = [{ ...training, description: '', title: undefined, fields: undefined } as unknown as ServiceItem, { ...training, id: 'professional-training-subscription', name: 'Professional Training Subscription' }];
+    const up = upgradeCatalog(old);
+    expect(up.map((x) => x.id)).toEqual(['on-demand-training']);
+    expect(up[0]!.fields?.map((f) => f.key)).toEqual(['audience', 'courses']);
+    expect(upgradeServices({ lines: [{ serviceId: 'professional-training-subscription', quantity: 3 }] })!.lines[0]!.serviceId).toBe('on-demand-training');
+  });
+
+  it('keeps a catalog entry the user already wrote', () => {
+    const mine = { ...training, description: 'My wording', fields: [] };
+    expect(upgradeCatalog([mine])[0]!.description).toBe('My wording');
+  });
+
+  it('puts services after the scenarios in the ROM, and names a description per scenario when they differ', () => {
+    const st = defaultState();
+    const mk = (title: string, courses: string[]) => ({ kind: 'self_managed' as const, title, services: priceLines(SEED_CATALOG, { lines: [{ serviceId: training.id, quantity: 5, values: { courses } }] }), workloads: st.forward.workloads, result: forward(st.forward, c) });
+    const html = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [mk('A', ['Elasticsearch Engineer']), mk('B', ['Data Analysis with Kibana'])] });
+    const at = (x: string) => html.indexOf(x);
+    expect(at('LICENSING OVERVIEW')).toBeLessThan(at('<h2 class="scenario">A</h2>'));
+    expect(at('<h2 class="scenario">B</h2>')).toBeLessThan(at('<h2>SERVICES</h2>'));
+    expect(at('<h2>SERVICES</h2>')).toBeLessThan(at('<h2>SERVICE DESCRIPTIONS</h2>'));
+    expect(html).toContain('Training Recommendations (A)');
+    expect(html).toContain('Training Recommendations (B)');
+    const same = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [mk('A', ['Elasticsearch Engineer']), mk('B', ['Elasticsearch Engineer'])] });
+    expect(same).toContain('<h3 class="svc">Training Recommendations</h3>');
+    expect(same).not.toContain('Training Recommendations (A)');
   });
 });

@@ -2,7 +2,7 @@ import type { EchData, EchLine, SizingResult, Tier, WorkloadProfile } from '@siz
 import { escapeHtml } from '../customerSummary.ts';
 import { useCaseLabel, type EchItem, type EchOutcome, type EchState } from '../ech/state.ts';
 import { fmtMoney, fmtNum } from '../format.ts';
-import { parseDescription, type PricedServiceLine, type ServiceItem } from '../services.ts';
+import { fillDescription, parseDescription, type DescriptionBlock, type PricedServiceLine, type ServiceItem } from '../services.ts';
 import { byRoleOrder } from '../ui/tiers.ts';
 import { BRAND } from './brand.ts';
 
@@ -194,7 +194,7 @@ function contents(input: RomInput): string {
   return `<section class="page">
   <div class="customer">${e(input.customer || '[CUSTOMER NAME]')}</div>
   <h1 class="doc-title">Elastic Sizing Estimation</h1>
-  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${describedServices(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}${scenarioItems}</ul>
+  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${scenarioItems}${hasServices(input) ? '<li class="main">SERVICES</li>' : ''}${serviceDescriptionList(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}</ul>
 </section>`;
 }
 
@@ -222,8 +222,16 @@ function licensing(input: RomInput): string {
     return `<table class="lic"><caption>Enterprise Subscription: ${volumeHeading(s)}</caption>
 <thead><tr><th>Annual</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
 <tbody><tr><td>Yr. 1</td><td>[MPN]</td><td>Enterprise Resource Units (ERU)</td><td class="accent">${start}</td><td class="accent">${end}</td><td>${fmtNum(eru, 0)}</td><td>${s.eruPrice !== undefined ? fmtMoney(s.eruPrice) : '[PRICE]'}</td><td>${total}</td></tr></tbody></table>`;
-  }).map((table, i) => table + servicesTable(input.scenarios[i]!, start, end)).join('');
+  }).join('');
   return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}</section>`;
+}
+
+/** D49: services come after the sizing and licensing: one table per scenario that has any. */
+function servicesSection(input: RomInput): string {
+  if (!hasServices(input)) return '';
+  const start = usDate(input.termStart);
+  const end = usDate(termEnd(input.termStart));
+  return `<section class="page"><h2>SERVICES</h2>${input.scenarios.map((s) => servicesTable(s, start, end)).join('')}</section>`;
 }
 
 export const scenarioServices = (s: RomScenario) => (s.services ?? []).filter((p): p is PricedServiceLine & { item: ServiceItem } => !!p.item);
@@ -242,17 +250,34 @@ function servicesTable(s: RomScenario, start: string, end: string): string {
 <tbody>${body}</tbody></table>`;
 }
 
-/** Every service used in the ROM that has a description, once each, in first-use order. */
-export function describedServices(input: RomInput): ServiceItem[] {
-  const seen = new Map<string, ServiceItem>();
-  for (const s of input.scenarios) for (const p of scenarioServices(s)) if (p.item.description.trim() && !seen.has(p.item.id)) seen.set(p.item.id, p.item);
-  return [...seen.values()];
+export const hasServices = (input: RomInput) => input.scenarios.some((s) => scenarioServices(s).length > 0);
+
+export interface RomServiceDescription { title: string; blocks: DescriptionBlock[] }
+
+/**
+ * The service descriptions to print, filled in with each scenario's values (D49), in first-use order. The same
+ * service with the same filled-in text prints once; when scenarios fill it differently, each copy is named after
+ * its scenario.
+ */
+export function serviceDescriptionList(input: RomInput): RomServiceDescription[] {
+  const found: { id: string; name: string; scenario: string; text: string }[] = [];
+  for (const s of input.scenarios) {
+    for (const p of scenarioServices(s)) {
+      if (!p.item.description.trim()) continue;
+      const text = fillDescription(p.item, p.line, { quantity: p.line.quantity, unit: p.item.unit, customer: input.customer, deployment: s.kind === 'ech' ? 'Elastic Cloud' : 'Elastic Stack' });
+      if (!found.some((f) => f.id === p.item.id && f.text === text)) found.push({ id: p.item.id, name: p.item.title?.trim() || p.item.name, scenario: s.title, text });
+    }
+  }
+  return found.map((f) => ({
+    title: found.filter((g) => g.id === f.id).length > 1 ? `${f.name} (${f.scenario})` : f.name,
+    blocks: parseDescription(f.text),
+  }));
 }
 
 function serviceDescriptions(input: RomInput): string {
-  const items = describedServices(input);
+  const items = serviceDescriptionList(input);
   if (items.length === 0) return '';
-  return `<section class="page"><h2>SERVICE DESCRIPTIONS</h2>${items.map((x) => `<div class="svc"><h3 class="svc">${e(x.name)}</h3>${parseDescription(x.description).map((b) => (b.kind === 'heading' ? `<h4 class="svc">${e(b.text)}</h4>` : b.kind === 'list' ? `<ul class="svc">${b.items.map((i) => `<li>${e(i)}</li>`).join('')}</ul>` : `<p>${e(b.text)}</p>`)).join('')}</div>`).join('')}</section>`;
+  return `<section class="page"><h2>SERVICE DESCRIPTIONS</h2>${items.map((x) => `<div class="svc"><h3 class="svc">${e(x.title)}</h3>${x.blocks.map((b) => (b.kind === 'heading' ? `<h4 class="svc">${e(b.text)}</h4>` : b.kind === 'list' ? `<ul class="svc">${b.items.map((i) => `<li>${e(i)}</li>`).join('')}</ul>` : `<p>${e(b.text)}</p>`)).join('')}</div>`).join('')}</section>`;
 }
 
 function scenarioPage(s: RomScenario): string {
@@ -348,7 +373,8 @@ ${cover(input)}
 ${contents(input)}
 ${caveatsAndTeam(input)}
 ${licensing(input)}
-${serviceDescriptions(input)}
 ${input.scenarios.map(scenarioPage).join('\n')}
+${servicesSection(input)}
+${serviceDescriptions(input)}
 </body></html>`;
 }

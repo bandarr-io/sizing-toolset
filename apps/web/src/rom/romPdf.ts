@@ -1,9 +1,8 @@
 import type { Content, ContentText, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { fmtMoney, fmtNum } from '../format.ts';
-import { parseDescription } from '../services.ts';
 import { BRAND } from './brand.ts';
 import {
-  ASSUMPTIONS_INTRO, dataLines, describedServices, echConfig, RETENTION_INTRO, scenarioEcu, scenarioServices, SCOPE_ECH, SCOPE_SELF_MANAGED,
+  ASSUMPTIONS_INTRO, dataLines, echConfig, hasServices, serviceDescriptionList, RETENTION_INTRO, scenarioEcu, scenarioServices, SCOPE_ECH, SCOPE_SELF_MANAGED,
   selfManagedConfig, SNAPSHOTS, termEnd, TIER_ROW, totalDays, usDate, volumeParts, type ConfigTable, type RomInput, type RomScenario,
 } from './rom.ts';
 
@@ -71,8 +70,9 @@ function cover(input: RomInput): Content[] {
 
 function contents(input: RomInput): Content[] {
   const rows: TableCell[][] = [['CAVEATS & CONSIDERATIONS', true, 0], ...(input.team.length ? [['TEAM INFORMATION', true, 0] as const] : []), ['LICENSING OVERVIEW', true, 0],
-    ...(describedServices(input).length ? [['SERVICE DESCRIPTIONS', true, 0] as const] : []),
     ...input.scenarios.flatMap((s) => [[s.title, true, 0] as const, ...['SCOPE', 'ASSUMPTIONS', 'Data Volume and Retention', 'Data Retention Breakdown', `ELASTIC CLUSTER CONFIGURATION - ${s.title}`].map((t) => [t, false, 1] as const)]),
+    ...(hasServices(input) ? [['SERVICES', true, 0] as const] : []),
+    ...(serviceDescriptionList(input).length ? [['SERVICE DESCRIPTIONS', true, 0] as const] : []),
   ].map(([text, bold, level]) => [{ text: String(text), bold: !!bold, margin: [Number(level) * 0.3 * PT, 0, 0, 0] }]);
   return [
     { text: input.customer || '[CUSTOMER NAME]', color: BLUE, fontSize: 17, bold: true, pageBreak: 'before', margin: [0, 7, 0, 0] },
@@ -127,31 +127,38 @@ function licensing(input: RomInput): Content[] {
   const start = usDate(input.termStart);
   const end = usDate(termEnd(input.termStart));
   const date = (x: string) => ({ text: x, color: BLUE });
-  const tables = input.scenarios.flatMap((s): Content[] => {
-    let lic: Content;
+  const tables = input.scenarios.map((s): Content => {
     if (s.kind === 'ech') {
       const ecu = scenarioEcu(s);
-      lic = licTable(captionFor('Enterprise Cloud Credits', s), LIC_HEAD, [['Yr. 1', 'ESSCLOUD', 'ESS-ANNUAL-PREPAID', date(start), date(end), fmtNum(ecu, 0), '1.00', fmtMoney(ecu)]]);
-    } else {
-      const eru = s.result.licenseUnits.value;
-      const price = s.eruPrice !== undefined ? fmtMoney(s.eruPrice) : '[PRICE]';
-      lic = licTable(captionFor('Enterprise Subscription', s), LIC_HEAD, [['Yr. 1', '[MPN]', 'Enterprise Resource Units (ERU)', date(start), date(end), fmtNum(eru, 0), price, s.eruPrice !== undefined ? fmtMoney(eru * s.eruPrice) : '[PRICE]']]);
+      return licTable(captionFor('Enterprise Cloud Credits', s), LIC_HEAD, [['Yr. 1', 'ESSCLOUD', 'ESS-ANNUAL-PREPAID', date(start), date(end), fmtNum(ecu, 0), '1.00', fmtMoney(ecu)]]);
     }
-    const services = scenarioServices(s);
-    if (services.length === 0) return [lic];
-    return [lic, licTable(`Services: ${s.title}`, ['Term', ...LIC_HEAD.slice(1)], services.map((x) => [
-      x.item.billing === 'annual' ? 'Yr. 1' : 'One-time', x.item.mpn || '[MPN]', x.item.name, date(x.item.dated ? start : ''), date(x.item.dated ? end : ''),
-      fmtNum(x.line.quantity, 2), x.unitPrice !== undefined ? fmtMoney(x.unitPrice, 2) : '[PRICE]', x.total !== undefined ? fmtMoney(x.total) : '[PRICE]',
-    ]))];
+    const eru = s.result.licenseUnits.value;
+    const price = s.eruPrice !== undefined ? fmtMoney(s.eruPrice) : '[PRICE]';
+    return licTable(captionFor('Enterprise Subscription', s), LIC_HEAD, [['Yr. 1', '[MPN]', 'Enterprise Resource Units (ERU)', date(start), date(end), fmtNum(eru, 0), price, s.eruPrice !== undefined ? fmtMoney(eru * s.eruPrice) : '[PRICE]']]);
   });
   return [h2('LICENSING OVERVIEW', { pageBreak: 'before' }), ...tables];
 }
 
+/** D49: services come after the sizing and licensing: one table per scenario that has any. */
+function servicesSection(input: RomInput): Content[] {
+  if (!hasServices(input)) return [];
+  const start = usDate(input.termStart);
+  const end = usDate(termEnd(input.termStart));
+  const date = (x: string) => ({ text: x, color: BLUE });
+  return [h2('SERVICES', { pageBreak: 'before' }), ...input.scenarios.flatMap((s): Content[] => {
+    const services = scenarioServices(s);
+    return services.length === 0 ? [] : [licTable(`Services: ${s.title}`, ['Term', ...LIC_HEAD.slice(1)], services.map((x) => [
+      x.item.billing === 'annual' ? 'Yr. 1' : 'One-time', x.item.mpn || '[MPN]', x.item.name, date(x.item.dated ? start : ''), date(x.item.dated ? end : ''),
+      fmtNum(x.line.quantity, 2), x.unitPrice !== undefined ? fmtMoney(x.unitPrice, 2) : '[PRICE]', x.total !== undefined ? fmtMoney(x.total) : '[PRICE]',
+    ]))];
+  })];
+}
+
 function serviceDescriptions(input: RomInput): Content[] {
-  const items = describedServices(input);
+  const items = serviceDescriptionList(input);
   if (items.length === 0) return [];
   return [h2('SERVICE DESCRIPTIONS', { pageBreak: 'before' }), ...items.map((x): Content => ({
-    stack: [{ ...h3(x.name), fontSize: 13, color: HEAD }, ...parseDescription(x.description).map((b): Content => (b.kind === 'heading'
+    stack: [{ ...h3(x.title), fontSize: 13, color: HEAD }, ...x.blocks.map((b): Content => (b.kind === 'heading'
       ? { text: b.text, bold: true, fontSize: 9.5, characterSpacing: 0.4, color: BLUE, margin: [0, 9, 0, 3], headlineLevel: 1 }
       : b.kind === 'list' ? { ul: b.items, margin: [0, 0, 0, 7] } : p(b.text)))],
   }))];
@@ -247,6 +254,6 @@ export function romPdfDefinition(input: RomInput): TDocumentDefinitions {
     }),
     // Keep a heading with what follows it.
     pageBreakBefore: (node, following) => node.headlineLevel === 1 && following.getFollowingNodesOnPage().length === 0,
-    content: [...cover(input), ...contents(input), ...caveatsAndTeam(input), ...licensing(input), ...serviceDescriptions(input), ...input.scenarios.flatMap(scenarioPage)],
+    content: [...cover(input), ...contents(input), ...caveatsAndTeam(input), ...licensing(input), ...input.scenarios.flatMap(scenarioPage), ...servicesSection(input), ...serviceDescriptions(input)],
   };
 }

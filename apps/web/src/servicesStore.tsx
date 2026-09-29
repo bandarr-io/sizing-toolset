@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { parseCatalog, SEED_CATALOG, type ServiceItem } from './services.ts';
+import { parseCatalog, SEED_CATALOG, upgradeCatalog, type ServiceItem } from './services.ts';
 
 // The service catalog and its default prices live in this browser only, like the cost defaults (D46).
 const STORAGE_KEY = 'sizing.serviceCatalog.v1';
@@ -7,7 +7,8 @@ const STORAGE_KEY = 'sizing.serviceCatalog.v1';
 function load(): ServiceItem[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return (raw && parseCatalog(JSON.parse(raw))) || SEED_CATALOG;
+    const saved = raw ? parseCatalog(JSON.parse(raw)) : undefined;
+    return saved ? upgradeCatalog(saved) : SEED_CATALOG;
   } catch {
     return SEED_CATALOG;
   }

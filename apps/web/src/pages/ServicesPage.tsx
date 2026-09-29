@@ -2,13 +2,14 @@ import {
   EuiButton, EuiButtonEmpty, EuiButtonIcon, EuiCallOut, EuiFieldNumber, EuiFieldText, EuiFlexGroup, EuiFlexItem, EuiPanel,
   EuiSelect, EuiSpacer, EuiSwitch, EuiText, EuiTextArea, EuiTitle,
 } from '@elastic/eui';
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { download, slug } from '../export.ts';
 import { fmtMoney } from '../format.ts';
 import {
-  BILLING_LABEL, missingStandardServices, newServiceId, parseCatalog, priceLines, type ScenarioServices, type ServiceBilling, type ServiceItem, type ServiceLine,
+  BILLING_LABEL, missingStandardServices, newServiceId, parseCatalog, standardService, priceLines, type ScenarioServices, type ServiceBilling, type ServiceItem, type ServiceLine,
 } from '../services.ts';
 import { useServiceCatalog } from '../servicesStore.tsx';
+import { FieldsEditor, LineFields } from './ServiceFields.tsx';
 import type { AppState } from '../state.ts';
 
 type Setter = (f: (s: AppState) => AppState) => void;
@@ -25,6 +26,8 @@ export function ServicesPage({ state, setState }: { state: AppState; setState: S
   const oneTime = priced.filter((p) => p.item?.billing === 'one_time').reduce((s, p) => s + (p.total ?? 0), 0);
   const perYear = priced.filter((p) => p.item?.billing === 'annual').reduce((s, p) => s + (p.total ?? 0), 0);
   const unpriced = priced.filter((p) => p.item && p.total === undefined).map((p) => p.item!.name);
+  const [openLine, setOpenLine] = useState<number | undefined>();
+  const deployment = state.sizeOn === 'ech' ? 'Elastic Cloud' : 'Elastic Stack';
 
   return (
     <>
@@ -41,11 +44,12 @@ export function ServicesPage({ state, setState }: { state: AppState; setState: S
             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead><tr>
                 <th style={head}>Service</th><th style={{ ...head, width: 120 }}>Quantity</th><th style={{ ...head, width: 170 }}>Price per unit</th>
-                <th style={head}>Billed</th><th style={{ ...head, textAlign: 'right' }}>Total</th><th style={{ ...head, width: 36 }} />
+                <th style={head}>Billed</th><th style={{ ...head, textAlign: 'right' }}>Total</th><th style={{ ...head, width: 64 }} />
               </tr></thead>
               <tbody>
                 {priced.map((p, i) => (
-                  <tr key={i}>
+                  <Fragment key={i}>
+                  <tr>
                     <td style={cell}>
                       <EuiSelect compressed aria-label="Service" value={p.line.serviceId}
                         options={[...catalog.map((x) => ({ value: x.id, text: x.name })), ...(p.item ? [] : [{ value: p.line.serviceId, text: `${p.line.serviceId} (no longer in the catalog)` }])]}
@@ -61,8 +65,23 @@ export function ServicesPage({ state, setState }: { state: AppState; setState: S
                     </td>
                     <td style={cell}><EuiText size="s">{p.item ? BILLING_LABEL[p.item.billing] : ''}</EuiText></td>
                     <td style={{ ...cell, textAlign: 'right' }}><EuiText size="s">{p.total === undefined ? '–' : fmtMoney(p.total)}</EuiText></td>
-                    <td style={cell}><EuiButtonIcon iconType="trash" color="danger" aria-label="Remove service" onClick={() => setLines(services.lines.filter((_, j) => j !== i))} /></td>
+                    <td style={cell}>
+                      <div style={{ display: 'flex' }}>
+                        {p.item && (p.item.fields?.length || p.item.description.trim()) ? (
+                          <EuiButtonIcon iconType={openLine === i ? 'chevronSingleDown' : 'chevronSingleRight'} aria-label={`${openLine === i ? 'Hide' : 'Show'} ${p.item.name} details`} aria-expanded={openLine === i}
+                            onClick={() => setOpenLine(openLine === i ? undefined : i)} />
+                        ) : null}
+                        <EuiButtonIcon iconType="trash" color="danger" aria-label="Remove service" onClick={() => { setLines(services.lines.filter((_, j) => j !== i)); setOpenLine(undefined); }} />
+                      </div>
+                    </td>
                   </tr>
+                  {openLine === i && p.item && (
+                    <tr><td colSpan={6} style={{ background: '#F7F8FC' }}>
+                      <LineFields item={p.item} line={p.line} ctx={{ quantity: p.line.quantity, unit: p.item.unit, deployment }}
+                        onChange={(values) => setLines(services.lines.map((l, j) => { if (j !== i) return l; const { values: _drop, ...rest } = l; return values && Object.keys(values).length ? { ...rest, values } : rest; }))} />
+                    </td></tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -89,6 +108,7 @@ function Catalog({ catalog, setCatalog, scenarioName }: { catalog: ServiceItem[]
     if (j !== i) return x;
     const next = { ...x, ...patch };
     if (next.unitPrice === undefined) delete next.unitPrice;
+    if (!next.title) delete next.title;
     return next;
   }));
   const importFile = async (f: File | undefined) => {
@@ -129,16 +149,10 @@ function Catalog({ catalog, setCatalog, scenarioName }: { catalog: ServiceItem[]
         </tr></thead>
         <tbody>
           {catalog.map((x, i) => (
-            <tr key={x.id}>
+            <Fragment key={x.id}>
+            <tr>
               <td style={cell} colSpan={1}>
                 <EuiFieldText compressed aria-label="Service name" value={x.name} onChange={(e) => set(i, { name: e.target.value })} />
-                {open === x.id && (
-                  <div style={{ marginTop: 6 }}>
-                    <EuiTextArea compressed fullWidth rows={10} aria-label={`${x.name} description`} placeholder="Description printed in the Budgetary ROM"
-                      value={x.description} onChange={(e) => set(i, { description: e.target.value })} />
-                    <EuiText size="xs" color="subdued"><p>Printed on the ROM's Service Descriptions page. Each line is a paragraph; a line in CAPITALS is a heading; lines starting with - are bullets.</p></EuiText>
-                  </div>
-                )}
               </td>
               <td style={cell}><EuiFieldText compressed aria-label="MPN" placeholder="e.g. SV-1D" value={x.mpn} onChange={(e) => set(i, { mpn: e.target.value })} /></td>
               <td style={cell}><EuiFieldText compressed aria-label="Unit" placeholder="hour" value={x.unit} onChange={(e) => set(i, { unit: e.target.value })} /></td>
@@ -155,6 +169,24 @@ function Catalog({ catalog, setCatalog, scenarioName }: { catalog: ServiceItem[]
                 </EuiFlexGroup>
               </td>
             </tr>
+            {open === x.id && (
+              <tr><td colSpan={7} style={{ background: '#F7F8FC' }}>
+                <div style={{ padding: '4px 6px 14px', maxWidth: 1000 }}>
+                    <EuiFieldText compressed fullWidth aria-label={`${x.name} printed title`} prepend="Printed title" placeholder={x.name} value={x.title ?? ''}
+                      onChange={(e) => set(i, { title: e.target.value })} style={{ marginBottom: 6 }} />
+                    <EuiTextArea compressed fullWidth rows={10} aria-label={`${x.name} description`} placeholder="Description printed in the Budgetary ROM"
+                      value={x.description} onChange={(e) => set(i, { description: e.target.value })} />
+                    <EuiText size="xs" color="subdued"><p>Printed on the ROM's Service Descriptions page under the printed title (the name when blank). Each line is a paragraph; a line in CAPITALS is a heading; lines starting with - are bullets.</p></EuiText>
+                    {(() => {
+                      const std = standardService(x.id);
+                      if (!std?.description || (std.description === x.description && JSON.stringify(std.fields ?? []) === JSON.stringify(x.fields ?? []))) return null;
+                      return <EuiButtonEmpty size="xs" iconType="refresh" onClick={() => set(i, { description: std.description, fields: std.fields ?? [], ...(std.title ? { title: std.title } : {}) })}>Use the standard wording and fields</EuiButtonEmpty>;
+                    })()}
+                    <FieldsEditor item={x} onChange={(fields) => set(i, { fields })} />
+                  </div>
+              </td></tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
