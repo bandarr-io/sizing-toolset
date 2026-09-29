@@ -4,7 +4,8 @@ import type { ConstantSet } from '@sizing/constants';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Toolbar } from '../calculator/Toolbar.tsx';
 import { download, slug } from '../export.ts';
-import type { AppState } from '../state.ts';
+import { SelectField } from '../components/Fields.tsx';
+import { modelOptionsFor, redirectToModels, type AppState } from '../state.ts';
 import { Gap, Section } from '../ui/Section.tsx';
 import { useEchData } from './EchData.tsx';
 import { EchItemList, PlacementForm } from './EchInputs.tsx';
@@ -22,6 +23,12 @@ export function EchCalculator({ state, setState, constants }: { state: AppState;
   const setEch = (next: EchState) => setState((s) => ({ ...s, ech: next }));
   const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
   const outcomes = useMemo(() => (data ? runEch(constants, data, e) : []), [constants, data, e]);
+
+  // D43: leaving Elastic Cloud goes back to the self-managed inputs, or to Compare models for ECK and ECE.
+  const switchDeployment = (model: string) => {
+    if (model === 'eck' || model === 'ece') setState((s) => redirectToModels({ ...s, sizeOn: 'self_managed' }, s.forward.workloads, { ...s.forward.options, model: 'self_managed' }));
+    else if (model === 'self_managed') setState((s) => ({ ...s, sizeOn: 'self_managed', forward: { ...s.forward, options: { ...s.forward.options, model: 'self_managed' } } }));
+  };
 
   const exportAs = (kind: 'md' | 'json') => {
     if (!data) return;
@@ -49,7 +56,11 @@ export function EchCalculator({ state, setState, constants }: { state: AppState;
         <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
           <EuiFlexItem style={{ minWidth: 480, flexBasis: 0, flexGrow: 7 }}>
             <Section step={1} title="Where will it run?" description="Elastic Cloud prices depend on the cloud, the region, how it is bought and the subscription level."
-              summary={placementSummary(e.placement)}>
+              summary={`Elastic Cloud Hosted · ${placementSummary(e.placement)}`}>
+              <div style={{ maxWidth: 420 }}>
+                <SelectField label="Deployment" value="ech" options={modelOptionsFor('forward')} onChange={switchDeployment} />
+              </div>
+              <EuiSpacer size="m" />
               <PlacementForm data={data} value={e.placement} onChange={(placement) => setEch({ ...e, placement })} />
             </Section>
             <Gap />

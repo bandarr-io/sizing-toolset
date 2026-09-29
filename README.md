@@ -10,11 +10,10 @@ The calculator has four modes, picked from the toolbar:
 
 | Mode | Question it answers |
 | --- | --- |
-| **Size a workload** | What cluster do these workloads need? Nodes, RAM, disk and vCPU per tier, with growth planned over a horizon. |
+| **Size a workload** | What cluster do these workloads need? Self-managed: nodes, RAM, disk and vCPU per tier, with growth planned over a horizon. Elastic Cloud Hosted (picked in "Where will it run?"): logs, metrics, SIEM, endpoint security, APM, search and vector search, priced like the internal ECH Ballpark Estimator. |
 | **Test hardware limits** | What can this hardware hold? Maximum GB/day, retention, vectors, ML jobs or agents, or how many years until it is full. |
 | **Multiple sites** | How do the same servers work across sites? Independent clusters, disaster recovery or active-active, identical or per-site. |
 | **Compare models** | Which deployment model fits these servers best? Self-managed, ECK and ECE side by side in a trade-off table. |
-| **Elastic Cloud** | What would this cost on Elastic Cloud Hosted? Logs, metrics, SIEM, endpoint security, APM, search and vector search, priced like the internal ECH Ballpark Estimator. |
 
 Alongside the modes:
 
@@ -57,7 +56,7 @@ Elastic Cloud (ECH) estimates use the internal ECH Ballpark Estimator price list
 node scripts/ech-import.mjs "<path to ECH Ballpark Estimator .xlsx>"
 ```
 
-This writes `apps/web/public/ech-data.local.json` (git-ignored). The dev server serves it to the app; production builds leave it out. Without it, the Elastic Cloud mode offers to upload a converted file, which then stays in that browser. Parity tests against the spreadsheet (`*.local.test.ts`) are also local-only and run whenever the file exists.
+This writes `apps/web/public/ech-data.local.json` (git-ignored). The dev server serves it to the app; production builds leave it out. Without it, choosing Elastic Cloud Hosted in Size a workload offers to upload a converted file, which then stays in that browser. Parity tests against the spreadsheet (`*.local.test.ts`) are also local-only and run whenever the file exists.
 
 ## Repository layout
 

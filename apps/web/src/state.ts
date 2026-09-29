@@ -7,7 +7,7 @@ import type {
   CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, IndexMode, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
 
-export type Mode = 'forward' | 'reverse' | 'multisite' | 'models' | 'ech';
+export type Mode = 'forward' | 'reverse' | 'multisite' | 'models';
 
 const fmt1 = (x: number) => x.toLocaleString('en-US', { maximumFractionDigits: 1 });
 
@@ -68,6 +68,8 @@ export interface AppState {
   models?: ModelsState;
   /** D40: Elastic Cloud Hosted, priced like the ECH Ballpark Estimator. */
   ech?: import('./ech/state.ts').EchState;
+  /** D43: Size a workload runs on self-managed (the sizing engine) or Elastic Cloud (the ECH inputs). */
+  sizeOn?: 'self_managed' | 'ech';
 }
 
 export type ModelOption = { value: DeploymentModel; text: string; disabled?: boolean };
@@ -433,7 +435,7 @@ export const HOST_MODEL_VALUES: DeploymentModel[] = ['self_managed', 'eck', 'ece
  */
 export function modelOptionsFor(mode: Mode): ModelOption[] {
   const cloud: ModelOption[] = [
-    { value: 'ech', text: 'Elastic Cloud Hosted: price it →' },
+    { value: 'ech', text: 'Elastic Cloud Hosted' },
     { value: 'serverless', text: 'Serverless (coming later)', disabled: true },
   ];
   if (mode === 'multisite' || mode === 'models') {
@@ -453,11 +455,11 @@ export function modelOptionsFor(mode: Mode): ModelOption[] {
 }
 
 /**
- * D40: Elastic Cloud Hosted picked in a node-based mode: open the Elastic Cloud mode. The first time, it starts
+ * D40/D43: Elastic Cloud Hosted picked in Where will it run?: Size a workload switches to the Elastic Cloud inputs. The first time, it starts
  * from the workloads it can carry over (logs and SIEM daily volume and retention); otherwise it keeps its own.
  */
 export function redirectToEch(s: AppState, workloads: readonly WorkloadProfile[]): AppState {
-  if (s.ech) return { ...s, mode: 'ech' };
+  if (s.ech) return { ...s, mode: 'forward', sizeOn: 'ech' };
   const base = defaultEch();
   const items: EchItem[] = [];
   for (const w of workloads) {
@@ -469,7 +471,7 @@ export function redirectToEch(s: AppState, workloads: readonly WorkloadProfile[]
       items.push({ ...newEchItem('siem', items.map((x) => x.name)), name: w.id, useCase: 'siem', req: { siemUseCase: 'enterprise', gbPerDay: w.rawGbPerDay, totalDays: Math.max(7, totalDays), logsdb: true, availability: 'high' } });
     }
   }
-  return { ...s, mode: 'ech', ech: { ...base, items: items.length ? items : base.items } };
+  return { ...s, mode: 'forward', sizeOn: 'ech', ech: { ...base, items: items.length ? items : base.items } };
 }
 
 /** ECK or ECE picked in a node-based mode: open Compare models with the same workloads and settings. */

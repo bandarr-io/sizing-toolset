@@ -52,12 +52,24 @@ describe('Elastic Cloud mode', () => {
     expect(p.tier).toBe('Enterprise');
   });
 
-  it('choosing Elastic Cloud in Size a workload carries logs and SIEM volumes over once', () => {
+  it('choosing Elastic Cloud in Size a workload switches its inputs, carrying logs and SIEM volumes over once', () => {
     const s = { ...defaultState(), forward: { ...defaultState().forward, workloads: [{ ...newWorkload('logs'), rawGbPerDay: 200 }, { ...newWorkload('siem'), rawGbPerDay: 50 }] } };
     const next = redirectToEch(s, s.forward.workloads);
-    expect(next.mode).toBe('ech');
+    expect(next.mode).toBe('forward');
+    expect(next.sizeOn).toBe('ech'); // D43: Elastic Cloud is a choice inside Size a workload
     expect(next.ech!.items.map((i) => i.useCase)).toEqual(['logs', 'siem']);
     expect(next.ech!.items[0]!.req).toMatchObject({ gbPerDay: 200 });
     expect(redirectToEch({ ...next, mode: 'forward' }, []).ech).toBe(next.ech);
+  });
+});
+
+describe('saved Elastic Cloud scenarios (D43)', () => {
+  it('open in Size a workload with Elastic Cloud selected', async () => {
+    const { migrate } = await import('../src/migrate.ts');
+    const saved = { ...defaultState(), mode: 'ech', ech: defaultEch() };
+    const m = migrate(saved)!;
+    expect(m.mode).toBe('forward');
+    expect(m.sizeOn).toBe('ech');
+    expect(m.ech).toEqual(saved.ech);
   });
 });
