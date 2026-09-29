@@ -12,6 +12,7 @@ import { Toolbar } from './calculator/Toolbar.tsx';
 import { WorkloadCard } from './calculator/WorkloadCard.tsx';
 import { WorkloadList } from './calculator/WorkloadList.tsx';
 import { NumField } from './components/Fields.tsx';
+import { decodeScenario, sharedParam, withoutSharedParam } from './share.ts';
 import { MathProvider } from './components/MathFlyout.tsx';
 import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
@@ -33,7 +34,7 @@ import {
   defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToEch, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
-import { loadCurrent, saveCurrent } from './storage.ts';
+import { loadCurrent, saveCurrent, saveNamed } from './storage.ts';
 import { Gap, Section } from './ui/Section.tsx';
 
 type Outcome = { result: SizingResult; workloads: WorkloadProfile[] } | { error: string };
@@ -74,6 +75,27 @@ export function App() {
   const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
   useEffect(() => saveCurrent(state), [state]);
 
+  // A shared link (#/?s=…) opens its scenario. The scenario that was open is saved first, so nothing is lost.
+  const [shared, setShared] = useState<{ ok: boolean; name?: string } | undefined>();
+  useEffect(() => {
+    const open = () => {
+      const data = sharedParam(window.location.hash);
+      if (!data) return;
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${withoutSharedParam(window.location.hash)}`);
+      void decodeScenario(data).then((s) => {
+        if (!s) { setShared({ ok: false }); return; }
+        setState((prev) => {
+          saveNamed({ ...prev, name: `${prev.name} (before opening a link)` });
+          return s;
+        });
+        setShared({ ok: true, name: s.name });
+      });
+    };
+    open();
+    window.addEventListener('hashchange', open);
+    return () => window.removeEventListener('hashchange', open);
+  }, []);
+
   return (
     <MathProvider>
       <EchDataProvider>
@@ -99,6 +121,15 @@ export function App() {
           ]}
         />
         <EuiPageTemplate.Section>
+          {shared && (
+            <>
+              <EuiCallOut size="s" color={shared.ok ? 'success' : 'warning'} iconType={shared.ok ? 'link' : 'warning'} onDismiss={() => setShared(undefined)}
+                title={shared.ok ? `Opened a shared scenario: ${shared.name}` : 'This link does not hold a scenario this app can open.'}>
+                {shared.ok && <p>The scenario you had open is in Open, as "(before opening a link)".</p>}
+              </EuiCallOut>
+              <EuiSpacer size="m" />
+            </>
+          )}
           {page === 'config' && <ConfigPage />}
           {page === 'tco' && <TcoPage state={state} setState={setState} constants={constants} />}
           {page === 'validate' && (

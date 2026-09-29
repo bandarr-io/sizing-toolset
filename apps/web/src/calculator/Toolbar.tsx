@@ -4,6 +4,7 @@ import {
 } from '@elastic/eui';
 import { useRef, useState } from 'react';
 import { migrate } from '../migrate.ts';
+import { encodeScenario, shareUrl } from '../share.ts';
 import type { AppState, Mode } from '../state.ts';
 import { deleteNamed, listSaved, saveNamed, type SavedScenario } from '../storage.ts';
 
@@ -39,6 +40,15 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
       say('Could not read that file');
     }
     if (file.current) file.current.value = '';
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl(await encodeScenario(state), window.location));
+      say('Link copied');
+    } catch {
+      say('Could not copy the link in this browser');
+    }
   };
 
   return (
@@ -91,6 +101,11 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
                 <EuiContextMenuItem key="json" icon="export" onClick={() => { onExportJson(); setOpenExport(false); }}>Data file that reloads exactly (JSON)</EuiContextMenuItem>,
               ]} />
             </EuiPopover>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiToolTip content="Copies a link that opens this scenario. It carries the scenario only: settings changed on the Configurations page, cost prices and Elastic Cloud price data stay in this browser.">
+              <EuiButtonEmpty size="s" iconType="link" onClick={() => void copyLink()}>Copy link</EuiButtonEmpty>
+            </EuiToolTip>
           </EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiPopover isOpen={openMore} closePopover={() => setOpenMore(false)} panelPaddingSize="none" anchorPosition="downRight"
