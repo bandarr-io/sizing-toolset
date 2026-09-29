@@ -165,14 +165,15 @@ describe('D49 fill-in fields', () => {
     expect(upgradeCatalog([mine])[0]!.description).toBe('My wording');
   });
 
-  it('puts services after the scenarios in the ROM, and names a description per scenario when they differ', () => {
+  it('D50 prices services up front after licensing, describes them at the end, and names a description per scenario when they differ', () => {
     const st = defaultState();
     const mk = (title: string, courses: string[]) => ({ kind: 'self_managed' as const, title, services: priceLines(SEED_CATALOG, { lines: [{ serviceId: training.id, quantity: 5, values: { courses } }] }), workloads: st.forward.workloads, result: forward(st.forward, c) });
     const html = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [mk('A', ['Elasticsearch Engineer']), mk('B', ['Data Analysis with Kibana'])] });
     const at = (x: string) => html.indexOf(x);
-    expect(at('LICENSING OVERVIEW')).toBeLessThan(at('<h2 class="scenario">A</h2>'));
-    expect(at('<h2 class="scenario">B</h2>')).toBeLessThan(at('<h2>SERVICES</h2>'));
-    expect(at('<h2>SERVICES</h2>')).toBeLessThan(at('<h2>SERVICE DESCRIPTIONS</h2>'));
+    expect(at('<h2>LICENSING OVERVIEW</h2>')).toBeLessThan(at('<h2 class="services">SERVICES</h2>'));
+    expect(at('<h2 class="services">SERVICES</h2>')).toBeLessThan(at('<h2 class="scenario">A</h2>'));
+    expect(at('<h2 class="scenario">B</h2>')).toBeLessThan(at('<h2>SERVICE DESCRIPTIONS</h2>'));
+    expect(html.indexOf('<li class="main">SERVICES</li>')).toBeLessThan(html.indexOf('<li class="main">A<'));
     expect(html).toContain('Training Recommendations (A)');
     expect(html).toContain('Training Recommendations (B)');
     const same = romHtml({ customer: 'Acme', date: '2026-09-29', termStart: '2026-10-01', team: [], scenarios: [mk('A', ['Elasticsearch Engineer']), mk('B', ['Elasticsearch Engineer'])] });

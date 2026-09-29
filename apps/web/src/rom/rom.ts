@@ -194,7 +194,7 @@ function contents(input: RomInput): string {
   return `<section class="page">
   <div class="customer">${e(input.customer || '[CUSTOMER NAME]')}</div>
   <h1 class="doc-title">Elastic Sizing Estimation</h1>
-  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${scenarioItems}${hasServices(input) ? '<li class="main">SERVICES</li>' : ''}${serviceDescriptionList(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}</ul>
+  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${hasServices(input) ? '<li class="main">SERVICES</li>' : ''}${scenarioItems}${serviceDescriptionList(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}</ul>
 </section>`;
 }
 
@@ -223,15 +223,15 @@ function licensing(input: RomInput): string {
 <thead><tr><th>Annual</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
 <tbody><tr><td>Yr. 1</td><td>[MPN]</td><td>Enterprise Resource Units (ERU)</td><td class="accent">${start}</td><td class="accent">${end}</td><td>${fmtNum(eru, 0)}</td><td>${s.eruPrice !== undefined ? fmtMoney(s.eruPrice) : '[PRICE]'}</td><td>${total}</td></tr></tbody></table>`;
   }).join('');
-  return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}</section>`;
+  return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}${servicesSection(input)}</section>`;
 }
 
-/** D49: services come after the sizing and licensing: one table per scenario that has any. */
+/** D50: services are priced up front, right after the licensing tables: one table per scenario that has any. */
 function servicesSection(input: RomInput): string {
   if (!hasServices(input)) return '';
   const start = usDate(input.termStart);
   const end = usDate(termEnd(input.termStart));
-  return `<section class="page"><h2>SERVICES</h2>${input.scenarios.map((s) => servicesTable(s, start, end)).join('')}</section>`;
+  return `<h2 class="services">SERVICES</h2>${input.scenarios.map((s) => servicesTable(s, start, end)).join('')}`;
 }
 
 export const scenarioServices = (s: RomScenario) => (s.services ?? []).filter((p): p is PricedServiceLine & { item: ServiceItem } => !!p.item);
@@ -336,6 +336,7 @@ section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; over
 h2 { font-size: 22pt; font-weight: 800; color: #3a3f4a; margin: 0 0 0.2in; }
 h2.scenario { font-size: 20pt; }
 h2.team-heading { margin-top: 0.45in; }
+h2.services { margin-top: 0.3in; break-after: avoid; }
 h3 { font-size: 11pt; font-weight: 700; color: #4a4f5a; margin: 0.25in 0 0.1in; }
 h4 { font-size: 11pt; font-weight: 700; color: #4a4f5a; margin: 0.18in 0 0.06in; }
 p { margin: 0 0 0.1in; }
@@ -374,7 +375,6 @@ ${contents(input)}
 ${caveatsAndTeam(input)}
 ${licensing(input)}
 ${input.scenarios.map(scenarioPage).join('\n')}
-${servicesSection(input)}
 ${serviceDescriptions(input)}
 </body></html>`;
 }

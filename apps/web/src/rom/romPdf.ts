@@ -70,8 +70,8 @@ function cover(input: RomInput): Content[] {
 
 function contents(input: RomInput): Content[] {
   const rows: TableCell[][] = [['CAVEATS & CONSIDERATIONS', true, 0], ...(input.team.length ? [['TEAM INFORMATION', true, 0] as const] : []), ['LICENSING OVERVIEW', true, 0],
-    ...input.scenarios.flatMap((s) => [[s.title, true, 0] as const, ...['SCOPE', 'ASSUMPTIONS', 'Data Volume and Retention', 'Data Retention Breakdown', `ELASTIC CLUSTER CONFIGURATION - ${s.title}`].map((t) => [t, false, 1] as const)]),
     ...(hasServices(input) ? [['SERVICES', true, 0] as const] : []),
+    ...input.scenarios.flatMap((s) => [[s.title, true, 0] as const, ...['SCOPE', 'ASSUMPTIONS', 'Data Volume and Retention', 'Data Retention Breakdown', `ELASTIC CLUSTER CONFIGURATION - ${s.title}`].map((t) => [t, false, 1] as const)]),
     ...(serviceDescriptionList(input).length ? [['SERVICE DESCRIPTIONS', true, 0] as const] : []),
   ].map(([text, bold, level]) => [{ text: String(text), bold: !!bold, margin: [Number(level) * 0.3 * PT, 0, 0, 0] }]);
   return [
@@ -139,19 +139,21 @@ function licensing(input: RomInput): Content[] {
   return [h2('LICENSING OVERVIEW', { pageBreak: 'before' }), ...tables];
 }
 
-/** D49: services come after the sizing and licensing: one table per scenario that has any. */
+/** D50: services are priced up front, right after the licensing tables: one table per scenario that has any. */
 function servicesSection(input: RomInput): Content[] {
   if (!hasServices(input)) return [];
   const start = usDate(input.termStart);
   const end = usDate(termEnd(input.termStart));
   const date = (x: string) => ({ text: x, color: BLUE });
-  return [h2('SERVICES', { pageBreak: 'before' }), ...input.scenarios.flatMap((s): Content[] => {
+  const tables = input.scenarios.flatMap((s): Content[] => {
     const services = scenarioServices(s);
     return services.length === 0 ? [] : [licTable(`Services: ${s.title}`, ['Term', ...LIC_HEAD.slice(1)], services.map((x) => [
       x.item.billing === 'annual' ? 'Yr. 1' : 'One-time', x.item.mpn || '[MPN]', x.item.name, date(x.item.dated ? start : ''), date(x.item.dated ? end : ''),
       fmtNum(x.line.quantity, 2), x.unitPrice !== undefined ? fmtMoney(x.unitPrice, 2) : '[PRICE]', x.total !== undefined ? fmtMoney(x.total) : '[PRICE]',
     ]))];
-  })];
+  });
+  // The heading stays on the page with the first table.
+  return [{ unbreakable: true, stack: [h2('SERVICES', { margin: [0, 14, 0, 14] }), tables[0]!] }, ...tables.slice(1)];
 }
 
 function serviceDescriptions(input: RomInput): Content[] {
@@ -254,6 +256,6 @@ export function romPdfDefinition(input: RomInput): TDocumentDefinitions {
     }),
     // Keep a heading with what follows it.
     pageBreakBefore: (node, following) => node.headlineLevel === 1 && following.getFollowingNodesOnPage().length === 0,
-    content: [...cover(input), ...contents(input), ...caveatsAndTeam(input), ...licensing(input), ...input.scenarios.flatMap(scenarioPage), ...servicesSection(input), ...serviceDescriptions(input)],
+    content: [...cover(input), ...contents(input), ...caveatsAndTeam(input), ...licensing(input), ...servicesSection(input), ...input.scenarios.flatMap(scenarioPage), ...serviceDescriptions(input)],
   };
 }
