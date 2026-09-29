@@ -12,3 +12,6 @@ apps/web/dist/
 *.xlsx
 # Parity tests quote real ECH prices from the local data: local only, like the data (D40)
 *.local.test.ts
+
+# Claude Code helper worktrees
+.claude/worktrees/
