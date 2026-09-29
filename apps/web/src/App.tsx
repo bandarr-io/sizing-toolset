@@ -24,9 +24,11 @@ import { MultiSiteInputs } from './calculator/MultiSiteInputs.tsx';
 import { TopologyPanel } from './results/TopologyPanel.tsx';
 import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
+import { EchCalculator } from './ech/EchCalculator.tsx';
+import { EchDataProvider } from './ech/EchData.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
 import {
-  defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
+  defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToEch, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
 import { loadCurrent, saveCurrent } from './storage.ts';
@@ -72,6 +74,7 @@ export function App() {
 
   return (
     <MathProvider>
+      <EchDataProvider>
       <EuiPageTemplate panelled={false} restrictWidth={1600} grow>
         <EuiPageTemplate.Header
           pageTitle="Elastic Ballpark Editor"
@@ -99,6 +102,7 @@ export function App() {
           )}
         </EuiPageTemplate.Section>
       </EuiPageTemplate>
+      </EchDataProvider>
     </MathProvider>
   );
 }
@@ -122,6 +126,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
 
   if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
   if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
+  if (state.mode === 'ech') return <EchCalculator state={state} setState={setState} constants={constants} />;
 
   return (
     <>
@@ -288,9 +293,11 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
       <Section step={1} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings
           value={deployment} modelOptions={modelOptionsFor('forward')}
-          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
-            ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
-            : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
+          onChange={(d) => (d.model === 'ech'
+            ? setState((s) => redirectToEch(s, f.workloads))
+            : d.model === 'eck' || d.model === 'ece'
+              ? setState((s) => redirectToModels(s, f.workloads, withForwardDeployment(f.options, { ...d, model: 'self_managed' })))
+              : setForward({ ...f, options: withForwardDeployment(f.options, d) }))}
           more={
             <>
               <EuiFlexItem>
@@ -338,9 +345,11 @@ function ReverseInputs({ state, setState }: { state: AppState; setState: Setter 
     <>
       <Section step={step++} title="Where will it run?" summary={deploymentSummary(deployment, extras)} startCollapsed={isDefaultDeployment(deployment, extras)}>
         <DeploymentSettings value={deployment} reverse modelOptions={modelOptionsFor('reverse')}
-          onChange={(d) => (d.model === 'eck' || d.model === 'ece'
-            ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
-            : setReverse(withReverseDeployment(r, d)))}
+          onChange={(d) => (d.model === 'ech'
+            ? setState((s) => redirectToEch(s, r.fixed))
+            : d.model === 'eck' || d.model === 'ece'
+              ? setState((s) => redirectToModels(s, r.fixed, withForwardDeployment({ model: 'self_managed' }, { ...d, model: 'self_managed' })))
+              : setReverse(withReverseDeployment(r, d)))}
           more={
             <EuiFlexItem>
               <CpuThroughputField value={r.eventsPerSecondPerVcpu} onChange={(eventsPerSecondPerVcpu) => setReverse({ ...r, eventsPerSecondPerVcpu })} />

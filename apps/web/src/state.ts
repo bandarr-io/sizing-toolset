@@ -1,12 +1,13 @@
 import { defaultConstants, num, val, type ConstantSet, type MasterSizingRow } from '@sizing/constants';
 import { nodesPerServer } from '@sizing/engine';
 import type { CostSettings } from './cost.ts';
+import { defaultEch, newEchItem, type EchItem } from './ech/state.ts';
 import type {
   HostModel, ServerGroup, SiteInput, SiteRelationship, TopologyRequest,
   CcrMode, DeploymentModel, ForwardOptions, ForwardRequest, IndexMode, NodeGroup, ReverseRequest, Solve, Tier, WorkloadKind, WorkloadProfile,
 } from '@sizing/engine';
 
-export type Mode = 'forward' | 'reverse' | 'multisite' | 'models';
+export type Mode = 'forward' | 'reverse' | 'multisite' | 'models' | 'ech';
 
 const fmt1 = (x: number) => x.toLocaleString('en-US', { maximumFractionDigits: 1 });
 
@@ -65,6 +66,8 @@ export interface AppState {
   multisite?: MultiSiteState;
   /** D33: one site's servers, compared across self-managed, ECK and ECE. */
   models?: ModelsState;
+  /** D40: Elastic Cloud Hosted, priced like the ECH Ballpark Estimator. */
+  ech?: import('./ech/state.ts').EchState;
 }
 
 export type ModelOption = { value: DeploymentModel; text: string; disabled?: boolean };
@@ -424,7 +427,7 @@ export const HOST_MODEL_VALUES: DeploymentModel[] = ['self_managed', 'eck', 'ece
  */
 export function modelOptionsFor(mode: Mode): ModelOption[] {
   const cloud: ModelOption[] = [
-    { value: 'ech', text: 'Elastic Cloud Hosted (coming later)', disabled: true },
+    { value: 'ech', text: 'Elastic Cloud Hosted: price it →' },
     { value: 'serverless', text: 'Serverless (coming later)', disabled: true },
   ];
   if (mode === 'multisite' || mode === 'models') {
@@ -432,7 +435,7 @@ export function modelOptionsFor(mode: Mode): ModelOption[] {
       { value: 'self_managed', text: 'Self-managed' },
       { value: 'eck', text: 'ECK (Kubernetes)' },
       { value: 'ece', text: 'ECE' },
-      ...cloud.map((o) => ({ ...o, text: o.text.replace('(coming later)', "(Elastic's cloud, not your servers)") })),
+      ...cloud.map((o) => ({ ...o, disabled: true, text: `${o.value === 'ech' ? 'Elastic Cloud Hosted' : 'Serverless'} (Elastic's cloud, not your servers)` })),
     ];
   }
   return [
@@ -441,6 +444,26 @@ export function modelOptionsFor(mode: Mode): ModelOption[] {
     { value: 'ece', text: 'ECE (private cloud): compare on your servers →' },
     ...cloud,
   ];
+}
+
+/**
+ * D40: Elastic Cloud Hosted picked in a node-based mode: open the Elastic Cloud mode. The first time, it starts
+ * from the workloads it can carry over (logs and SIEM daily volume and retention); otherwise it keeps its own.
+ */
+export function redirectToEch(s: AppState, workloads: readonly WorkloadProfile[]): AppState {
+  if (s.ech) return { ...s, mode: 'ech' };
+  const base = defaultEch();
+  const items: EchItem[] = [];
+  for (const w of workloads) {
+    if (!w.rawGbPerDay) continue;
+    const r = w.retentionDays;
+    if (w.kind === 'logs') items.push({ ...newEchItem('logs', items.map((x) => x.name)), name: w.id, useCase: 'logs', req: { gbPerDay: w.rawGbPerDay, retentionDays: { ...r } } });
+    if (w.kind === 'siem') {
+      const totalDays = (r.hot ?? 0) + (r.warm ?? 0) + (r.cold ?? 0) + (r.frozen ?? 0);
+      items.push({ ...newEchItem('siem', items.map((x) => x.name)), name: w.id, useCase: 'siem', req: { siemUseCase: 'enterprise', gbPerDay: w.rawGbPerDay, totalDays: Math.max(7, totalDays), logsdb: true, availability: 'high' } });
+    }
+  }
+  return { ...s, mode: 'ech', ech: { ...base, items: items.length ? items : base.items } };
 }
 
 /** ECK or ECE picked in a node-based mode: open Compare models with the same workloads and settings. */

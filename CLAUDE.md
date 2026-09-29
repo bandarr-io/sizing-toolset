@@ -41,7 +41,12 @@ Current phase: MVP (§12). Build order a → e; stop for review after each step.
 - "Write to repo" goes through `constants-dev-plugin.ts` (dev server only, same-origin JSON POST) into `writeOverrides` in `packages/constants/scripts/write.ts`, which runs the CI check on the merged set before touching files. A written value that breaks a §11 test fails CI; that is intended.
 
 ## Out of scope until told otherwise
-BigQuery (§8), PDF export, ECK/ECE/ECH/Serverless adapters, comparison view, sensitivity panel.
+BigQuery (§8), PDF export, Serverless, sensitivity panel. (ECK, ECE and ECH are built: D32, D33, D40.)
+
+## ECH (D40)
+- Engine code in `packages/sizing-engine/src/ech/` reproduces the ECH Ballpark Estimator v4.6 formula for formula; cite the sheet cell in comments.
+- Prices and instance specs are internal: they come from `scripts/ech-import.mjs` into git-ignored `*.local.json` and are passed to the engine as `EchData`. Never commit them, and never put a price in constants.
+- Parity tests quoting real prices are `*.local.test.ts` (git-ignored); CI tests use invented prices.
 
 ## Writing for Dan
 No em dashes. No narrating that you are about to check something. No "real find" style framing.

@@ -1,0 +1,306 @@
+[
+  {
+    "key": "ech.security.bytes_per_event",
+    "value": 500,
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!G30: bytes per event when SIEM volume is given in events per second.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.retention_days",
+    "value": {
+      "hot": 1,
+      "warm": 0,
+      "cold": 6
+    },
+    "unit": "days",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!M:O (INTO CALCULATOR Q:S): every security use case keeps 1 day hot and 6 days cold; the rest of the total goes to frozen (T = total − 7 when total > 7).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.availability",
+    "value": {
+      "standard": {
+        "zones": {
+          "hot": 1,
+          "warm": 1,
+          "cold": 1,
+          "frozen": 1
+        },
+        "replicas": {
+          "hot": 0,
+          "warm": 0,
+          "cold": 0
+        }
+      },
+      "high": {
+        "zones": {
+          "hot": 2,
+          "warm": 2,
+          "cold": 1,
+          "frozen": 1
+        },
+        "replicas": {
+          "hot": 1,
+          "warm": 1,
+          "cold": 0
+        }
+      },
+      "maximum": {
+        "zones": {
+          "hot": 3,
+          "warm": 3,
+          "cold": 2,
+          "frozen": 1
+        },
+        "replicas": {
+          "hot": 2,
+          "warm": 1,
+          "cold": 1
+        }
+      }
+    },
+    "unit": "zones and replicas",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!B24:L26: availability choice → zones per tier (F:I) and replicas (J:L).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.logsdb_reduction",
+    "value": {
+      "siem": 0.6,
+      "endpoint": 0.22,
+      "non_enterprise": 0.19
+    },
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "low",
+    "notes": "K151 on SIEM Security (60%) and Endpoint Security (22%) with the Enterprise tier; 19% otherwise. The hidden Endpoint (Default) sheet uses 37% but only feeds a readback.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.logsdb_ingest_impact_non_enterprise",
+    "value": 0.15,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "M155: LogsDB ingest-rate impact when the tier is not Enterprise (0% on Enterprise).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.index_factor",
+    "value": 0.9,
+    "unit": "multiplier",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "E99: raw to on-disk ratio before LogsDB for security data.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.raw_to_json",
+    "value": 3.21,
+    "unit": "multiplier",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "E103 = round(0.49 + 0.136 × 20 JSON fields, 2): only used for the data-in transfer estimate.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.data_out_share",
+    "value": 0.25,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "M91: data out as a share of snapshot storage for security (Logs uses 15%).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.fixed_ram_gb",
+    "value": {
+      "master": 3,
+      "coordinating": 0
+    },
+    "unit": "GB RAM (all zones)",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!AD:AE: master 1 GB × 3 zones, no coordinating nodes, for every security use case.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.siem_ram",
+    "value": {
+      "ultra_small": {
+        "ml": 2,
+        "kibana": 2
+      },
+      "small": {
+        "ml": 4,
+        "kibana": 4
+      },
+      "soc": {
+        "ml": 8,
+        "kibana": 8
+      }
+    },
+    "unit": "GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!AF10:AG12: ML and Kibana RAM per SIEM use case.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.siem_enterprise_ram",
+    "value": {
+      "min_gb": 16,
+      "gb_per_rule_instance": 8,
+      "analysts_per_step": 10,
+      "gb_per_analyst_step": 8
+    },
+    "unit": "GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!AF13:AG13: ML = MAX(16, rule instances × 8); Kibana = ML + ROUNDUP(analysts / 10) × 8.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.siem_default_rule_instances",
+    "value": 2,
+    "unit": "instances",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "SIEM Security - Front End!D14 default.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.siem_default_analysts",
+    "value": 10,
+    "unit": "analysts per shift",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "SIEM Security - Front End!D15 default.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.endpoint_ingest",
+    "value": {
+      "mb_per_day": {
+        "ngav": {
+          "windows": 7,
+          "linux": 80,
+          "macos": 20
+        },
+        "essential_edr": {
+          "windows": 25,
+          "linux": 310,
+          "macos": 150
+        },
+        "complete_edr": {
+          "windows": 45,
+          "linux": 310,
+          "macos": 200
+        },
+        "cwp_protect": {
+          "windows": 0,
+          "linux": 35,
+          "macos": 35
+        },
+        "cwp_monitor": {
+          "windows": 0,
+          "linux": 35,
+          "macos": 35
+        },
+        "cwp_comprehensive": {
+          "windows": 0,
+          "linux": 145,
+          "macos": 145
+        }
+      },
+      "linux_mac_weights": {
+        "linux": 20,
+        "macos": 5
+      }
+    },
+    "unit": "MB/day per endpoint",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!C4:D9: Windows MB/day (C) and Linux/macOS MB/day (D = (Linux × 20 + macOS × 5) / 25; Cloud Workload rows give one Linux/macOS figure, stored here for both).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.endpoint_default_mix",
+    "value": {
+      "windows": 75,
+      "linux_mac": 25
+    },
+    "unit": "percent",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Endpoint Security - Front End!D7:D8 defaults. The sheet applies the user mix to Cloud Workload rows too (quirk kept).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.security.endpoint_ram",
+    "value": {
+      "ml_base_steps": {
+        "ngav": null,
+        "essential_edr": 0,
+        "complete_edr": 2,
+        "cwp_protect": 2,
+        "cwp_monitor": 2,
+        "cwp_comprehensive": 2
+      },
+      "endpoints_per_step": 10000,
+      "gb_per_step": 8,
+      "kibana_gb": {
+        "ngav": 4,
+        "essential_edr": 8,
+        "complete_edr": 16,
+        "cwp_protect": 16,
+        "cwp_monitor": 16,
+        "cwp_comprehensive": 16
+      }
+    },
+    "unit": "GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Security - Data Validation!AF4:AG9: ML = (base + ROUNDUP(endpoints / 10,000)) × 8 (NGAV: none); Kibana fixed per use case.",
+    "carried_forward": false
+  }
+]

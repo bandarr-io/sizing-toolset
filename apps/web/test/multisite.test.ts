@@ -92,12 +92,14 @@ describe('compare deployment models (D33)', () => {
 });
 
 describe('deployment model selector per mode (D34)', () => {
-  it('node-based modes offer ECK and ECE as links to Compare models; cloud models stay disabled', async () => {
+  it('node-based modes offer ECK and ECE as links to Compare models, and ECH as a link to Elastic Cloud (D40)', async () => {
     const { modelOptionsFor } = await import('../src/state.ts');
     const fwd = modelOptionsFor('forward');
     expect(fwd.find((o) => o.value === 'eck')).toMatchObject({ text: expect.stringMatching(/compare on your servers/) });
     expect(fwd.find((o) => o.value === 'eck')!.disabled).toBeFalsy();
-    expect(fwd.find((o) => o.value === 'ech')!.disabled).toBe(true);
+    expect(fwd.find((o) => o.value === 'ech')).toMatchObject({ text: expect.stringMatching(/price it/) });
+    expect(fwd.find((o) => o.value === 'ech')!.disabled).toBeFalsy();
+    expect(fwd.find((o) => o.value === 'serverless')!.disabled).toBe(true);
   });
 
   it('server-based modes size ECK and ECE directly', async () => {

@@ -12,5 +12,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "constants:check": "pnpm -F @sizing/constants check"
+  },
+  "devDependencies": {
+    "exceljs": "^4.4.0"
   }
 }

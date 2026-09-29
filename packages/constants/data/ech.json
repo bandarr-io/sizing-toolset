@@ -1,0 +1,217 @@
+[
+  {
+    "key": "ech.hours_per_month",
+    "value": 730,
+    "unit": "hours",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "high",
+    "notes": "Logs!I56: $/GB-RAM-hour × 730 = $/GB-RAM-month, rounded to cents.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.price_adjustment",
+    "value": 1,
+    "unit": "multiplier",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "D40: prices are used as the v4.6 table gives them (Dan, 2026-09-28). The release notes' +5% (v3.9.2) and +3% (v4.4) are already in the table. Change this to apply a later list-price change.",
+    "carried_forward": true
+  },
+  {
+    "key": "ech.line_rounding_usd",
+    "value": 1000,
+    "unit": "USD",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "high",
+    "notes": "Every annual line is rounded up to this (roundup(x, -3)); applied only when rounding is switched on.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.reserved_storage",
+    "value": 0.2,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E99: share of disk kept free.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.index_factor",
+    "value": {
+      "logs": 1.2,
+      "metrics": 1
+    },
+    "unit": "multiplier",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E100: stored size per GB ingested, before LogsDB.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.logsdb_reduction",
+    "value": 0.54,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Logs!K154: LogsDB storage reduction.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.logsdb_share",
+    "value": 1,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E113: share of data in LogsDB indices (Logs only).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.reserved_cpu_search",
+    "value": 0.2,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E103: CPU kept for search when sizing ingest.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.frozen_ram_to_blob",
+    "value": 1600,
+    "unit": "GB blob per GB RAM",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E102.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.raw_to_json",
+    "value": 3.66,
+    "unit": "multiplier",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E104: raw log bytes to JSON (data in, for transfer costs).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.node_to_node_compression",
+    "value": 0.7,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced input E105.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.data_out_share",
+    "value": 0.15,
+    "unit": "fraction",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Logs!M92: data out as a share of snapshot storage.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.storage_api_calls_per_hour",
+    "value": 20,
+    "unit": "thousand calls per hour",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "low",
+    "notes": "Logs!I96: 730 × 2 × 10 thousand calls a month (M96 = 10).",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.zones",
+    "value": {
+      "hot": 2,
+      "warm": 2,
+      "cold": 1,
+      "frozen": 1
+    },
+    "unit": "availability zones",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced inputs E86:E92.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.replicas",
+    "value": {
+      "hot": 1,
+      "warm": 1,
+      "cold": 0
+    },
+    "unit": "replicas",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Advanced inputs E95:E97. Frozen has none.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.fixed_ram_gb",
+    "value": {
+      "master": 3,
+      "coordinating": 4,
+      "ml": 4,
+      "kibana": 8
+    },
+    "unit": "GB RAM (all zones)",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Inputs E35:E38: fixed sizes, always billed.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.metrics_bytes_per_sample",
+    "value": 5,
+    "unit": "bytes",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "medium",
+    "notes": "Metrics!K135.",
+    "carried_forward": false
+  },
+  {
+    "key": "ech.metrics_scaling_exponent",
+    "value": 0.85,
+    "unit": "exponent",
+    "source_url": "https://ela.st/ess-ballpark",
+    "as_of_date": "2026-09-18",
+    "stack_version": "ECH ballpark v4.6",
+    "confidence": "low",
+    "notes": "Metrics hot CPU: nodes = (datapoints/s × copies / EPS per node)^(1/0.85). No documented source in the sheet.",
+    "carried_forward": false
+  }
+]
