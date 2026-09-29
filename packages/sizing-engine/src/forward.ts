@@ -300,7 +300,7 @@ export function forward(req: ForwardRequest, c: ConstantSet = defaultConstants):
   const warnings = [
     ...validateHardware(c, {
       groups, airGapped, autoOps: opts.autoOps ?? false, replicasByTier, agents, shards, dataGbByTier, ratioOverrides: ratioOverrides(opts),
-      profiles, fips: opts.fips ?? false, ...(opts.eventsPerSecondPerVcpu !== undefined ? { eventsPerSecondPerVcpu: opts.eventsPerSecondPerVcpu } : {}),
+      profiles, ...(opts.eventsPerSecondPerVcpu !== undefined ? { eventsPerSecondPerVcpu: opts.eventsPerSecondPerVcpu } : {}),
     }),
     ...commonWarnings(opts.model),
   ];

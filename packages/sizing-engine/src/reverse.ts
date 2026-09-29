@@ -504,7 +504,7 @@ export function reverse(req: ReverseRequest, c: ConstantSet = defaultConstants):
     ...validateHardware(c, {
       groups, airGapped, autoOps: req.hardware.autoOps ?? false, replicasByTier, agents,
       shards: estimateShards(c, atMax, 0), dataGbByTier, ratioOverrides: req.hardware.memDiskRatio ?? {},
-      profiles: atMax, fips: req.fips ?? false, ...(req.eventsPerSecondPerVcpu !== undefined ? { eventsPerSecondPerVcpu: req.eventsPerSecondPerVcpu } : {}),
+      profiles: atMax, ...(req.eventsPerSecondPerVcpu !== undefined ? { eventsPerSecondPerVcpu: req.eventsPerSecondPerVcpu } : {}),
     }),
     ...commonWarnings(req.hardware.model),
     ...tiersWithoutNodes(req.fixed, groups, dataGbByTier),

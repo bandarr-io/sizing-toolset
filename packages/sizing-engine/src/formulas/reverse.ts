@@ -206,10 +206,4 @@ export const FORMULAS: Formula[] = [
     explanation: 'Processing speed varies a lot with the data and the hardware. A value outside the usual range may be right, but it should come from a Rally test on the customer\'s data.',
     constantKeys: ['ev_per_s_per_vcpu.band_min', 'ev_per_s_per_vcpu.band_max'], source: 'SPEC §5.3', code: 'validation.ts',
   },
-  {
-    id: 'check.hv15_federal_retention', area: H, group: 'Security', title: 'US federal log retention (HV15)',
-    formula: 'when FIPS 140-3 is selected: note when a workload keeps data for fewer than the retrievable months × 30 days',
-    explanation: 'FIPS 140-3 is a US government encryption standard, so its use suggests a federal system. OMB memo M-26-14 asks federal agencies to keep logs searchable for 6 months and retrievable for 12.',
-    constantKeys: ['omb_m2614'], source: 'SPEC C6, OMB M-26-14', code: 'validation.ts',
-  },
 ];

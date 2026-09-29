@@ -21,12 +21,10 @@ export interface ValidationInput {
   ratioOverrides?: RatioOverrides;
   /** Data GB (before overhead) per tier, for HV7. */
   dataGbByTier?: Partial<Record<Tier, number>>;
-  /** The workloads, for document counts per shard (HV8), vectors (HV13), Fleet policies (HV12) and retention (HV15). */
+  /** The workloads, for document counts per shard (HV8), vectors (HV13) and Fleet policies (HV12). */
   profiles?: readonly WorkloadProfile[];
   /** A custom processing speed, events/s per vCPU (HV14). */
   eventsPerSecondPerVcpu?: number;
-  /** FIPS 140-3 selected: treated as a US federal system for the retention note (HV15). */
-  fips?: boolean;
 }
 
 /** Display names for node roles in warning text. */
@@ -195,16 +193,5 @@ export function validateHardware(c: ConstantSet, v: ValidationInput): Warning[] 
     }
   }
 
-  // HV15: US federal retention guidance (OMB M-26-14), for systems that ask for FIPS 140-3.
-  if (v.fips) {
-    const omb = val<{ searchableMonths: number; retrievableMonths: number; l3SearchableMonths: number }>(c, 'omb_m2614');
-    for (const p of v.profiles ?? []) {
-      const r = p.retentionDays;
-      const total = (r.hot ?? 0) + (r.warm ?? 0) + (r.cold ?? 0) + (r.frozen ?? 0);
-      if (total > 0 && total < omb.retrievableMonths * 30) {
-        add('HV15', 'info', `${p.id} keeps data for ${fmt(total, 0)} days. If this is a US federal system, OMB M-26-14 asks for logs searchable for ${omb.searchableMonths} months (${omb.l3SearchableMonths} at the highest maturity level's minimum) and retrievable for ${omb.retrievableMonths} months.`);
-      }
-    }
-  }
   return w;
 }

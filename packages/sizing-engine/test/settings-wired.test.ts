@@ -63,11 +63,6 @@ describe('settings that now drive a rule (D41)', () => {
     expect(cpu(reverse({ ...req, eventsPerSecondPerVcpu: 2000 })).math.some((s) => /usual range/.test(s.label))).toBe(false);
   });
 
-  it('omb_m2614: HV15 notes short retention when FIPS is selected', () => {
-    expect(ids(run({ fips: true, profiles: [logs()] }))).toContain('HV15/info');
-    expect(ids(run({ fips: false, profiles: [logs()] }))).not.toContain('HV15/info');
-    expect(ids(run({ fips: true, profiles: [logs({ retentionDays: { hot: 30, frozen: 335 } })] }))).not.toContain('HV15/info');
-  });
 
   it('eck.operator_ram_gb: ECK adds the manager to memory needed, not to the license', () => {
     const servers: ServerGroup[] = [{ role: 'master', count: 3, ramGb: 128, diskGb: 500, diskType: 'ssd', vcpu: 16 }, { role: 'hot', count: 4, ramGb: 256, diskGb: 12800, diskType: 'nvme', vcpu: 64 }];
