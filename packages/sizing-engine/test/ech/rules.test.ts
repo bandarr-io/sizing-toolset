@@ -80,3 +80,12 @@ describe('ECH logs (made-up prices)', () => {
     expect(adjusted.lines.find((l) => l.key === 'hot')!.monthlyPerGb).toBe(78.95); // ROUND(0.1 × 1.0815 × 730, 2)
   });
 });
+
+describe('ECH default instance per role (for the pickers)', () => {
+  it('names the instance a use case uses when none is chosen', async () => {
+    const { echDefaultSku } = await import('../../src/index.ts');
+    expect(echDefaultSku(data, at, 'logs', 'hot')).toBe('aws.es.datahot.x');
+    expect(echDefaultSku(data, at, 'siem', 'kibana')).toBe('aws.kibana.x');
+    expect(echDefaultSku(data, { ...at, provider: 'gcp' }, 'logs', 'hot')).toBeUndefined();
+  });
+});
