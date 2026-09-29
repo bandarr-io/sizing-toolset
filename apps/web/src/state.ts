@@ -105,6 +105,8 @@ export interface AppState {
   models?: ModelsState;
   /** D40: Elastic Cloud Hosted, priced like the ECH Ballpark Estimator. */
   ech?: import('./ech/state.ts').EchState;
+  /** D46: services sold with this scenario (consulting, support, training). */
+  services?: import('./services.ts').ScenarioServices;
   /** D43: Size a workload runs on self-managed (the sizing engine) or Elastic Cloud (the ECH inputs). */
   sizeOn?: 'self_managed' | 'ech';
 }

@@ -2,6 +2,7 @@ import type { EchData, EchLine, SizingResult, Tier, WorkloadProfile } from '@siz
 import { escapeHtml } from '../customerSummary.ts';
 import { useCaseLabel, type EchItem, type EchOutcome, type EchState } from '../ech/state.ts';
 import { fmtMoney, fmtNum } from '../format.ts';
+import type { PricedServiceLine, ServiceItem } from '../services.ts';
 import { byRoleOrder } from '../ui/tiers.ts';
 import { BRAND } from './brand.ts';
 
@@ -14,9 +15,10 @@ import { BRAND } from './brand.ts';
 
 export interface RomTeamMember { name: string; role: string; email: string }
 
+/** D46: `services` are the scenario's priced service lines; each gets a row under its licensing table. */
 export type RomScenario =
-  | { kind: 'ech'; title: string; notes?: string; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] }
-  | { kind: 'self_managed'; title: string; notes?: string; workloads: readonly WorkloadProfile[]; result: SizingResult; eruPrice?: number };
+  | { kind: 'ech'; title: string; notes?: string; services?: readonly PricedServiceLine[]; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] }
+  | { kind: 'self_managed'; title: string; notes?: string; services?: readonly PricedServiceLine[]; workloads: readonly WorkloadProfile[]; result: SizingResult; eruPrice?: number };
 
 export interface RomInput {
   customer: string;
@@ -162,7 +164,7 @@ function contents(input: RomInput): string {
   return `<section class="page">
   <div class="customer">${e(input.customer || '[CUSTOMER NAME]')}</div>
   <h1 class="doc-title">Elastic Sizing Estimation</h1>
-  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${scenarioItems}</ul>
+  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${describedServices(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}${scenarioItems}</ul>
 </section>`;
 }
 
@@ -190,8 +192,37 @@ function licensing(input: RomInput): string {
     return `<table class="lic"><caption>Enterprise Subscription: ${volumeHeading(s)}</caption>
 <thead><tr><th>Annual</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
 <tbody><tr><td>Yr. 1</td><td>[MPN]</td><td>Enterprise Resource Units (ERU)</td><td class="accent">${start}</td><td class="accent">${end}</td><td>${fmtNum(eru, 0)}</td><td>${s.eruPrice !== undefined ? fmtMoney(s.eruPrice) : '[PRICE]'}</td><td>${total}</td></tr></tbody></table>`;
-  }).join('');
+  }).map((table, i) => table + servicesTable(input.scenarios[i]!, start, end)).join('');
   return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}</section>`;
+}
+
+const scenarioServices = (s: RomScenario) => (s.services ?? []).filter((p): p is PricedServiceLine & { item: ServiceItem } => !!p.item);
+
+/** D46: the scenario's services, laid out like the licensing tables. Dates only on services marked as dated. */
+function servicesTable(s: RomScenario, start: string, end: string): string {
+  const rows = scenarioServices(s);
+  if (rows.length === 0) return '';
+  const body = rows.map((p) => {
+    const dated = p.item.dated;
+    const total = p.total !== undefined ? fmtMoney(p.total) : '[PRICE]';
+    return `<tr><td>${p.item.billing === 'annual' ? 'Yr. 1' : 'One-time'}</td><td>${e(p.item.mpn || '[MPN]')}</td><td>${e(p.item.name)}</td><td class="accent">${dated ? start : ''}</td><td class="accent">${dated ? end : ''}</td><td>${fmtNum(p.line.quantity, 2)}</td><td>${p.unitPrice !== undefined ? fmtMoney(p.unitPrice, 2) : '[PRICE]'}</td><td>${total}</td></tr>`;
+  }).join('');
+  return `<table class="lic"><caption>Services: ${e(s.title)}</caption>
+<thead><tr><th>Term</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
+<tbody>${body}</tbody></table>`;
+}
+
+/** Every service used in the ROM that has a description, once each, in first-use order. */
+function describedServices(input: RomInput): ServiceItem[] {
+  const seen = new Map<string, ServiceItem>();
+  for (const s of input.scenarios) for (const p of scenarioServices(s)) if (p.item.description.trim() && !seen.has(p.item.id)) seen.set(p.item.id, p.item);
+  return [...seen.values()];
+}
+
+function serviceDescriptions(input: RomInput): string {
+  const items = describedServices(input);
+  if (items.length === 0) return '';
+  return `<section class="page"><h2>SERVICE DESCRIPTIONS</h2>${items.map((x) => `<div class="keep"><h3>${e(x.name)}</h3>${x.description.trim().split(/\n\s*\n/).map((para) => `<p>${e(para.trim())}</p>`).join('')}</div>`).join('')}</section>`;
 }
 
 function scenarioPage(s: RomScenario): string {
@@ -284,6 +315,7 @@ ${cover(input)}
 ${contents(input)}
 ${caveatsAndTeam(input)}
 ${licensing(input)}
+${serviceDescriptions(input)}
 ${input.scenarios.map(scenarioPage).join('\n')}
 </body></html>`;
 }

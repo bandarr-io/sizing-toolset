@@ -1,6 +1,7 @@
 import type { ConstantSet } from '@sizing/constants';
 import { forward, reverse, type MathStep, type SizingResult, type Tier } from '@sizing/engine';
 import { fmtMoney, fmtNum } from './format.ts';
+import { servicesForYear, type ServiceItem } from './services.ts';
 
 const DISK_NAME: Record<string, string> = { nvme: 'NVMe', ssd: 'SSD', hdd: 'HDD' };
 import { defaultDiskType, type AppState } from './state.ts';
@@ -42,7 +43,7 @@ export function validDiscount(pct: number | undefined): number | undefined {
 
 export const DEFAULT_TERM_YEARS = 3;
 
-export type CostPart = 'subscription' | 'hardware' | 'object' | 'hosting' | 'ops';
+export type CostPart = 'subscription' | 'hardware' | 'object' | 'hosting' | 'ops' | 'services';
 
 export interface CostLine {
   part: CostPart;
@@ -180,13 +181,26 @@ export function resultsByYear(state: AppState, c: ConstantSet, years: number): S
   return Array.from({ length: years }, (_, i) => forward({ ...state.forward, options: { ...state.forward.options, growthHorizonYears: i + 1 } }, c));
 }
 
+/** D46: services the scenario picked: one-time ones in year 1, annual ones every year. */
+function withServices(t: ReturnType<typeof termCosts>, catalog: readonly ServiceItem[], state: AppState): ReturnType<typeof termCosts> {
+  // Every year gets the line once any service is picked, so the years' lines stay aligned (0 after year 1 for one-time only).
+  if (!servicesForYear(catalog, state.services, 1)) return t;
+  const years = t.years.map((y) => {
+    const s = servicesForYear(catalog, state.services, y.year) ?? { annual: 0, math: [] };
+    const line: CostLine = { part: 'services', label: 'Services', math: s.math, ...(s.annual !== undefined ? { annual: s.annual } : {}), ...(s.missing ? { missing: s.missing } : {}) };
+    const lines = [...y.lines, line];
+    return { ...y, lines, total: sumLines(lines) };
+  });
+  return { years, total: years.reduce((sum, y) => sum + y.total, 0) };
+}
+
 export interface CostReport { termYears: number; years: ReturnType<typeof termCosts>['years']; total: number; partial: boolean }
 
 /** Everything the TCO page and the export show, or an error message when the scenario cannot be sized. */
-export function costReport(state: AppState, c: ConstantSet, rates: CostRates): CostReport | { error: string } {
+export function costReport(state: AppState, c: ConstantSet, rates: CostRates, catalog: readonly ServiceItem[] = []): CostReport | { error: string } {
   const termYears = Math.max(1, Math.round(state.cost?.termYears ?? DEFAULT_TERM_YEARS));
   try {
-    const t = termCosts(state, rates, resultsByYear(state, c, termYears));
+    const t = withServices(termCosts(state, rates, resultsByYear(state, c, termYears)), catalog, state);
     return { termYears, ...t, partial: t.years[0]!.lines.some((l) => l.annual === undefined) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };

@@ -7,6 +7,8 @@ import { useMemo, useState } from 'react';
 import { useConstants } from '../constantsStore.tsx';
 import { mergeRates } from '../cost.ts';
 import { useCostDefaults } from '../costStore.tsx';
+import { priceLines } from '../services.ts';
+import { useServiceCatalog } from '../servicesStore.tsx';
 import { useEchData } from '../ech/EchData.tsx';
 import { defaultEch, runEch } from '../ech/state.ts';
 import { download, slug } from '../export.ts';
@@ -36,6 +38,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
   const { set: c } = useConstants();
   const { data } = useEchData();
   const { defaults } = useCostDefaults();
+  const { catalog } = useServiceCatalog();
   const options = useMemo(() => candidates(current), [current]);
   const [customer, setCustomer] = useState(current.name === 'Untitled scenario' ? '' : current.name);
   const [date, setDate] = useState(today());
@@ -52,14 +55,15 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
       if (!p || o.why) continue;
       const s = o.state;
       const title = p.title.trim() || s.name;
+      const services = priceLines(catalog, s.services);
       if (s.sizeOn === 'ech') {
         if (!data) { setError(`${title} is an Elastic Cloud scenario, and the Elastic Cloud price data is not loaded in this browser.`); return undefined; }
         const ech = s.ech ?? defaultEch();
-        scenarios.push({ kind: 'ech', title, notes: p.notes, ech, data, outcomes: runEch(c, data, ech) });
+        scenarios.push({ kind: 'ech', title, notes: p.notes, services, ech, data, outcomes: runEch(c, data, ech) });
       } else {
         try {
           const eruPrice = mergeRates(defaults, s.cost?.rates).eruPerYear;
-          scenarios.push({ kind: 'self_managed', title, notes: p.notes, workloads: s.forward.workloads, result: forward(s.forward, c), ...(eruPrice !== undefined ? { eruPrice } : {}) });
+          scenarios.push({ kind: 'self_managed', title, notes: p.notes, services, workloads: s.forward.workloads, result: forward(s.forward, c), ...(eruPrice !== undefined ? { eruPrice } : {}) });
         } catch (x) {
           setError(`${title} cannot be sized: ${x instanceof Error ? x.message : String(x)}`);
           return undefined;

@@ -12,6 +12,8 @@ import { useEchData } from './EchData.tsx';
 import { EchItemList, PlacementForm } from './EchInputs.tsx';
 import { EchPanel } from './EchPanel.tsx';
 import { echMarkdown } from './export.ts';
+import { priceLines } from '../services.ts';
+import { useServiceCatalog } from '../servicesStore.tsx';
 import { defaultEch, placementSummary, runEch, useCaseLabel, type EchState } from './state.ts';
 
 type Setter = (f: (s: AppState) => AppState) => void;
@@ -19,6 +21,7 @@ type Setter = (f: (s: AppState) => AppState) => void;
 /** D40: Elastic Cloud Hosted estimate, priced like the ECH Ballpark Estimator. */
 export function EchCalculator({ state, setState, constants }: { state: AppState; setState: Setter; constants: ConstantSet }) {
   const { data, status, from, upload } = useEchData();
+  const { catalog } = useServiceCatalog();
   const e = state.ech ?? defaultEch();
   useEffect(() => { if (!state.ech) setState((s) => ({ ...s, ech: s.ech ?? defaultEch() })); }, [state.ech, setState]);
   const setEch = (next: EchState) => setState((s) => ({ ...s, ech: next }));
@@ -34,7 +37,7 @@ export function EchCalculator({ state, setState, constants }: { state: AppState;
   const exportAs = (kind: 'md' | 'json') => {
     if (!data) return;
     const at = new Date().toISOString();
-    if (kind === 'md') download(`${slug(state.name)}-ech.md`, echMarkdown(state.name, e, data, outcomes, at), 'text/markdown');
+    if (kind === 'md') download(`${slug(state.name)}-ech.md`, echMarkdown(state.name, e, data, outcomes, at, priceLines(catalog, state.services)), 'text/markdown');
     else download(`${slug(state.name)}-ech.json`, JSON.stringify({ exportedAt: at, engineVersion: ENGINE_VERSION, constantsHash: constants.hash, echData: data.source, scenario: state, result: outcomes }, null, 2), 'application/json');
   };
 
@@ -49,7 +52,7 @@ export function EchCalculator({ state, setState, constants }: { state: AppState;
         onReset={() => setState((s) => ({ ...s, ech: defaultEch() }))}
         onExportMd={() => exportAs('md')}
         onExportJson={() => exportAs('json')}
-        {...(data ? { onExportSummary: () => download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'ech', state, ech: e, data, outcomes }, new Date().toISOString()), 'text/html') } : {})}
+        {...(data ? { onExportSummary: () => download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'ech', state, ech: e, data, outcomes, services: priceLines(catalog, state.services) }, new Date().toISOString()), 'text/html') } : {})}
       />
       <EuiSpacer size="l" />
       {!data ? (

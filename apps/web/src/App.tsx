@@ -19,6 +19,7 @@ import { useConstants } from './constantsStore.tsx';
 import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
 import { useCostDefaults } from './costStore.tsx';
 import { customerSummaryHtml } from './customerSummary.ts';
+import { useServiceCatalog } from './servicesStore.tsx';
 import { download, modelsMarkdown, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
 import { ModelsPanel } from './results/ModelsPanel.tsx';
 import { ServerGroups } from './calculator/ServerGroups.tsx';
@@ -28,6 +29,8 @@ import { ConfigPage } from './pages/ConfigPage.tsx';
 import { TcoPage } from './pages/TcoPage.tsx';
 import { ValidationPage } from './pages/ValidationPage.tsx';
 import { FormulasPage } from './pages/FormulasPage.tsx';
+import { ServicesPage } from './pages/ServicesPage.tsx';
+import { priceLines } from './services.ts';
 import { EchCalculator } from './ech/EchCalculator.tsx';
 import { EchDataProvider } from './ech/EchData.tsx';
 import { ResultsPanel } from './results/ResultsPanel.tsx';
@@ -57,9 +60,9 @@ function compute(s: AppState, c: ConstantSet, overriddenKeys: string[]): Outcome
   }
 }
 
-type Page = 'calculator' | 'tco' | 'validate' | 'formulas' | 'config';
-const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', validate: '#/validate', formulas: '#/formulas', config: '#/config' };
-const pageFromHash = (): Page => (['config', 'tco', 'validate', 'formulas'] as const).find((p) => window.location.hash.startsWith(HASH[p])) ?? 'calculator';
+type Page = 'calculator' | 'tco' | 'services' | 'validate' | 'formulas' | 'config';
+const HASH: Record<Page, string> = { calculator: '#/', tco: '#/tco', services: '#/services', validate: '#/validate', formulas: '#/formulas', config: '#/config' };
+const pageFromHash = (): Page => (['config', 'tco', 'services', 'validate', 'formulas'] as const).find((p) => window.location.hash.startsWith(HASH[p])) ?? 'calculator';
 
 export function App() {
   const [page, setPage] = useState<Page>(pageFromHash);
@@ -106,6 +109,7 @@ export function App() {
           tabs={[
             { label: 'Calculator', isSelected: page === 'calculator', onClick: () => go('calculator') },
             { label: 'Total cost', isSelected: page === 'tco', onClick: () => go('tco') },
+            { label: 'Services', isSelected: page === 'services', onClick: () => go('services') },
             { label: 'Validation', isSelected: page === 'validate', onClick: () => go('validate') },
             { label: 'Formulas', isSelected: page === 'formulas', onClick: () => go('formulas') },
             { label: `Configurations${overriddenKeys.length ? ` (${overriddenKeys.length} changed)` : ''}`, isSelected: page === 'config', onClick: () => go('config') },
@@ -138,6 +142,7 @@ export function App() {
               onOpen={(forward, name) => { setState((s) => ({ ...s, name, mode: 'forward', forward })); go('calculator'); }} />
           )}
           {page === 'formulas' && <FormulasPage />}
+          {page === 'services' && <ServicesPage state={state} setState={setState} />}
           {page === 'calculator' && (
             <Calculator state={state} setState={setState} constants={constants} overriddenKeys={overriddenKeys} overrides={Object.values(overrides)} onOpenTco={() => go('tco')} />
           )}
@@ -155,20 +160,21 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
   const outcome = useMemo(() => compute(state, constants, overriddenKeys), [state, constants, overriddenKeys]);
   const patch = (p: Partial<AppState>) => setState((s) => ({ ...s, ...p }));
   const rates = mergeRates(defaults, state.cost?.rates);
+  const { catalog } = useServiceCatalog();
   const setScenarioRates = (r: CostRates) => setState((s) => ({ ...s, cost: { ...s.cost, rates: r } }));
 
   const exportAs = (kind: 'md' | 'json') => {
     if ('error' in outcome) return;
     const at = new Date().toISOString();
-    const cost = state.cost?.includeInExport ? costReport(state, constants, rates) : undefined;
-    if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at, cost), 'text/markdown');
+    const cost = state.cost?.includeInExport ? costReport(state, constants, rates, catalog) : undefined;
+    if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at, cost, priceLines(catalog, state.services)), 'text/markdown');
     else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
   };
   // One-page customer summary: Size a workload only; cost appears when prices are set.
   const exportSummary = state.mode === 'forward' && 'result' in outcome
     ? () => {
-      const cost = costReport(state, constants, rates);
-      download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'self_managed', state, result: outcome.result, cost }, new Date().toISOString()), 'text/html');
+      const cost = costReport(state, constants, rates, catalog);
+      download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'self_managed', state, result: outcome.result, cost, services: priceLines(catalog, state.services) }, new Date().toISOString()), 'text/html');
     }
     : undefined;
 

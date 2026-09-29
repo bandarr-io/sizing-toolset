@@ -22,6 +22,7 @@ Alongside the modes:
 - **Cluster map:** a flyout drawing of the nodes per tier and server.
 - **Total cost:** annual and term costs for hardware and the Elastic subscription, with an optional subscription discount.
 - **Validation:** record real deals next to the cluster the customer runs, and see how close the estimates are, deal by deal and overall. Export as CSV or JSON; import other people's files to pool results.
+- **Services:** consulting, dedicated support and training sold with a scenario, priced from a service catalog kept in your browser (with a per-scenario price override). They flow into Total cost, the exports and the Budgetary ROM.
 - **Budgetary ROM:** Export › Budgetary ROM builds the branded customer document (cover, caveats, team, licensing, one section per scenario) from one or more scenarios, ready to save as PDF.
 - **Formulas:** every formula the calculator uses, in plain words, with the settings each one reads and their current values. A test fails if a setting that feeds a calculation is not covered.
 - **Configurations:** view and edit the underlying constants. In `pnpm dev`, edits are written back to `packages/constants/data`.

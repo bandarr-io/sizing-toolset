@@ -1,7 +1,8 @@
 import type { Constant } from '@sizing/constants';
 import type { ModelRow, SizingResult, TopologyResult, WorkloadProfile } from '@sizing/engine';
 import type { CostReport } from './cost.ts';
-import { fmtMoney } from './format.ts';
+import { fmtMoney, fmtNum } from './format.ts';
+import { BILLING_LABEL, type PricedServiceLine } from './services.ts';
 import { byRoleOrder } from './ui/tiers.ts';
 import type { AppState } from './state.ts';
 
@@ -53,6 +54,19 @@ export function toJson(state: AppState, result: SizingResult, exportedAt: string
   }, null, 2);
 }
 
+/** D46: the services picked for this scenario, one row each. */
+export function servicesMarkdown(services: readonly PricedServiceLine[]): string[] {
+  const rows = services.filter((p) => p.item);
+  if (rows.length === 0) return [];
+  const L = ['## Services', '', '| Service | Part number | Quantity | Price per unit | Billed | Total |', '|---|---|---:|---:|---|---:|'];
+  for (const p of rows) {
+    const unit = `${p.item!.unit}${p.line.quantity === 1 ? '' : 's'}`;
+    L.push(`| ${p.item!.name} | ${p.item!.mpn} | ${fmtNum(p.line.quantity, 2)} ${unit} | ${p.unitPrice === undefined ? 'not priced' : fmtMoney(p.unitPrice, 2)} | ${BILLING_LABEL[p.item!.billing]} | ${p.total === undefined ? 'not priced' : fmtMoney(p.total)} |`);
+  }
+  L.push('');
+  return L;
+}
+
 function costSection(cost: CostReport | { error: string }): string[] {
   if ('error' in cost) return ['## Estimated cost', '', `Not available: ${cost.error}`, ''];
   const years = cost.years.map((y) => `Year ${y.year}`);
@@ -69,7 +83,7 @@ function costSection(cost: CostReport | { error: string }): string[] {
   return L;
 }
 
-export function toMarkdown(state: AppState, result: SizingResult, workloads: readonly WorkloadProfile[], exportedAt: string, cost?: CostReport | { error: string }): string {
+export function toMarkdown(state: AppState, result: SizingResult, workloads: readonly WorkloadProfile[], exportedAt: string, cost?: CostReport | { error: string }, services: readonly PricedServiceLine[] = []): string {
   const L: string[] = [];
   const perSite = result.sites > 1 ? ' (per site)' : '';
   L.push(`# ${state.name}`, '');
@@ -113,6 +127,7 @@ export function toMarkdown(state: AppState, result: SizingResult, workloads: rea
   L.push('');
 
   if (cost) L.push(...costSection(cost));
+  L.push(...servicesMarkdown(services));
 
   L.push('## Assumptions', '', ...result.assumptions.map((a) => `- ${a}`), '');
   L.push('## Recommended Rally tests', '', 'Rally is Elastic\'s benchmarking tool. These steps are for the technical team.', '', ...rallyPlan(workloads), '');
