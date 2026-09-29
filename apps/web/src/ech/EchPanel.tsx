@@ -3,6 +3,10 @@ import type { EchData, EchLine } from '@sizing/engine';
 import { SwitchField } from '../components/Fields.tsx';
 import { MathButton } from '../components/MathFlyout.tsx';
 import { fmtMoney, fmtNum } from '../format.ts';
+import { SeverityGroups } from '../components/Results.tsx';
+import { Delta } from '../results/ResultsPanel.tsx';
+import { echSentence, echSeverity } from '../results/summary.ts';
+import { useDeltas } from '../results/useDeltas.ts';
 import { echTotals, type EchOutcome } from './state.ts';
 
 const cell = { padding: '6px 6px', verticalAlign: 'top' as const };
@@ -21,7 +25,9 @@ export function EchPanel({ data, outcomes, rounded, onRounded, from }: {
   data: EchData; outcomes: EchOutcome[]; rounded: boolean; onRounded: (v: boolean) => void; from: 'file' | 'upload' | undefined;
 }) {
   const totals = echTotals(outcomes, rounded);
-  const warnings = outcomes.flatMap((o) => ('result' in o ? o.result.warnings.map((w) => `${o.item.name}: ${w}`) : []));
+  const warnings = outcomes.flatMap((o) => ('result' in o ? o.result.warnings.map((w) => ({ severity: echSeverity(w), message: `${o.item.name}: ${w}` })) : []));
+  const failed = outcomes.filter((o) => 'error' in o).length;
+  const delta = useDeltas({ cost: totals.annual });
   return (
     <EuiPanel hasBorder paddingSize="l">
       <EuiText size="s" color="subdued"><p>Elastic Cloud Hosted, list price</p></EuiText>
@@ -29,8 +35,10 @@ export function EchPanel({ data, outcomes, rounded, onRounded, from }: {
         <EuiFlexItem grow={false}>
           <EuiTitle size="l"><h2 style={{ color: '#0B64DD' }}>{fmtMoney(totals.annual)}<span style={{ fontSize: 16, fontWeight: 400 }}> a year</span></h2></EuiTitle>
         </EuiFlexItem>
+        {delta('cost', 'money') && <EuiFlexItem grow={false}><div><Delta text={delta('cost', 'money')} /></div></EuiFlexItem>}
         <EuiFlexItem grow={false}><EuiText size="s"><p>{fmtMoney(totals.annual / 12)} a month · {fmtMoney(totals.y1)} in year one</p></EuiText></EuiFlexItem>
       </EuiFlexGroup>
+      <EuiText size="s"><p style={{ margin: 0 }}>{echSentence(totals.annual, outcomes.length - failed, failed)}</p></EuiText>
       <EuiSpacer size="s" />
       <SwitchField label="Round each line up to $1,000, like the spreadsheet" checked={rounded} onChange={onRounded}
         helpText="Year one is lower because snapshot storage fills up over the retention period." />
@@ -77,11 +85,7 @@ export function EchPanel({ data, outcomes, rounded, onRounded, from }: {
         </div>
       ))}
 
-      {warnings.length > 0 && (
-        <EuiCallOut size="s" color="warning" iconType="warning" title="Worth a look">
-          <ul>{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
-        </EuiCallOut>
-      )}
+      {warnings.length > 0 && <SeverityGroups items={warnings} max={4} emptyText="Nothing to fix" />}
       <EuiSpacer size="s" />
       <EuiText size="xs" color="subdued">
         <p>
