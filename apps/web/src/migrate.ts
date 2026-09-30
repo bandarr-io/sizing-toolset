@@ -1,4 +1,5 @@
 import type { ForwardRequest, NodeGroup, ReverseRequest, Tier, WorkloadProfile } from '@sizing/engine';
+import { upgradeServices } from './services.ts';
 import { normalizeReverse, type AppState } from './state.ts';
 
 // Scenario format v1 (fast/expert split). Kept only to read saved scenarios and exports.
@@ -88,7 +89,9 @@ export function migrate(x: unknown): AppState | undefined {
     const unified: AppState = (raw.mode as string) === 'ech' ? { ...raw, mode: 'forward', sizeOn: 'ech' } : raw;
     const s = withoutFullLogsdb(localDisksOnly(unified));
     // "Already running on this cluster" was removed: drop saved extra workloads so they cannot use capacity unseen.
-    return { ...s, reverse: normalizeReverse(s.reverse) };
+    // D49: services on a retired catalog entry move to its replacement.
+    const services = upgradeServices(s.services);
+    return { ...s, reverse: normalizeReverse(s.reverse), ...(services ? { services } : {}) };
   }
   const v1 = x as Partial<AppStateV1>;
   if (!isV1(v1)) return undefined;

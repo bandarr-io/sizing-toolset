@@ -82,6 +82,8 @@ export interface EchLine {
   nodeSizeGb?: number;
   zones?: number;
   diskGb?: number;
+  /** Frozen: snapshot (blob) data in object storage behind the local cache, GB. */
+  blobGb?: number;
   constraint?: 'disk' | 'cpu';
   monthlyPerGb?: number;
   annual: number;

@@ -3,6 +3,7 @@ import type { CostReport } from './cost.ts';
 import { echTotals, placementSummary, useCaseLabel, type EchItem, type EchOutcome, type EchState } from './ech/state.ts';
 import { constraintWithTier } from './export.ts';
 import { fmtMoney, fmtNum, fmtStorage } from './format.ts';
+import { BILLING_LABEL, type PricedServiceLine } from './services.ts';
 import { KINDS, type AppState } from './state.ts';
 import { byRoleOrder } from './ui/tiers.ts';
 
@@ -12,8 +13,18 @@ import { byRoleOrder } from './ui/tiers.ts';
  * on one A4 or Letter page. Every piece of text the user typed is escaped.
  */
 export type SummaryInput =
-  | { kind: 'self_managed'; state: AppState; result: SizingResult; cost?: CostReport | { error: string } }
-  | { kind: 'ech'; state: AppState; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] };
+  | { kind: 'self_managed'; state: AppState; result: SizingResult; cost?: CostReport | { error: string }; services?: readonly PricedServiceLine[] }
+  | { kind: 'ech'; state: AppState; ech: EchState; data: EchData; outcomes: readonly EchOutcome[]; services?: readonly PricedServiceLine[] };
+
+/** D46: the services picked for this scenario. `note` says how they relate to the totals above. */
+function servicesHtml(services: readonly PricedServiceLine[], note: string): string[] {
+  const rows = services.filter((p) => p.item);
+  if (rows.length === 0) return [];
+  const L = ['<h2>Services</h2>', '<table><thead><tr><th>Service</th><th class="n">Quantity</th><th>Billed</th><th class="n">Total</th></tr></thead><tbody>'];
+  for (const p of rows) L.push(`<tr><td>${escapeHtml(p.item!.name)}</td><td class="n">${fmtNum(p.line.quantity, 2)} ${escapeHtml(p.item!.unit)}${p.line.quantity === 1 ? '' : 's'}</td><td>${BILLING_LABEL[p.item!.billing]}</td><td class="n">${p.total === undefined ? 'not priced' : fmtMoney(p.total)}</td></tr>`);
+  L.push('</tbody></table>', `<p class="note">${note}</p>`);
+  return L;
+}
 
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -124,7 +135,7 @@ ${body}
 `;
 }
 
-function selfManaged(state: AppState, r: SizingResult, cost: CostReport | { error: string } | undefined): { subtitle: string; body: string } {
+function selfManaged(state: AppState, r: SizingResult, cost: CostReport | { error: string } | undefined, services: readonly PricedServiceLine[]): { subtitle: string; body: string } {
   const perSite = r.sites > 1 ? ' per site' : '';
   const rows = byRoleOrder([
     ...r.tiers.map((t) => ({ role: t.tier as string, nodes: t.nodes, ram: t.ramGb, disk: t.diskGb })),
@@ -171,6 +182,7 @@ function selfManaged(state: AppState, r: SizingResult, cost: CostReport | { erro
     growing && years ? `Sized for the data volume ${fmtNum(years, 0)} year${years === 1 ? '' : 's'} from now, at the growth rates above.` : 'Sized for today\'s data volume, with no growth.',
     ...(binding ? [`What sets the size: ${escapeHtml(constraintWithTier(binding.name, binding.tier))} runs out first.`] : []),
   ].slice(0, 5);
+  L.push(...servicesHtml(services, cost && !('error' in cost) && cost.total > 0 ? 'Included in the estimated cost above: one-time services in year 1, yearly ones every year.' : 'One-time services are billed once; yearly ones every year.'));
   L.push('<h2>What this depends on</h2>', '<ul>', ...assumptions.map((a) => `<li>${a}</li>`), '</ul>');
   L.push('<div class="caveat"><strong>This is an estimate, not a quote.</strong> Disk space figures are dependable. Processing and search speed depend on your data, so they should be confirmed with a test on your own data before hardware is bought.</div>');
   return { subtitle: `Self-managed Elasticsearch${r.sites > 1 ? `, ${r.sites} sites` : ''}`, body: L.join('\n') };
@@ -183,7 +195,7 @@ function sizeWords(l: EchLine): string {
   return l.ramGb !== undefined ? `${fmtNum(l.ramGb, 0)} GB` : '';
 }
 
-function elasticCloud(ech: EchState, data: EchData, outcomes: readonly EchOutcome[]): { subtitle: string; body: string } {
+function elasticCloud(ech: EchState, data: EchData, outcomes: readonly EchOutcome[], services: readonly PricedServiceLine[]): { subtitle: string; body: string } {
   const rounded = ech.roundLines;
   const t = echTotals(outcomes, rounded);
   const L: string[] = [];
@@ -223,6 +235,7 @@ function elasticCloud(ech: EchState, data: EchData, outcomes: readonly EchOutcom
     'The first year costs a little less because stored snapshots build up over the retention period.',
     ...(rounded ? ['Each line is rounded up to the next $1,000.'] : []),
   ].slice(0, 5);
+  L.push(...servicesHtml(services, 'Services are priced separately and are not in the Elastic Cloud total above.'));
   L.push('<h2>What this depends on</h2>', '<ul>', ...assumptions.map((a) => `<li>${a}</li>`), '</ul>');
   L.push('<div class="caveat"><strong>This is an estimate, not a quote.</strong> Final prices, discounts and terms come from an official quote from Elastic.</div>');
   return { subtitle: `Elastic Cloud Hosted · ${escapeHtml(placementSummary(ech.placement))}`, body: L.join('\n') };
@@ -233,7 +246,7 @@ export function customerSummaryHtml(input: SummaryInput, at: string): string {
   const date = at.slice(0, 10);
   const title = escapeHtml(input.state.name);
   const { subtitle, body } = input.kind === 'self_managed'
-    ? selfManaged(input.state, input.result, input.cost)
-    : elasticCloud(input.ech, input.data, input.outcomes);
+    ? selfManaged(input.state, input.result, input.cost, input.services ?? [])
+    : elasticCloud(input.ech, input.data, input.outcomes, input.services ?? []);
   return page(title, subtitle, body, date);
 }

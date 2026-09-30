@@ -4,6 +4,7 @@ import {
 } from '@elastic/eui';
 import { useRef, useState } from 'react';
 import { migrate } from '../migrate.ts';
+import { RomBuilder } from '../rom/RomBuilder.tsx';
 import { encodeScenario, shareUrl } from '../share.ts';
 import type { AppState, Mode } from '../state.ts';
 import { deleteNamed, listSaved, saveNamed, type SavedScenario } from '../storage.ts';
@@ -27,6 +28,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
   const [saved, setSaved] = useState<SavedScenario[]>(() => listSaved());
   const [openList, setOpenList] = useState(false);
   const [openExport, setOpenExport] = useState(false);
+  const [openRom, setOpenRom] = useState(false);
   const [openMore, setOpenMore] = useState(false);
   const [flash, setFlash] = useState<string | undefined>();
   const file = useRef<HTMLInputElement>(null);
@@ -54,6 +56,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
   };
 
   return (
+    <>
     <EuiFlexGroup alignItems="center" justifyContent="spaceBetween" gutterSize="m" wrap>
       <EuiFlexItem grow={false}>
         <EuiButtonGroup
@@ -104,6 +107,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
                 <EuiContextMenuItem key="summary" icon="reportingApp" disabled={!onExportSummary}
                   toolTipContent={onExportSummary ? undefined : 'Available in Size a workload, for self-managed and Elastic Cloud.'}
                   onClick={() => { onExportSummary?.(); setOpenExport(false); }}>Customer summary (one page)</EuiContextMenuItem>,
+                <EuiContextMenuItem key="rom" icon="document" onClick={() => { setOpenRom(true); setOpenExport(false); }}>Budgetary ROM (PDF)…</EuiContextMenuItem>,
               ]} />
             </EuiPopover>
           </EuiFlexItem>
@@ -125,5 +129,7 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
       </EuiFlexItem>
       <input ref={file} type="file" accept="application/json,.json" hidden onChange={(e) => void importJson(e.target.files?.[0])} />
     </EuiFlexGroup>
+    {openRom && <RomBuilder current={state} onClose={() => setOpenRom(false)} />}
+    </>
   );
 }
