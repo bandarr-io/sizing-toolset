@@ -6,17 +6,31 @@ import type { CostLine } from '../cost.ts';
 import type { MathStep, SizingResult } from '@sizing/engine';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConfidenceBadge } from '../components/ConfidenceBadge.tsx';
-import { ConstraintPanel, FindingsSummary, groupFindings, NodeTable, TopConstraints, WarningsPanel } from '../components/Results.tsx';
+import { ConstraintPanel, groupFindings, NodeTable, SeverityGroups, TopConstraints, WarningsPanel } from '../components/Results.tsx';
 import { MathButton } from '../components/MathFlyout.tsx';
 import { constraintWithTier, solveLabel } from '../export.ts';
 import { SOLVES } from '../state.ts';
 import { fmtCompact, fmtMoney, fmtNum, fmtStorage } from '../format.ts';
 import { byRoleOrder, ROLE_LABEL } from '../ui/tiers.ts';
 import { ClusterMap } from './ClusterMap.tsx';
+import { resultSentence, sizingHeadlines, type DeltaKind } from './summary.ts';
+import { useDeltas } from './useDeltas.ts';
+
+type DeltaFn = (key: string, kind: DeltaKind) => string | undefined;
+
+/** The change the last edit made to a headline number, e.g. "+2" or "−48 GB". */
+export function Delta({ text }: { text: string | undefined }) {
+  if (!text) return null;
+  return (
+    <EuiToolTip content="Change from your last edit">
+      <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: '#4A5263', background: '#EEF2F8', borderRadius: 10, padding: '1px 7px', whiteSpace: 'nowrap' }}>{text}</span>
+    </EuiToolTip>
+  );
+}
 
 const ANSWER_COLOR = '#0B64DD';
 
-function Stat({ label, value, steps, hint, sub, action }: { label: string; value: ReactNode; steps?: MathStep[]; hint?: string; sub?: ReactNode; action?: ReactNode }) {
+function Stat({ label, value, steps, hint, sub, action, delta }: { label: string; value: ReactNode; steps?: MathStep[]; hint?: string; sub?: ReactNode; action?: ReactNode; delta?: string }) {
   return (
     <EuiFlexItem style={{ minWidth: 110 }}>
       <EuiText size="xs" color="subdued">{label}</EuiText>
@@ -30,12 +44,13 @@ function Stat({ label, value, steps, hint, sub, action }: { label: string; value
         {action && <EuiFlexItem grow={false}>{action}</EuiFlexItem>}
       </EuiFlexGroup>
       {sub && <EuiText size="xs" color="subdued">{sub}</EuiText>}
+      {delta && <div style={{ marginTop: 2, marginLeft: -6 }}><Delta text={delta} /></div>}
     </EuiFlexItem>
   );
 }
 
 /** D29 plus cost: the license in one stat, and what it costs per year with the price editable in place. */
-function SubscriptionStats({ r, cost }: { r: SizingResult; cost?: CostProps }) {
+function SubscriptionStats({ r, cost, delta }: { r: SizingResult; cost?: CostProps; delta: DeltaFn }) {
   const [editing, setEditing] = useState(false);
   const basic = r.licenseFloor === 'basic';
   const line = cost?.subscription;
@@ -53,7 +68,7 @@ function SubscriptionStats({ r, cost }: { r: SizingResult; cost?: CostProps }) {
         hint={basic
           ? 'No paid features are used, so no subscription is needed.'
           : `An ERU (Enterprise Resource Unit) is the unit Elastic licenses by, a block of memory. Enterprise is needed for: ${r.licenseFloorReasons.join('; ')}.`}
-        sub={basic ? 'no subscription' : 'Enterprise license'} />
+        sub={basic ? 'no subscription' : 'Enterprise license'} {...(basic ? {} : { delta: delta('eru', 'count') })} />
       {cost && !basic && (
         <Stat label="Subscription" value={line?.annual === undefined ? priceEditor : `${fmtMoney(line.annual)} / yr`}
           steps={line?.math} action={line?.annual !== undefined ? priceEditor : undefined}
@@ -82,13 +97,13 @@ function nodeMath(r: SizingResult): MathStep[] {
   ];
 }
 
-function Totals({ r, withNodes, cost }: { r: SizingResult; withNodes: boolean; cost?: CostProps }) {
+function Totals({ r, withNodes, cost, delta }: { r: SizingResult; withNodes: boolean; cost?: CostProps; delta: DeltaFn }) {
   const { dataNodes, allNodes } = nodeCounts(r);
   return (
     <EuiFlexGroup gutterSize="l" wrap responsive={false}>
       {withNodes && <Stat label={r.sites > 1 ? 'Nodes per site' : 'Nodes'} value={`${allNodes}`} hint={`${dataNodes} hold data; the rest keep the cluster running. A node is one running copy of Elasticsearch.`} steps={nodeMath(r)} />}
-      <Stat label={r.sites > 1 ? 'Memory per site' : 'Total memory'} value={`${fmtNum(r.totalRamGb)} GB`} steps={r.totalRamMath} />
-      <SubscriptionStats r={r} {...(cost ? { cost } : {})} />
+      <Stat label={r.sites > 1 ? 'Memory per site' : 'Total memory'} value={`${fmtNum(r.totalRamGb)} GB`} steps={r.totalRamMath} delta={delta('memory', 'gb')} />
+      <SubscriptionStats r={r} delta={delta} {...(cost ? { cost } : {})} />
       {r.objectStorage && (
         <Stat label="Object storage" value={fmtStorage(r.objectStorage.gb)} steps={r.objectStorage.math}
           hint={`Cheap bulk storage (such as S3) that holds the cold and frozen data${r.objectStorage.overridden ? '. Size set by hand for this scenario' : ''}. Not counted in memory or license units.`} />
@@ -98,7 +113,7 @@ function Totals({ r, withNodes, cost }: { r: SizingResult; withNodes: boolean; c
   );
 }
 
-function Headline({ label, value, unit, math, mathTitle }: { label: string; value: ReactNode; unit: string; math?: MathStep[]; mathTitle: string }) {
+function Headline({ label, value, unit, math, mathTitle, delta }: { label: string; value: ReactNode; unit: string; math?: MathStep[]; mathTitle: string; delta?: string | undefined }) {
   return (
     <>
       <EuiText size="s" color="subdued">{label}</EuiText>
@@ -110,6 +125,7 @@ function Headline({ label, value, unit, math, mathTitle }: { label: string; valu
           </div>
         </EuiFlexItem>
         {math && <EuiFlexItem grow={false}><MathButton title={mathTitle} steps={math} /></EuiFlexItem>}
+        {delta && <EuiFlexItem grow={false}><div><Delta text={delta} /></div></EuiFlexItem>}
       </EuiFlexGroup>
     </>
   );
@@ -129,7 +145,7 @@ function fillDate(years: number): string {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-function Answer({ r }: { r: SizingResult }) {
+function Answer({ r, delta }: { r: SizingResult; delta: DeltaFn }) {
   const a = r.answer!;
   const binding = r.constraints.find((k) => k.binding);
   const title = SOLVES.find((s) => s.value === a.solve)?.title ?? solveLabel(a.solve);
@@ -138,7 +154,8 @@ function Answer({ r }: { r: SizingResult }) {
   return (
     <>
       <Headline label={title} value={neverFull ? 'Not reached' : shown.n} unit={neverFull ? '' : shown.unit}
-        {...(binding ? { math: binding.math } : {})} mathTitle={solveLabel(a.solve)} />
+        {...(binding ? { math: binding.math } : {})} mathTitle={solveLabel(a.solve)}
+        delta={delta('answer', a.unit === 'GB/day' ? 'gb' : a.unit === 'days' || a.unit === 'shards' || a.unit === 'agents' || a.unit === 'jobs' ? 'count' : 'number')} />
       {a.unit === 'years' && Number.isFinite(a.value) && a.value > 0 && <EuiText size="s" color="subdued">around {fillDate(a.value)}</EuiText>}
       {a.dataStreams !== undefined && <EuiText size="s">About <strong>{fmtNum(a.dataStreams, 0)}</strong> data streams (separate data feeds) like this one</EuiText>}
       <EuiSpacer size="xs" />
@@ -151,9 +168,9 @@ function Answer({ r }: { r: SizingResult }) {
   );
 }
 
-function Recommended({ r }: { r: SizingResult }) {
+function Recommended({ r, delta }: { r: SizingResult; delta: DeltaFn }) {
   const { allNodes } = nodeCounts(r);
-  return <Headline label={`Recommended cluster${r.sites > 1 ? ` (per site, ${r.sites} sites)` : ''}`} value={allNodes} unit={allNodes === 1 ? 'node' : 'nodes'} math={nodeMath(r)} mathTitle="Nodes" />;
+  return <Headline label={`Recommended cluster${r.sites > 1 ? ` (per site, ${r.sites} sites)` : ''}`} value={allNodes} unit={allNodes === 1 ? 'node' : 'nodes'} math={nodeMath(r)} mathTitle="Nodes" delta={delta('nodes', 'count')} />;
 }
 
 function Block({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
@@ -212,6 +229,7 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
   const [open, setOpen] = useState<Detail | undefined>();
   const { ref, fits } = useFitsViewport<HTMLDivElement>();
   const findings = groupFindings(r.warnings.filter((w) => w.severity !== 'info')).length;
+  const delta = useDeltas(sizingHeadlines(r));
   const assumptions = r.assumptions.filter((a) => !a.startsWith('Estimate, not benchmark'));
   const link = (label: string, d: Detail) => <EuiButtonEmpty size="xs" flush="right" onClick={() => setOpen(d)}>{label}</EuiButtonEmpty>;
 
@@ -225,9 +243,11 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
   return (
     <div ref={ref} style={fits ? { position: 'sticky', top: PIN_TOP } : undefined}>
       <EuiPanel hasBorder paddingSize="l">
-        {r.answer ? <Answer r={r} /> : <Recommended r={r} />}
+        {r.answer ? <Answer r={r} delta={delta} /> : <Recommended r={r} delta={delta} />}
+        <EuiSpacer size="s" />
+        <EuiText size="s"><p style={{ margin: 0 }}>{resultSentence(r)}</p></EuiText>
         <EuiSpacer size="m" />
-        <Totals r={r} withNodes={!!r.answer} {...(cost ? { cost } : {})} />
+        <Totals r={r} withNodes={!!r.answer} delta={delta} {...(cost ? { cost } : {})} />
 
         <Block title={r.sites > 1 ? 'Cluster map (per site)' : 'Cluster map'} action={link('Node details', 'nodes')}>
           <ClusterMap r={r} />
@@ -237,8 +257,8 @@ export function ResultsPanel({ r, subscription, subscriptionPrice, onOpenTco }: 
           <TopConstraints r={r} />
         </Block>
 
-        <Block title="Hardware checks" action={findings > 2 || r.warnings.some((w) => w.severity === 'info') ? link(`All checks${findings ? ` (${findings})` : ''}`, 'checks') : undefined}>
-          <FindingsSummary warnings={r.warnings} />
+        <Block title="Hardware checks" action={r.warnings.length ? link(`All checks${findings ? ` (${findings})` : ''}`, 'checks') : undefined}>
+          <SeverityGroups items={groupFindings(r.warnings)} max={2} onMore={() => setOpen('checks')} />
         </Block>
       </EuiPanel>
 

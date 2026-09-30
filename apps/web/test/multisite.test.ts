@@ -92,15 +92,16 @@ describe('compare deployment models (D33)', () => {
 });
 
 describe('deployment model selector per mode (D34)', () => {
-  it('node-based modes offer ECK and ECE as links to Compare models, and Elastic Cloud Hosted as a choice (D40, D43)', async () => {
+  it('Size a workload offers self-managed and Elastic Cloud only (D44); Test hardware limits still links ECK and ECE to Compare models', async () => {
     const { modelOptionsFor } = await import('../src/state.ts');
     const fwd = modelOptionsFor('forward');
-    expect(fwd.find((o) => o.value === 'eck')).toMatchObject({ text: expect.stringMatching(/compare on your servers/) });
-    expect(fwd.find((o) => o.value === 'eck')!.disabled).toBeFalsy();
+    expect(fwd.map((o) => o.value)).toEqual(['self_managed', 'ech', 'serverless']);
     expect(fwd.find((o) => o.value === 'ech')).toMatchObject({ text: 'Elastic Cloud Hosted' });
-    expect(fwd.find((o) => o.value === 'ech')!.disabled).toBeFalsy();
     expect(fwd.find((o) => o.value === 'serverless')!.disabled).toBe(true);
+    const rev = modelOptionsFor('reverse');
+    expect(rev.find((o) => o.value === 'eck')).toMatchObject({ text: expect.stringMatching(/compare on your servers/) });
   });
+
 
   it('server-based modes size ECK and ECE directly', async () => {
     const { modelOptionsFor } = await import('../src/state.ts');

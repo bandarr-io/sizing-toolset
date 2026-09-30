@@ -63,6 +63,22 @@ describe('Elastic Cloud mode', () => {
   });
 });
 
+describe('Elastic Cloud templates and defaults', () => {
+  it('new logs and metrics start with 7 days hot and 83 frozen, like Size a workload', () => {
+    expect(newEchItem('logs').req).toMatchObject({ retentionDays: { hot: 7, frozen: 83 } });
+    expect(newEchItem('metrics').req).toMatchObject({ retentionDays: { hot: 7, frozen: 83 } });
+  });
+  it('templates replace the list with named use cases', async () => {
+    const { applyEchTemplate, ECH_TEMPLATES } = await import('../src/ech/state.ts');
+    expect(ECH_TEMPLATES.map((t) => t.id)).toEqual(['siem', 'observability', 'search', 'vector']);
+    const obs = applyEchTemplate('observability');
+    expect(obs.map((i) => i.useCase)).toEqual(['logs', 'metrics', 'apm']);
+    expect(new Set(obs.map((i) => i.name)).size).toBe(3);
+    expect(obs[0]!.req).toMatchObject({ gbPerDay: 200 });
+    expect(applyEchTemplate('siem')[0]!.useCase).toBe('siem');
+  });
+});
+
 describe('saved Elastic Cloud scenarios (D43)', () => {
   it('open in Size a workload with Elastic Cloud selected', async () => {
     const { migrate } = await import('../src/migrate.ts');

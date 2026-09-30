@@ -37,6 +37,22 @@ describe('defaults', () => {
   });
 });
 
+describe('starter templates (Size a workload)', () => {
+  it('build realistic workloads from newWorkload, replacing the list', async () => {
+    const { defaultConstants } = await import('@sizing/constants');
+    const { applyTemplate, TEMPLATES } = await import('../src/state.ts');
+    expect(TEMPLATES.map((t) => t.id)).toEqual(['siem', 'observability', 'search', 'vector']);
+    expect(applyTemplate('siem')).toMatchObject([{ kind: 'siem', rawGbPerDay: 500, indexMode: 'logsdb', retentionDays: { hot: 30, frozen: 335 } }]);
+    const obs = applyTemplate('observability');
+    expect(obs.map((w) => [w.kind, w.rawGbPerDay])).toEqual([['logs', 200], ['metrics', 50], ['apm', 50]]);
+    expect(new Set(obs.map((w) => w.id)).size).toBe(3);
+    expect(obs[1]!.downsampleFactor).toEqual({ frozen: 0.1 }); // the settings-driven default is kept
+    expect(applyTemplate('search')[0]).toMatchObject({ kind: 'search', totalGb: 500 });
+    expect(applyTemplate('vector')[0]!.vector).toMatchObject({ count: 10_000_000, dims: 1024, quant: 'bbq' });
+    for (const t of TEMPLATES) expect(() => forward({ workloads: t.build(defaultConstants), options: { model: 'self_managed' } })).not.toThrow();
+  });
+});
+
 describe('Plan for growth folding', () => {
   it('starts folded with no rates, and summarizes the horizon and rates when set', async () => {
     const { defaultConstants } = await import('@sizing/constants');

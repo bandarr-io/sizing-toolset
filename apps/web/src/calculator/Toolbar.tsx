@@ -4,6 +4,7 @@ import {
 } from '@elastic/eui';
 import { useRef, useState } from 'react';
 import { migrate } from '../migrate.ts';
+import { encodeScenario, shareUrl } from '../share.ts';
 import type { AppState, Mode } from '../state.ts';
 import { deleteNamed, listSaved, saveNamed, type SavedScenario } from '../storage.ts';
 
@@ -11,7 +12,7 @@ const MODE_LABEL: Record<Mode, string> = {
   forward: 'Size a workload', reverse: 'Test hardware limits', multisite: 'Multiple sites', models: 'Compare models'
 };
 
-export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, onExportJson, canExport }: {
+export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, onExportJson, onExportSummary, canExport }: {
   state: AppState;
   onMode: (m: Mode) => void;
   onRename: (name: string) => void;
@@ -19,6 +20,8 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
   onReset: () => void;
   onExportMd: () => void;
   onExportJson: () => void;
+  /** One-page customer summary (HTML); absent where it does not apply yet. */
+  onExportSummary?: () => void;
   canExport: boolean;
 }) {
   const [saved, setSaved] = useState<SavedScenario[]>(() => listSaved());
@@ -39,6 +42,15 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
       say('Could not read that file');
     }
     if (file.current) file.current.value = '';
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl(await encodeScenario(state), window.location));
+      say('Link copied');
+    } catch {
+      say('Could not copy the link in this browser');
+    }
   };
 
   return (
@@ -89,8 +101,16 @@ export function Toolbar({ state, onMode, onRename, onLoad, onReset, onExportMd, 
               <EuiContextMenuPanel items={[
                 <EuiContextMenuItem key="md" icon="document" onClick={() => { onExportMd(); setOpenExport(false); }}>Document for the customer (Markdown)</EuiContextMenuItem>,
                 <EuiContextMenuItem key="json" icon="export" onClick={() => { onExportJson(); setOpenExport(false); }}>Data file that reloads exactly (JSON)</EuiContextMenuItem>,
+                <EuiContextMenuItem key="summary" icon="reportingApp" disabled={!onExportSummary}
+                  toolTipContent={onExportSummary ? undefined : 'Available in Size a workload, for self-managed and Elastic Cloud.'}
+                  onClick={() => { onExportSummary?.(); setOpenExport(false); }}>Customer summary (one page)</EuiContextMenuItem>,
               ]} />
             </EuiPopover>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiToolTip content="Copies a link that opens this scenario. It carries the scenario only: settings changed on the Configurations page, cost prices and Elastic Cloud price data stay in this browser.">
+              <EuiButtonEmpty size="s" iconType="link" onClick={() => void copyLink()}>Copy link</EuiButtonEmpty>
+            </EuiToolTip>
           </EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiPopover isOpen={openMore} closePopover={() => setOpenMore(false)} panelPaddingSize="none" anchorPosition="downRight"

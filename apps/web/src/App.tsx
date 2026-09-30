@@ -12,11 +12,13 @@ import { Toolbar } from './calculator/Toolbar.tsx';
 import { WorkloadCard } from './calculator/WorkloadCard.tsx';
 import { WorkloadList } from './calculator/WorkloadList.tsx';
 import { NumField } from './components/Fields.tsx';
+import { decodeScenario, sharedParam, withoutSharedParam } from './share.ts';
 import { MathProvider } from './components/MathFlyout.tsx';
 import { CostRatesForm } from './components/CostRatesForm.tsx';
 import { useConstants } from './constantsStore.tsx';
 import { costReport, mergeRates, subscriptionCost, type CostRates } from './cost.ts';
 import { useCostDefaults } from './costStore.tsx';
+import { customerSummaryHtml } from './customerSummary.ts';
 import { download, modelsMarkdown, slug, toJson, toMarkdown, topologyMarkdown } from './export.ts';
 import { ModelsPanel } from './results/ModelsPanel.tsx';
 import { ServerGroups } from './calculator/ServerGroups.tsx';
@@ -33,7 +35,7 @@ import {
   defaultModels, defaultMultiSite, defaultState, groupsSummary, growthSummary, isDefaultGrowth, MODEL_NAMES, modelOptionsFor, redirectToEch, redirectToModels, deploymentOfForward, RELATIONSHIPS, topologyRequest, deploymentOfReverse, normalizeReverse, SOLVE_KINDS, SOLVES, workloadsSummary, tiersInUse, withForwardDeployment,
   withReverseDeployment, withSolve, type AppState,
 } from './state.ts';
-import { loadCurrent, saveCurrent } from './storage.ts';
+import { loadCurrent, saveCurrent, saveNamed } from './storage.ts';
 import { Gap, Section } from './ui/Section.tsx';
 
 type Outcome = { result: SizingResult; workloads: WorkloadProfile[] } | { error: string };
@@ -74,6 +76,27 @@ export function App() {
   const [state, setState] = useState<AppState>(() => loadCurrent() ?? defaultState());
   useEffect(() => saveCurrent(state), [state]);
 
+  // A shared link (#/?s=…) opens its scenario. The scenario that was open is saved first, so nothing is lost.
+  const [shared, setShared] = useState<{ ok: boolean; name?: string } | undefined>();
+  useEffect(() => {
+    const open = () => {
+      const data = sharedParam(window.location.hash);
+      if (!data) return;
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${withoutSharedParam(window.location.hash)}`);
+      void decodeScenario(data).then((s) => {
+        if (!s) { setShared({ ok: false }); return; }
+        setState((prev) => {
+          saveNamed({ ...prev, name: `${prev.name} (before opening a link)` });
+          return s;
+        });
+        setShared({ ok: true, name: s.name });
+      });
+    };
+    open();
+    window.addEventListener('hashchange', open);
+    return () => window.removeEventListener('hashchange', open);
+  }, []);
+
   return (
     <MathProvider>
       <EchDataProvider>
@@ -99,6 +122,15 @@ export function App() {
           ]}
         />
         <EuiPageTemplate.Section>
+          {shared && (
+            <>
+              <EuiCallOut size="s" color={shared.ok ? 'success' : 'warning'} iconType={shared.ok ? 'link' : 'warning'} onDismiss={() => setShared(undefined)}
+                title={shared.ok ? `Opened a shared scenario: ${shared.name}` : 'This link does not hold a scenario this app can open.'}>
+                {shared.ok && <p>The scenario you had open is in Open, as "(before opening a link)".</p>}
+              </EuiCallOut>
+              <EuiSpacer size="m" />
+            </>
+          )}
           {page === 'config' && <ConfigPage />}
           {page === 'tco' && <TcoPage state={state} setState={setState} constants={constants} />}
           {page === 'validate' && (
@@ -132,6 +164,13 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
     if (kind === 'md') download(`${slug(state.name)}.md`, toMarkdown(state, outcome.result, outcome.workloads, at, cost), 'text/markdown');
     else download(`${slug(state.name)}.json`, toJson(state, outcome.result, at, overrides), 'application/json');
   };
+  // One-page customer summary: Size a workload only; cost appears when prices are set.
+  const exportSummary = state.mode === 'forward' && 'result' in outcome
+    ? () => {
+      const cost = costReport(state, constants, rates);
+      download(`${slug(state.name)}-summary.html`, customerSummaryHtml({ kind: 'self_managed', state, result: outcome.result, cost }, new Date().toISOString()), 'text/html');
+    }
+    : undefined;
 
   if (state.mode === 'multisite') return <MultiSiteCalculator state={state} setState={setState} constants={constants} />;
   if (state.mode === 'models') return <ModelsCalculator state={state} setState={setState} constants={constants} />;
@@ -148,6 +187,7 @@ function Calculator({ state, setState, constants, overriddenKeys, overrides, onO
         onReset={() => setState((s) => ({ ...defaultState(), name: s.name, mode: s.mode }))}
         onExportMd={() => exportAs('md')}
         onExportJson={() => exportAs('json')}
+        {...(exportSummary ? { onExportSummary: exportSummary } : {})}
       />
       <EuiSpacer size="l" />
       <EuiFlexGroup gutterSize="xl" alignItems="flexStart" wrap>
@@ -323,7 +363,7 @@ function ForwardInputs({ state, setState, objectStorage }: { state: AppState; se
       </Section>
       <Gap />
       <Section step={2} title="What will the cluster hold?" description="Add each kind of data the cluster will store. The cluster is the group of servers running Elasticsearch. Results update as you type." summary={workloadsSummary(f.workloads)}>
-        <WorkloadList workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
+        <WorkloadList templates workloads={f.workloads} onChange={(workloads) => setForward({ ...f, workloads })} />
       </Section>
       <Gap />
       <Section step={3} title="Node sizes and ratios"
