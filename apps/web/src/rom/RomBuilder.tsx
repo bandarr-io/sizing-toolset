@@ -46,7 +46,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
   const [termStart, setTermStart] = useState(firstOfNextMonth());
   const [team, setTeamState] = useState<RomTeamMember[]>(() => (readTeam().length ? readTeam() : [{ name: '', role: 'Solution Architect', email: '' }]));
   const setTeam = (t: RomTeamMember[]) => { setTeamState(t); saveTeam(t); };
-  const [picked, setPicked] = useState<Record<string, { title: string; notes: string }>>({ current: { title: current.name, notes: '' } });
+  const [picked, setPicked] = useState<Record<string, { title: string; notes: string; recommended?: boolean }>>({ current: { title: current.name, notes: '' } });
   const [summary, setSummary] = useState('');
   const [error, setError] = useState<string | undefined>();
 
@@ -63,11 +63,11 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
       if (s.sizeOn === 'ech') {
         if (!data) { setError(`${title} is an Elastic Cloud scenario, and the Elastic Cloud price data is not loaded in this browser.`); return undefined; }
         const ech = s.ech ?? defaultEch();
-        scenarios.push({ kind: 'ech', title, notes: p.notes, services, ech, data, outcomes: runEch(c, data, ech) });
+        scenarios.push({ kind: 'ech', title, notes: p.notes, recommended: !!p.recommended, services, ech, data, outcomes: runEch(c, data, ech) });
       } else {
         try {
           const eruPrice = mergeRates(defaults, s.cost?.rates).eruPerYear;
-          scenarios.push({ kind: 'self_managed', title, notes: p.notes, services, workloads: s.forward.workloads, result: forward(s.forward, c), ...(eruPrice !== undefined ? { eruPrice } : {}) });
+          scenarios.push({ kind: 'self_managed', title, notes: p.notes, recommended: !!p.recommended, services, workloads: s.forward.workloads, result: forward(s.forward, c), ...(eruPrice !== undefined ? { eruPrice } : {}) });
         } catch (x) {
           setError(`${title} cannot be sized: ${x instanceof Error ? x.message : String(x)}`);
           return undefined;
@@ -142,6 +142,8 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
                     helpText="Printed in this scenario's section, after the retention breakdown, as NOTE: … in blue italics. Leave empty to leave it out.">
                     <EuiTextArea compressed fullWidth rows={2} value={p.notes} onChange={(ev) => setPicked((prev) => ({ ...prev, [o.id]: { ...p, notes: ev.target.value } }))} />
                   </EuiFormRow>
+                  <EuiCheckbox id={`rom-rec-${o.id}`} label="Recommended (highlighted in the executive summary)" checked={!!p.recommended}
+                    onChange={(ev) => setPicked((prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, { ...v, recommended: k === o.id ? ev.target.checked : false }])))} />
                 </>
               )}
             </EuiPanel>

@@ -15,10 +15,10 @@ import { BRAND } from './brand.ts';
 
 export interface RomTeamMember { name: string; role: string; email: string }
 
-/** D46: `services` are the scenario's priced service lines; each gets a row under its licensing table. */
+/** D46: `services` are the scenario's priced service lines. D52: `recommended` marks the scenario the SA recommends. */
 export type RomScenario =
-  | { kind: 'ech'; title: string; notes?: string; services?: readonly PricedServiceLine[]; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] }
-  | { kind: 'self_managed'; title: string; notes?: string; services?: readonly PricedServiceLine[]; workloads: readonly WorkloadProfile[]; result: SizingResult; eruPrice?: number };
+  | { kind: 'ech'; title: string; notes?: string; recommended?: boolean; services?: readonly PricedServiceLine[]; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] }
+  | { kind: 'self_managed'; title: string; notes?: string; recommended?: boolean; services?: readonly PricedServiceLine[]; workloads: readonly WorkloadProfile[]; result: SizingResult; eruPrice?: number };
 
 export interface RomInput {
   customer: string;
@@ -256,7 +256,7 @@ function servicesTable(s: RomScenario, start: string, end: string): string {
 
 export const SUMMARY_HEAD = ['Scenario', 'Deployment', 'Data', 'Cluster', 'License', 'Year 1'];
 
-export interface SummaryRow { scenario: string; deployment: string; data: string; cluster: string; license: string; year1: string }
+export interface SummaryRow { recommended: boolean; scenario: string; deployment: string; data: string; cluster: string; license: string; year1: string }
 
 /** The standard opening when the SA writes none. */
 export function defaultSummary(input: RomInput): string {
@@ -294,6 +294,7 @@ export function summaryRows(input: RomInput): SummaryRow[] {
     const missing = licenseCost === undefined || services.some((p) => p.total === undefined);
     const year1 = !missing ? fmtMoney(known) : known > 0 ? `${fmtMoney(known)} + [PRICE]` : '[PRICE]';
     return {
+      recommended: !!s.recommended,
       scenario: s.title,
       deployment: s.kind === 'ech' ? 'Elastic Cloud Hosted' : 'Self-managed',
       data,
@@ -305,6 +306,7 @@ export function summaryRows(input: RomInput): SummaryRow[] {
 }
 
 export const SUMMARY_NOTES = (input: RomInput) => [
+  ...input.scenarios.filter((s) => s.recommended).map((s) => `Recommended: ${s.title}.`),
   `Term: ${usDate(input.termStart)} to ${usDate(termEnd(input.termStart))}.`,
   'Year 1 is the license plus the services billed in year 1, at the prices in this document. Each scenario is priced on its own.',
   'These are budgetary figures, not a quote; see Caveats & Considerations.',
@@ -312,7 +314,7 @@ export const SUMMARY_NOTES = (input: RomInput) => [
 
 function executiveSummary(input: RomInput): string {
   const opening = (input.summary?.trim() || defaultSummary(input)).split(/\n\s*\n/).map((p) => `<p>${e(p.trim())}</p>`).join('');
-  const rows = summaryRows(input).map((r) => `<tr><th scope="row">${e(r.scenario)}</th><td>${r.deployment}</td><td>${e(r.data)}</td><td>${r.cluster}</td><td>${r.license}</td><td class="accent"><strong>${r.year1}</strong></td></tr>`).join('');
+  const rows = summaryRows(input).map((r) => `<tr${r.recommended ? ' class="recommended"' : ''}><th scope="row">${e(r.scenario)}${r.recommended ? '<div class="tag">RECOMMENDED</div>' : ''}</th><td>${r.deployment}</td><td>${e(r.data)}</td><td>${r.cluster}</td><td>${r.license}</td><td class="accent"><strong>${r.year1}</strong></td></tr>`).join('');
   return `<section class="page"><h2>EXECUTIVE SUMMARY</h2>${opening}
 <table class="config summary"><thead><tr>${SUMMARY_HEAD.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
 <ul class="svc">${SUMMARY_NOTES(input).map((n) => `<li>${e(n)}</li>`).join('')}</ul></section>`;
@@ -404,6 +406,8 @@ section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; over
 h2 { font-size: 22pt; font-weight: 800; color: #3a3f4a; margin: 0 0 0.2in; }
 h2.scenario { font-size: 20pt; }
 table.summary th[scope=row] { text-align: left; }
+table.summary tr.recommended td, table.summary tr.recommended th { background: #e6f0fc; }
+table.summary .tag { color: ${BRAND.blue}; font-size: 7.5pt; font-weight: 800; letter-spacing: 0.05em; margin-top: 2px; }
 table.summary td, table.summary tbody th { vertical-align: top; }
 h2.team-heading { margin-top: 0.45in; }
 h2.services { margin-top: 0.3in; break-after: avoid; }

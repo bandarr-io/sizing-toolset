@@ -100,8 +100,11 @@ function executiveSummary(input: RomInput): Content[] {
         widths: ['*', 62, 78, 110, 62, 62], headerRows: 1, dontBreakRows: true,
         body: [
           SUMMARY_HEAD.map((h) => ({ text: h, bold: true, color: WHITE, fillColor: BLUE, margin: [0, 5, 0, 5] })),
-          ...summaryRows(input).map((r, i): TableCell[] => [r.scenario, r.deployment, r.data, r.cluster, r.license, { text: r.year1, bold: true, color: BLUE }]
-            .map((c) => ({ ...(typeof c === 'string' ? { text: c } : c), ...cell, fillColor: i % 2 ? '#f5f7fa' : undefined, ...(c === r.scenario ? { bold: true } : {}) }))),
+          ...summaryRows(input).map((r, i): TableCell[] => {
+            const fill = r.recommended ? '#e6f0fc' : i % 2 ? '#f5f7fa' : undefined;
+            const first: TableCell = { stack: [{ text: r.scenario, bold: true }, ...(r.recommended ? [{ text: 'RECOMMENDED', color: BLUE, fontSize: 7.5, bold: true, characterSpacing: 0.4 }] : [])], ...cell, fillColor: fill };
+            return [first, ...[r.deployment, r.data, r.cluster, r.license].map((t) => ({ text: t, ...cell, fillColor: fill })), { text: r.year1, bold: true, color: BLUE, ...cell, fillColor: fill }];
+          }),
         ],
       },
       layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 5, paddingRight: () => 5 },

@@ -108,3 +108,13 @@ describe('D51 executive summary', () => {
     expect(summaryRows(unpriced)[0]!.year1).toBe(`$${(eru * 1000 + 1000).toLocaleString('en-US')} + [PRICE]`);
   });
 });
+
+describe('D52 recommended scenario', () => {
+  it('highlights the recommended scenario in the executive summary and names it in the notes', () => {
+    const base = input();
+    const html = romHtml({ ...base, scenarios: [base.scenarios[0]!, { ...base.scenarios[1]!, recommended: true }] });
+    expect(html).toContain('<tr class="recommended"><th scope="row">Scenario - Self-managed<div class="tag">RECOMMENDED</div></th>');
+    expect(html).toContain('<li>Recommended: Scenario - Self-managed.</li>');
+    expect(romHtml(base)).not.toContain('RECOMMENDED');
+  });
+});
