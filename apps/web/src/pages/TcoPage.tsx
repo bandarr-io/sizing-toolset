@@ -6,6 +6,7 @@ import { NumField, SwitchField } from '../components/Fields.tsx';
 import { MathButton } from '../components/MathFlyout.tsx';
 import { costReport, DEFAULT_TERM_YEARS, mergeRates, validDiscount, type CostReport, type CostSettings } from '../cost.ts';
 import { useCostDefaults } from '../costStore.tsx';
+import { useServiceCatalog } from '../servicesStore.tsx';
 import { fmtMoney } from '../format.ts';
 import type { AppState } from '../state.ts';
 
@@ -56,9 +57,10 @@ function CostTable({ report }: { report: CostReport }) {
 /** Total cost of the platform for the current scenario: subscription plus hardware and running costs, per year and over a term. */
 export function TcoPage({ state, setState, constants }: { state: AppState; setState: (f: (s: AppState) => AppState) => void; constants: ConstantSet }) {
   const { defaults } = useCostDefaults();
+  const { catalog } = useServiceCatalog();
   const settings = state.cost ?? {};
   const rates = useMemo(() => mergeRates(defaults, settings.rates), [defaults, settings.rates]);
-  const report = useMemo(() => costReport(state, constants, rates), [state, constants, rates]);
+  const report = useMemo(() => costReport(state, constants, rates, catalog), [state, constants, rates, catalog]);
   const patch = (p: Partial<CostSettings>) => setState((s) => ({ ...s, cost: { ...s.cost, ...p } }));
 
   return (

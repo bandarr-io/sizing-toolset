@@ -16,14 +16,17 @@
     "@elastic/eui-theme-borealis": "^8.1.0",
     "@emotion/css": "^11.13.5",
     "@emotion/react": "^11.14.0",
+    "@fontsource/inter": "^5.3.0",
     "@sizing/constants": "workspace:*",
     "@sizing/engine": "workspace:*",
     "moment": "^2.31.0",
+    "pdfmake": "^0.3.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@types/pdfmake": "^0.3.3",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.1.1",

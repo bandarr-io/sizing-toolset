@@ -7,12 +7,15 @@ import { useMemo, useState } from 'react';
 import { useConstants } from '../constantsStore.tsx';
 import { mergeRates } from '../cost.ts';
 import { useCostDefaults } from '../costStore.tsx';
+import { priceLines } from '../services.ts';
+import { useServiceCatalog } from '../servicesStore.tsx';
 import { useEchData } from '../ech/EchData.tsx';
 import { defaultEch, runEch } from '../ech/state.ts';
 import { download, slug } from '../export.ts';
 import type { AppState } from '../state.ts';
 import { listSaved } from '../storage.ts';
-import { romHtml, type RomScenario, type RomTeamMember } from './rom.ts';
+import { romHtml, type RomInput, type RomScenario, type RomTeamMember } from './rom.ts';
+import { downloadRomPdf } from './romPdfDownload.ts';
 
 const TEAM_KEY = 'sizing.rom-team.v1';
 const readTeam = (): RomTeamMember[] => {
@@ -36,30 +39,35 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
   const { set: c } = useConstants();
   const { data } = useEchData();
   const { defaults } = useCostDefaults();
+  const { catalog } = useServiceCatalog();
   const options = useMemo(() => candidates(current), [current]);
   const [customer, setCustomer] = useState(current.name === 'Untitled scenario' ? '' : current.name);
   const [date, setDate] = useState(today());
   const [termStart, setTermStart] = useState(firstOfNextMonth());
   const [team, setTeamState] = useState<RomTeamMember[]>(() => (readTeam().length ? readTeam() : [{ name: '', role: 'Solution Architect', email: '' }]));
   const setTeam = (t: RomTeamMember[]) => { setTeamState(t); saveTeam(t); };
-  const [picked, setPicked] = useState<Record<string, { title: string; notes: string }>>({ current: { title: current.name, notes: '' } });
+  const [picked, setPicked] = useState<Record<string, { title: string; notes: string; recommended?: boolean }>>({ current: { title: current.name, notes: '' } });
+  const [summary, setSummary] = useState('');
   const [error, setError] = useState<string | undefined>();
 
-  const build = (): string | undefined => {
+  const [busy, setBusy] = useState(false);
+
+  const buildInput = (): RomInput | undefined => {
     const scenarios: RomScenario[] = [];
     for (const o of options) {
       const p = picked[o.id];
       if (!p || o.why) continue;
       const s = o.state;
       const title = p.title.trim() || s.name;
+      const services = priceLines(catalog, s.services);
       if (s.sizeOn === 'ech') {
         if (!data) { setError(`${title} is an Elastic Cloud scenario, and the Elastic Cloud price data is not loaded in this browser.`); return undefined; }
         const ech = s.ech ?? defaultEch();
-        scenarios.push({ kind: 'ech', title, notes: p.notes, ech, data, outcomes: runEch(c, data, ech) });
+        scenarios.push({ kind: 'ech', title, notes: p.notes, recommended: !!p.recommended, services, ech, data, outcomes: runEch(c, data, ech) });
       } else {
         try {
           const eruPrice = mergeRates(defaults, s.cost?.rates).eruPerYear;
-          scenarios.push({ kind: 'self_managed', title, notes: p.notes, workloads: s.forward.workloads, result: forward(s.forward, c), ...(eruPrice !== undefined ? { eruPrice } : {}) });
+          scenarios.push({ kind: 'self_managed', title, notes: p.notes, recommended: !!p.recommended, services, workloads: s.forward.workloads, result: forward(s.forward, c), ...(eruPrice !== undefined ? { eruPrice } : {}) });
         } catch (x) {
           setError(`${title} cannot be sized: ${x instanceof Error ? x.message : String(x)}`);
           return undefined;
@@ -68,8 +76,9 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     }
     if (scenarios.length === 0) { setError('Pick at least one scenario.'); return undefined; }
     setError(undefined);
-    return romHtml({ customer: customer.trim(), date, termStart, team: team.filter((m) => m.name.trim()), scenarios });
+    return { customer: customer.trim(), date, termStart, team: team.filter((m) => m.name.trim()), scenarios, ...(summary.trim() ? { summary } : {}) };
   };
+  const build = (): string | undefined => { const input = buildInput(); return input && romHtml(input); };
 
   const fileName = `Sizing Summary - ${customer.trim() || 'Customer'} - ${date}`;
   const openPrintable = () => {
@@ -81,6 +90,12 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     w.document.write(html.replace('</body>', '<script>document.fonts.ready.then(() => setTimeout(() => window.print(), 300));</script></body>'));
     w.document.close();
   };
+  const downloadPdf = async () => {
+    const input = buildInput();
+    if (!input) return;
+    setBusy(true);
+    try { await downloadRomPdf(input, fileName); } catch (x) { setError(`The PDF could not be made: ${x instanceof Error ? x.message : String(x)}`); } finally { setBusy(false); }
+  };
   const downloadHtml = () => { const html = build(); if (html) download(`${slug(fileName)}.html`, html, 'text/html'); };
 
   const setMember = (i: number, patch: Partial<RomTeamMember>) => setTeam(team.map((m, j) => (j === i ? { ...m, ...patch } : m)));
@@ -89,7 +104,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     <EuiFlyout onClose={onClose} size="m" ownFocus aria-labelledby="rom-title">
       <EuiFlyoutHeader hasBorder>
         <EuiTitle size="s"><h2 id="rom-title">Budgetary ROM</h2></EuiTitle>
-        <EuiText size="s" color="subdued"><p>A branded rough order of magnitude for the customer: caveats, team, licensing and one section per scenario. It opens ready to save as PDF.</p></EuiText>
+        <EuiText size="s" color="subdued"><p>A branded rough order of magnitude for the customer: caveats, team, licensing and one section per scenario. Download it as a PDF, or open the print version.</p></EuiText>
       </EuiFlyoutHeader>
       <EuiFlyoutBody>
         <EuiFlexGrid columns={3} gutterSize="m">
@@ -97,6 +112,13 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
           <EuiFlexItem><EuiFormRow label="Document date"><EuiFieldText type="date" value={date} onChange={(ev) => setDate(ev.target.value)} /></EuiFormRow></EuiFlexItem>
           <EuiFlexItem><EuiFormRow label="Term starts" helpText="Ends one year later."><EuiFieldText type="date" value={termStart} onChange={(ev) => setTermStart(ev.target.value)} /></EuiFormRow></EuiFlexItem>
         </EuiFlexGrid>
+
+        <EuiSpacer size="m" />
+        <EuiFormRow label="Executive summary (optional)" fullWidth
+          helpText="The opening of the Executive Summary page, above the table of scenarios. Leave empty for a standard sentence. A blank line starts a new paragraph.">
+          <EuiTextArea fullWidth rows={3} value={summary} onChange={(ev) => setSummary(ev.target.value)}
+            placeholder="For example: what the customer asked for, and which scenario we recommend and why." />
+        </EuiFormRow>
 
         <EuiSpacer size="l" />
         <EuiTitle size="xs"><h3>Scenarios</h3></EuiTitle>
@@ -120,6 +142,8 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
                     helpText="Printed in this scenario's section, after the retention breakdown, as NOTE: … in blue italics. Leave empty to leave it out.">
                     <EuiTextArea compressed fullWidth rows={2} value={p.notes} onChange={(ev) => setPicked((prev) => ({ ...prev, [o.id]: { ...p, notes: ev.target.value } }))} />
                   </EuiFormRow>
+                  <EuiCheckbox id={`rom-rec-${o.id}`} label="Recommended (highlighted in the executive summary)" checked={!!p.recommended}
+                    onChange={(ev) => setPicked((prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, { ...v, recommended: k === o.id ? ev.target.checked : false }])))} />
                 </>
               )}
             </EuiPanel>
@@ -147,8 +171,9 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
           <EuiFlexItem grow={false}><EuiButtonEmpty onClick={onClose}>Cancel</EuiButtonEmpty></EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiFlexGroup gutterSize="s" responsive={false}>
-              <EuiFlexItem grow={false}><EuiButtonEmpty iconType="download" onClick={downloadHtml}>Download HTML</EuiButtonEmpty></EuiFlexItem>
-              <EuiFlexItem grow={false}><EuiButton fill iconType="document" onClick={openPrintable}>Open and save as PDF</EuiButton></EuiFlexItem>
+              <EuiFlexItem grow={false}><EuiButtonEmpty iconType="download" onClick={downloadHtml}>HTML</EuiButtonEmpty></EuiFlexItem>
+              <EuiFlexItem grow={false}><EuiButtonEmpty iconType="document" onClick={openPrintable}>Print version</EuiButtonEmpty></EuiFlexItem>
+              <EuiFlexItem grow={false}><EuiButton fill iconType="download" isLoading={busy} onClick={() => void downloadPdf()}>Download PDF</EuiButton></EuiFlexItem>
             </EuiFlexGroup>
           </EuiFlexItem>
         </EuiFlexGroup>

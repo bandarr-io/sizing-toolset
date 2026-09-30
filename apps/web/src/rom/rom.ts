@@ -2,6 +2,7 @@ import type { EchData, EchLine, SizingResult, Tier, WorkloadProfile } from '@siz
 import { escapeHtml } from '../customerSummary.ts';
 import { useCaseLabel, type EchItem, type EchOutcome, type EchState } from '../ech/state.ts';
 import { fmtMoney, fmtNum } from '../format.ts';
+import { fillDescription, parseDescription, type DescriptionBlock, type PricedServiceLine, type ServiceItem } from '../services.ts';
 import { byRoleOrder } from '../ui/tiers.ts';
 import { BRAND } from './brand.ts';
 
@@ -14,9 +15,10 @@ import { BRAND } from './brand.ts';
 
 export interface RomTeamMember { name: string; role: string; email: string }
 
+/** D46: `services` are the scenario's priced service lines. D52: `recommended` marks the scenario the SA recommends. */
 export type RomScenario =
-  | { kind: 'ech'; title: string; notes?: string; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] }
-  | { kind: 'self_managed'; title: string; notes?: string; workloads: readonly WorkloadProfile[]; result: SizingResult; eruPrice?: number };
+  | { kind: 'ech'; title: string; notes?: string; recommended?: boolean; services?: readonly PricedServiceLine[]; ech: EchState; data: EchData; outcomes: readonly EchOutcome[] }
+  | { kind: 'self_managed'; title: string; notes?: string; recommended?: boolean; services?: readonly PricedServiceLine[]; workloads: readonly WorkloadProfile[]; result: SizingResult; eruPrice?: number };
 
 export interface RomInput {
   customer: string;
@@ -26,22 +28,24 @@ export interface RomInput {
   termStart: string;
   team: RomTeamMember[];
   scenarios: RomScenario[];
+  /** The executive summary's opening, written by the SA; a standard sentence when blank (D51). */
+  summary?: string;
 }
 
 const e = escapeHtml;
-const usDate = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split('-'); return `${m}/${d}/${y}`; };
-function termEnd(iso: string): string {
+export const usDate = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split('-'); return `${m}/${d}/${y}`; };
+export function termEnd(iso: string): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   d.setUTCFullYear(d.getUTCFullYear() + 1);
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
-const tb = (gb: number) => `${fmtNum(gb / 1000, 2)} TB`;
-const gbText = (gb: number) => `${fmtNum(gb, gb < 10 ? 1 : 0)} GB`;
+export const tb = (gb: number) => `${fmtNum(gb / 1000, 2)} TB`;
+export const gbText = (gb: number) => `${fmtNum(gb, gb < 10 ? 1 : 0)} GB`;
 
 // ---- Fixed wording from the template ----------------------------------------------------------------
 
-const CAVEATS = `
+export const CAVEATS = `
 <p>The recommendations provided <strong><em><u>serve as a starting point</u></em></strong>, subject to adjustments based on actual system configurations and evolving business needs. They offer guidance for optimal configurations but should be adapted as necessary.</p>
 <p><strong><em>Sizing parameters are dynamic and may vary due to hardware/software factors.</em></strong> Regular reassessment is crucial to ensure alignment with changing requirements.</p>
 <p>Recommendations should be tailored to meet specific business objectives. Engaging with account representatives ensures solutions are aligned with organizational goals. Stakeholders are encouraged to seek clarification from representatives for a deeper understanding of recommendations and informed decision-making.</p>
@@ -49,19 +53,19 @@ const CAVEATS = `
 <p><strong><em>It's important to note that sizings <u class="accent">should not</u> be considered facts and will require an adjustment period and staged implementation plan to achieve optimal results.</em></strong></p>
 <p>In summary, while the recommendations offer valuable initial guidance, stakeholders should remain adaptable, align solutions with business goals, consult representatives for clarity, and continuously adapt sizing strategies to changing needs.</p>`;
 
-const SCOPE_ECH = `This sizing estimate is for an ECH-Commercial Cloud deployment based upon a subscription for pre-paid Committed Enterprise Cloud Units (ECU). ECUs are based upon the amount of projected RAM, Data Transfer, and Storage to be consumed for the term. The cost of the underlying environment, virtual machines and supporting back-end network, is included in the ECU subscription costs. It is also inclusive of Elastic support for customers and the platform operational maintenance and ongoing service operations. Please see https://www.elastic.co/cloud/shared-responsibility.`;
+export const SCOPE_ECH = `This sizing estimate is for an ECH-Commercial Cloud deployment based upon a subscription for pre-paid Committed Enterprise Cloud Units (ECU). ECUs are based upon the amount of projected RAM, Data Transfer, and Storage to be consumed for the term. The cost of the underlying environment, virtual machines and supporting back-end network, is included in the ECU subscription costs. It is also inclusive of Elastic support for customers and the platform operational maintenance and ongoing service operations. Please see https://www.elastic.co/cloud/shared-responsibility.`;
 
 // Not in the template: written for self-managed scenarios in the same voice. Review before sending.
-const SCOPE_SELF_MANAGED = `This sizing estimate is for a self-managed deployment of the Elastic Stack on infrastructure you provide and operate, based upon an Enterprise subscription licensed by Enterprise Resource Units (ERU). ERUs are based upon the amount of memory allocated to various components of the deployment. The cost of the underlying servers, storage, network and their operation is not included in the subscription. The subscription includes Elastic support for your deployment.`;
+export const SCOPE_SELF_MANAGED = `This sizing estimate is for a self-managed deployment of the Elastic Stack on infrastructure you provide and operate, based upon an Enterprise subscription licensed by Enterprise Resource Units (ERU). ERUs are based upon the amount of memory allocated to various components of the deployment. The cost of the underlying servers, storage, network and their operation is not included in the subscription. The subscription includes Elastic support for your deployment.`;
 
-const ASSUMPTIONS_INTRO = 'The following assumptions have been made about your environment based on the information available at the time of this estimate:';
-const RETENTION_INTRO = 'Generally, Elastic recommends a multi-tier data architecture. This allows for optimization of data storage based on the relative importance of the data as it changes over time, allowing for more cost-effective data management. With this in mind, this sizing estimation recommends the following data tiering strategy for each network:';
-const SNAPSHOTS = 'As a best practice, Elastic recommends routine snapshots of the indices within your cluster. This would require additional object-compatible (e.g., NFS/MinIO/Amazon S3) storage space to snapshot the entirety of your data (this is required if utilizing the Frozen Tier).';
+export const ASSUMPTIONS_INTRO = 'The following assumptions have been made about your environment based on the information available at the time of this estimate:';
+export const RETENTION_INTRO = 'Generally, Elastic recommends a multi-tier data architecture. This allows for optimization of data storage based on the relative importance of the data as it changes over time, allowing for more cost-effective data management. With this in mind, this sizing estimation recommends the following data tiering strategy for each network:';
+export const SNAPSHOTS = 'As a best practice, Elastic recommends routine snapshots of the indices within your cluster. This would require additional object-compatible (e.g., NFS/MinIO/Amazon S3) storage space to snapshot the entirety of your data (this is required if utilizing the Frozen Tier).';
 
 // ---- What each scenario holds ----------------------------------------------------------------------
 
-type Tiers = Partial<Record<Tier, number>>;
-interface DataLine { name: string; gbPerDay?: number; volume?: string; tiers?: Tiers }
+export type Tiers = Partial<Record<Tier, number>>;
+export interface DataLine { name: string; gbPerDay?: number; volume?: string; tiers?: Tiers }
 
 /** SIEM and Endpoint on Elastic Cloud: 1 day hot, 6 days cold, the rest frozen (ECH front ends). */
 function securityTiers(totalDays: number): Tiers {
@@ -92,19 +96,24 @@ function workloadData(w: WorkloadProfile): DataLine {
   return { name: w.id, ...(w.rawGbPerDay !== undefined ? { gbPerDay: w.rawGbPerDay } : {}), ...(volume ? { volume } : {}), ...(Object.keys(w.retentionDays).length ? { tiers: w.retentionDays } : {}) };
 }
 
-function dataLines(s: RomScenario): DataLine[] {
+export function dataLines(s: RomScenario): DataLine[] {
   return s.kind === 'ech' ? s.ech.items.map(echData) : s.workloads.map(workloadData);
 }
 
-const totalDays = (t: Tiers | undefined) => (['hot', 'warm', 'cold', 'frozen'] as Tier[]).reduce((sum, k) => sum + (t?.[k] ?? 0), 0);
+export const totalDays = (t: Tiers | undefined) => (['hot', 'warm', 'cold', 'frozen'] as Tier[]).reduce((sum, k) => sum + (t?.[k] ?? 0), 0);
 
 /** The heading the template puts on a licensing table: "106GB / Day (365 Days Retention)". */
-function volumeHeading(s: RomScenario): string {
+export function volumeParts(s: RomScenario): { volume: string; retention: string } | undefined {
   const lines = dataLines(s).filter((d) => d.gbPerDay !== undefined);
-  if (lines.length === 0) return e(s.title);
+  if (lines.length === 0) return undefined;
   const gb = lines.reduce((sum, d) => sum + (d.gbPerDay ?? 0), 0);
   const days = Math.max(...lines.map((d) => totalDays(d.tiers)));
-  return `${fmtNum(gb, 0)}GB / Day <strong>(${fmtNum(days, 0)} Days Retention)</strong>`;
+  return { volume: `${fmtNum(gb, 0)}GB / Day`, retention: `(${fmtNum(days, 0)} Days Retention)` };
+}
+
+function volumeHeading(s: RomScenario): string {
+  const v = volumeParts(s);
+  return v ? `${v.volume} <strong>${v.retention}</strong>` : e(s.title);
 }
 
 // ---- Numbers --------------------------------------------------------------------------------------
@@ -114,32 +123,57 @@ export function scenarioEcu(s: Extract<RomScenario, { kind: 'ech' }>): number {
   return s.outcomes.reduce((sum, o) => sum + ('result' in o ? o.result.totalRounded : 0), 0);
 }
 
-const TIER_ROW: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold', frozen: 'Frozen', master: 'Master', coordinating: 'Coordinating', ml: 'ML', kibana: 'Kibana', apm: 'APM Server', data: 'Data', enterprisesearch: 'Crawlers and connectors' };
+export const TIER_ROW: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold', frozen: 'Frozen', master: 'Master', coordinating: 'Coordinating', ml: 'ML', kibana: 'Kibana', apm: 'APM Server', data: 'Data', enterprisesearch: 'Crawlers and connectors' };
 
-function echConfigTable(lines: readonly EchLine[]): string {
+/** One row of a cluster configuration table; `storage` undefined prints as a blank (blue) cell on Elastic Cloud. */
+export interface ConfigTable {
+  head: string[];
+  rows: { tier: string; cells: (string | undefined)[]; blobTb?: string }[];
+  /** Columns the footer labels span. */
+  labelSpan: number;
+  ram: string;
+  storage: string;
+}
+
+export function echConfig(lines: readonly EchLine[]): ConfigTable {
   const rows = lines.filter((l) => l.key !== 'transfer' && l.key !== 'storage');
   const disk = rows.reduce((s, l) => s + (l.diskGb ?? 0), 0);
   const blob = rows.reduce((s, l) => s + (l.blobGb ?? 0), 0);
   const ram = rows.reduce((s, l) => s + (l.ramGb ?? 0), 0);
-  const body = rows.map((l) => {
-    const storage = l.diskGb === undefined ? '<td class="blank"></td>' : `<td>${tb(l.diskGb)}${l.blobGb ? `, <strong>Blob Storage:</strong> ${tb(l.blobGb)}` : ''}</td>`;
-    return `<tr><th scope="row">${e(TIER_ROW[l.key] ?? l.label)}</th><td>${l.zones ?? ''}</td><td>${l.error ? 'n/a' : gbText(l.ramGb ?? 0)}</td>${storage}<td>${e(l.sku ?? '')}</td></tr>`;
-  }).join('');
-  return `<table class="config"><thead><tr><th>Tier</th><th>Availability Zones</th><th>Total RAM</th><th>Storage</th><th>Instance Type</th></tr></thead><tbody>${body}</tbody>
-<tfoot><tr><th colspan="2">Total Calculated RAM</th><td colspan="3" class="accent">${gbText(ram)}</td></tr>
-<tr><th colspan="2">Total Calculated Storage</th><td colspan="3" class="accent">${tb(disk)}${blob ? `, Blob: ${tb(blob)}` : ''}</td></tr></tfoot></table>`;
+  return {
+    head: ['Tier', 'Availability Zones', 'Total RAM', 'Storage', 'Instance Type'],
+    rows: rows.map((l) => ({
+      tier: TIER_ROW[l.key] ?? l.label,
+      cells: [l.zones === undefined ? '' : String(l.zones), l.error ? 'n/a' : gbText(l.ramGb ?? 0), l.diskGb === undefined ? undefined : tb(l.diskGb), l.sku ?? ''],
+      ...(l.diskGb !== undefined && l.blobGb ? { blobTb: tb(l.blobGb) } : {}),
+    })),
+    labelSpan: 2,
+    ram: gbText(ram),
+    storage: `${tb(disk)}${blob ? `, Blob: ${tb(blob)}` : ''}`,
+  };
 }
 
-function selfManagedConfigTable(r: SizingResult): string {
+export function selfManagedConfig(r: SizingResult): ConfigTable {
   const rows = byRoleOrder([
     ...r.tiers.map((t) => ({ role: t.tier as string, n: t.nodes, ram: t.ramGb, disk: t.diskGb })),
     ...r.overhead.filter((o) => o.count > 0).map((o) => ({ role: o.role as string, n: o.count, ram: o.ramGb, disk: o.diskGb })),
   ]);
-  const body = rows.map((x) => `<tr><th scope="row">${e(TIER_ROW[x.role] ?? x.role)}</th><td>${x.n}</td><td>${gbText(x.ram)}</td><td>${gbText(x.n * x.ram)}</td><td>${x.disk ? tb(x.disk) : ''}</td><td>${x.disk ? tb(x.n * x.disk) : ''}</td></tr>`).join('');
   const disk = rows.reduce((s, x) => s + x.n * (x.disk ?? 0), 0);
-  return `<table class="config"><thead><tr><th>Tier</th><th>Nodes</th><th>RAM per node</th><th>Total RAM</th><th>Storage per node</th><th>Total storage</th></tr></thead><tbody>${body}</tbody>
-<tfoot><tr><th colspan="3">Total Calculated RAM</th><td colspan="3" class="accent">${gbText(r.totalRamGb)}</td></tr>
-<tr><th colspan="3">Total Calculated Storage</th><td colspan="3" class="accent">${tb(disk)}${r.objectStorage ? `, Object storage: ${tb(r.objectStorage.gb)}` : ''}</td></tr></tfoot></table>`;
+  return {
+    head: ['Tier', 'Nodes', 'RAM per node', 'Total RAM', 'Storage per node', 'Total storage'],
+    rows: rows.map((x) => ({ tier: TIER_ROW[x.role] ?? x.role, cells: [String(x.n), gbText(x.ram), gbText(x.n * x.ram), x.disk ? tb(x.disk) : '', x.disk ? tb(x.n * x.disk) : ''] })),
+    labelSpan: 3,
+    ram: gbText(r.totalRamGb),
+    storage: `${tb(disk)}${r.objectStorage ? `, Object storage: ${tb(r.objectStorage.gb)}` : ''}`,
+  };
+}
+
+function configTable(t: ConfigTable): string {
+  const cols = t.head.length;
+  const body = t.rows.map((r) => `<tr><th scope="row">${e(r.tier)}</th>${r.cells.map((c, i) => (c === undefined ? '<td class="blank"></td>' : `<td>${e(c)}${r.blobTb && i === 2 ? `, <strong>Blob Storage:</strong> ${r.blobTb}` : ''}</td>`)).join('')}</tr>`).join('');
+  return `<table class="config"><thead><tr>${t.head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody>
+<tfoot><tr><th colspan="${t.labelSpan}">Total Calculated RAM</th><td colspan="${cols - t.labelSpan}" class="accent">${t.ram}</td></tr>
+<tr><th colspan="${t.labelSpan}">Total Calculated Storage</th><td colspan="${cols - t.labelSpan}" class="accent">${t.storage}</td></tr></tfoot></table>`;
 }
 
 // ---- Pages ----------------------------------------------------------------------------------------
@@ -162,7 +196,7 @@ function contents(input: RomInput): string {
   return `<section class="page">
   <div class="customer">${e(input.customer || '[CUSTOMER NAME]')}</div>
   <h1 class="doc-title">Elastic Sizing Estimation</h1>
-  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${scenarioItems}</ul>
+  <ul class="toc"><li class="main">EXECUTIVE SUMMARY</li><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${hasServices(input) ? '<li class="main">SERVICES</li>' : ''}${scenarioItems}${serviceDescriptionList(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}</ul>
 </section>`;
 }
 
@@ -191,7 +225,129 @@ function licensing(input: RomInput): string {
 <thead><tr><th>Annual</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
 <tbody><tr><td>Yr. 1</td><td>[MPN]</td><td>Enterprise Resource Units (ERU)</td><td class="accent">${start}</td><td class="accent">${end}</td><td>${fmtNum(eru, 0)}</td><td>${s.eruPrice !== undefined ? fmtMoney(s.eruPrice) : '[PRICE]'}</td><td>${total}</td></tr></tbody></table>`;
   }).join('');
-  return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}</section>`;
+  return `<section class="page"><h2>LICENSING OVERVIEW</h2>${tables}${servicesSection(input)}</section>`;
+}
+
+/** D50: services are priced up front, right after the licensing tables: one table per scenario that has any. */
+function servicesSection(input: RomInput): string {
+  if (!hasServices(input)) return '';
+  const start = usDate(input.termStart);
+  const end = usDate(termEnd(input.termStart));
+  return `<h2 class="services">SERVICES</h2>${input.scenarios.map((s) => servicesTable(s, start, end)).join('')}`;
+}
+
+export const scenarioServices = (s: RomScenario) => (s.services ?? []).filter((p): p is PricedServiceLine & { item: ServiceItem } => !!p.item);
+
+/** D46: the scenario's services, laid out like the licensing tables. Dates only on services marked as dated. */
+function servicesTable(s: RomScenario, start: string, end: string): string {
+  const rows = scenarioServices(s);
+  if (rows.length === 0) return '';
+  const body = rows.map((p) => {
+    const dated = p.item.dated;
+    const total = p.total !== undefined ? fmtMoney(p.total) : '[PRICE]';
+    return `<tr><td>${p.item.billing === 'annual' ? 'Yr. 1' : 'One-time'}</td><td>${e(p.item.mpn || '[MPN]')}</td><td>${e(p.item.name)}</td><td class="accent">${dated ? start : ''}</td><td class="accent">${dated ? end : ''}</td><td>${fmtNum(p.line.quantity, 2)}</td><td>${p.unitPrice !== undefined ? fmtMoney(p.unitPrice, 2) : '[PRICE]'}</td><td>${total}</td></tr>`;
+  }).join('');
+  return `<table class="lic"><caption>Services: ${e(s.title)}</caption>
+<thead><tr><th>Term</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
+<tbody>${body}</tbody></table>`;
+}
+
+// ---- Executive summary (D51) ------------------------------------------------------------------
+
+export const SUMMARY_HEAD = ['Scenario', 'Deployment', 'Data', 'Cluster', 'License', 'Year 1'];
+
+export interface SummaryRow { recommended: boolean; scenario: string; deployment: string; data: string; cluster: string; license: string; year1: string }
+
+/** The standard opening when the SA writes none. */
+export function defaultSummary(input: RomInput): string {
+  const n = input.scenarios.length;
+  return `This document gives a budgetary estimate for ${input.customer || 'the customer'} across ${n === 1 ? 'one scenario' : `${n} scenarios`}. The table below summarizes each; the sections that follow give the licensing, services, sizing and assumptions behind these figures.`;
+}
+
+/** One line per scenario: what it holds, how big the cluster is, what it licenses and what year 1 costs. */
+export function summaryRows(input: RomInput): SummaryRow[] {
+  return input.scenarios.map((s) => {
+    const v = volumeParts(s);
+    const lines = dataLines(s);
+    const data = v ? `${v.volume}, ${v.retention.replace(/[()]/g, '').replace(' Retention', '')}` : lines.map((d) => d.volume ?? d.name).join('; ');
+    let ramGb = 0; let diskGb = 0; let objectGb = 0; let license: string; let licenseCost: number | undefined;
+    if (s.kind === 'ech') {
+      for (const o of s.outcomes) {
+        if (!('result' in o)) continue;
+        for (const l of o.result.lines) {
+          if (l.key === 'transfer' || l.key === 'storage') continue;
+          ramGb += l.ramGb ?? 0; diskGb += l.diskGb ?? 0; objectGb += l.blobGb ?? 0;
+        }
+      }
+      const ecu = scenarioEcu(s);
+      license = `${fmtNum(ecu, 0)} ECU`;
+      licenseCost = ecu;
+    } else {
+      const t = s.result.tiers.reduce((sum, x) => sum + x.nodes * (x.diskGb ?? 0), 0) + s.result.overhead.reduce((sum, o) => sum + o.count * (o.diskGb ?? 0), 0);
+      ramGb = s.result.totalRamGb; diskGb = t; objectGb = s.result.objectStorage?.gb ?? 0;
+      license = `${fmtNum(s.result.licenseUnits.value, 0)} ERU`;
+      licenseCost = s.eruPrice !== undefined ? s.result.licenseUnits.value * s.eruPrice : undefined;
+    }
+    const services = scenarioServices(s);
+    // What is priced adds up; anything without a price shows as "+ [PRICE]" so the known part still reads.
+    const known = (licenseCost ?? 0) + services.reduce((sum, p) => sum + (p.total ?? 0), 0);
+    const missing = licenseCost === undefined || services.some((p) => p.total === undefined);
+    const year1 = !missing ? fmtMoney(known) : known > 0 ? `${fmtMoney(known)} + [PRICE]` : '[PRICE]';
+    return {
+      recommended: !!s.recommended,
+      scenario: s.title,
+      deployment: s.kind === 'ech' ? 'Elastic Cloud Hosted' : 'Self-managed',
+      data,
+      cluster: `${gbText(ramGb)} RAM, ${tb(diskGb)} storage${objectGb ? `, ${tb(objectGb)} ${s.kind === 'ech' ? 'blob' : 'object'}` : ''}`,
+      license,
+      year1,
+    };
+  });
+}
+
+export const SUMMARY_NOTES = (input: RomInput) => [
+  ...input.scenarios.filter((s) => s.recommended).map((s) => `Recommended: ${s.title}.`),
+  `Term: ${usDate(input.termStart)} to ${usDate(termEnd(input.termStart))}.`,
+  'Year 1 is the license plus the services billed in year 1, at the prices in this document. Each scenario is priced on its own.',
+  'These are budgetary figures, not a quote; see Caveats & Considerations.',
+];
+
+function executiveSummary(input: RomInput): string {
+  const opening = (input.summary?.trim() || defaultSummary(input)).split(/\n\s*\n/).map((p) => `<p>${e(p.trim())}</p>`).join('');
+  const rows = summaryRows(input).map((r) => `<tr${r.recommended ? ' class="recommended"' : ''}><th scope="row">${e(r.scenario)}${r.recommended ? '<div class="tag">RECOMMENDED</div>' : ''}</th><td>${r.deployment}</td><td>${e(r.data)}</td><td>${r.cluster}</td><td>${r.license}</td><td class="accent"><strong>${r.year1}</strong></td></tr>`).join('');
+  return `<section class="page"><h2>EXECUTIVE SUMMARY</h2>${opening}
+<table class="config summary"><thead><tr>${SUMMARY_HEAD.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
+<ul class="svc">${SUMMARY_NOTES(input).map((n) => `<li>${e(n)}</li>`).join('')}</ul></section>`;
+}
+
+export const hasServices = (input: RomInput) => input.scenarios.some((s) => scenarioServices(s).length > 0);
+
+export interface RomServiceDescription { title: string; blocks: DescriptionBlock[] }
+
+/**
+ * The service descriptions to print, filled in with each scenario's values (D49), in first-use order. The same
+ * service with the same filled-in text prints once; when scenarios fill it differently, each copy is named after
+ * its scenario.
+ */
+export function serviceDescriptionList(input: RomInput): RomServiceDescription[] {
+  const found: { id: string; name: string; scenario: string; text: string }[] = [];
+  for (const s of input.scenarios) {
+    for (const p of scenarioServices(s)) {
+      if (!p.item.description.trim()) continue;
+      const text = fillDescription(p.item, p.line, { quantity: p.line.quantity, unit: p.item.unit, customer: input.customer, deployment: s.kind === 'ech' ? 'Elastic Cloud' : 'Elastic Stack' });
+      if (!found.some((f) => f.id === p.item.id && f.text === text)) found.push({ id: p.item.id, name: p.item.title?.trim() || p.item.name, scenario: s.title, text });
+    }
+  }
+  return found.map((f) => ({
+    title: found.filter((g) => g.id === f.id).length > 1 ? `${f.name} (${f.scenario})` : f.name,
+    blocks: parseDescription(f.text),
+  }));
+}
+
+function serviceDescriptions(input: RomInput): string {
+  const items = serviceDescriptionList(input);
+  if (items.length === 0) return '';
+  return `<section class="page"><h2>SERVICE DESCRIPTIONS</h2>${items.map((x) => `<div class="svc"><h3 class="svc">${e(x.title)}</h3>${x.blocks.map((b) => (b.kind === 'heading' ? `<h4 class="svc">${e(b.text)}</h4>` : b.kind === 'list' ? `<ul class="svc">${b.items.map((i) => `<li>${e(i)}</li>`).join('')}</ul>` : `<p>${e(b.text)}</p>`)).join('')}</div>`).join('')}</section>`;
 }
 
 function scenarioPage(s: RomScenario): string {
@@ -204,10 +360,10 @@ function scenarioPage(s: RomScenario): string {
     config = s.outcomes.map((o) => {
       if ('error' in o) return `<p><strong>${e(o.item.name)}:</strong> could not be priced: ${e(o.error)}</p>`;
       const ecu = o.result.totalRounded;
-      return `${s.outcomes.length > 1 ? `<h4>${e(o.item.name)}</h4>` : ''}<p>Based on the information and assumptions above, we have estimated the cost of your deployment to be <strong>${fmtNum(ecu, 0)}</strong> ECUs, and configured as follows:</p>${echConfigTable(o.result.lines)}`;
+      return `${s.outcomes.length > 1 ? `<h4>${e(o.item.name)}</h4>` : ''}<p>Based on the information and assumptions above, we have estimated the cost of your deployment to be <strong>${fmtNum(ecu, 0)}</strong> ECUs, and configured as follows:</p>${configTable(echConfig(o.result.lines))}`;
     }).join('');
   } else {
-    config = `<p>Based on the information and assumptions above, we have estimated your deployment to need <strong>${fmtNum(s.result.licenseUnits.value, 0)}</strong> Enterprise Resource Units (ERU), configured as follows:</p>${selfManagedConfigTable(s.result)}`;
+    config = `<p>Based on the information and assumptions above, we have estimated your deployment to need <strong>${fmtNum(s.result.licenseUnits.value, 0)}</strong> Enterprise Resource Units (ERU), configured as follows:</p>${configTable(selfManagedConfig(s.result))}`;
   }
 
   return `<section class="page">
@@ -249,7 +405,12 @@ section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; over
 .toc ul li { font-weight: 400; padding: 2px 0; border-bottom: 1px dotted #c4cad4; }
 h2 { font-size: 22pt; font-weight: 800; color: #3a3f4a; margin: 0 0 0.2in; }
 h2.scenario { font-size: 20pt; }
+table.summary th[scope=row] { text-align: left; }
+table.summary tr.recommended td, table.summary tr.recommended th { background: #e6f0fc; }
+table.summary .tag { color: ${BRAND.blue}; font-size: 7.5pt; font-weight: 800; letter-spacing: 0.05em; margin-top: 2px; }
+table.summary td, table.summary tbody th { vertical-align: top; }
 h2.team-heading { margin-top: 0.45in; }
+h2.services { margin-top: 0.3in; break-after: avoid; }
 h3 { font-size: 11pt; font-weight: 700; color: #4a4f5a; margin: 0.25in 0 0.1in; }
 h4 { font-size: 11pt; font-weight: 700; color: #4a4f5a; margin: 0.18in 0 0.06in; }
 p { margin: 0 0 0.1in; }
@@ -260,6 +421,9 @@ p.sub { font-weight: 700; margin: 0.08in 0 0.02in; }
 u.accent { color: ${BRAND.blue}; }
 .team { display: flex; gap: 0.5in; }
 .team .who { color: ${BRAND.blue}; font-weight: 700; font-size: 12pt; }
+h3.svc { font-size: 13pt; color: #3a3f4a; }
+h4.svc { font-size: 9.5pt; letter-spacing: 0.04em; color: ${BRAND.blue}; margin: 0.14in 0 0.04in; }
+ul.svc { margin: 0.02in 0 0.1in; }
 ul.volume, ul.tiers { font-weight: 700; margin: 0.04in 0 0.1in; }
 .note { color: ${BRAND.blue}; font-style: italic; }
 table { width: 100%; border-collapse: collapse; margin: 0.12in 0 0.3in; font-size: 9.5pt; break-inside: avoid; }
@@ -282,8 +446,10 @@ ${BRAND.fontLink}
 <body>
 ${cover(input)}
 ${contents(input)}
+${executiveSummary(input)}
 ${caveatsAndTeam(input)}
 ${licensing(input)}
 ${input.scenarios.map(scenarioPage).join('\n')}
+${serviceDescriptions(input)}
 </body></html>`;
 }
