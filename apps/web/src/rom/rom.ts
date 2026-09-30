@@ -28,6 +28,8 @@ export interface RomInput {
   termStart: string;
   team: RomTeamMember[];
   scenarios: RomScenario[];
+  /** The executive summary's opening, written by the SA; a standard sentence when blank (D51). */
+  summary?: string;
 }
 
 const e = escapeHtml;
@@ -194,7 +196,7 @@ function contents(input: RomInput): string {
   return `<section class="page">
   <div class="customer">${e(input.customer || '[CUSTOMER NAME]')}</div>
   <h1 class="doc-title">Elastic Sizing Estimation</h1>
-  <ul class="toc"><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${hasServices(input) ? '<li class="main">SERVICES</li>' : ''}${scenarioItems}${serviceDescriptionList(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}</ul>
+  <ul class="toc"><li class="main">EXECUTIVE SUMMARY</li><li class="main">CAVEATS &amp; CONSIDERATIONS</li>${input.team.length ? '<li class="main">TEAM INFORMATION</li>' : ''}<li class="main">LICENSING OVERVIEW</li>${hasServices(input) ? '<li class="main">SERVICES</li>' : ''}${scenarioItems}${serviceDescriptionList(input).length ? '<li class="main">SERVICE DESCRIPTIONS</li>' : ''}</ul>
 </section>`;
 }
 
@@ -248,6 +250,72 @@ function servicesTable(s: RomScenario, start: string, end: string): string {
   return `<table class="lic"><caption>Services: ${e(s.title)}</caption>
 <thead><tr><th>Term</th><th>MPN</th><th>Description</th><th>Start Date</th><th>End Date</th><th>Quantity</th><th>List Unit Price</th><th>Total</th></tr></thead>
 <tbody>${body}</tbody></table>`;
+}
+
+// ---- Executive summary (D51) ------------------------------------------------------------------
+
+export const SUMMARY_HEAD = ['Scenario', 'Deployment', 'Data', 'Cluster', 'License', 'Year 1'];
+
+export interface SummaryRow { scenario: string; deployment: string; data: string; cluster: string; license: string; year1: string }
+
+/** The standard opening when the SA writes none. */
+export function defaultSummary(input: RomInput): string {
+  const n = input.scenarios.length;
+  return `This document gives a budgetary estimate for ${input.customer || 'the customer'} across ${n === 1 ? 'one scenario' : `${n} scenarios`}. The table below summarizes each; the sections that follow give the licensing, services, sizing and assumptions behind these figures.`;
+}
+
+/** One line per scenario: what it holds, how big the cluster is, what it licenses and what year 1 costs. */
+export function summaryRows(input: RomInput): SummaryRow[] {
+  return input.scenarios.map((s) => {
+    const v = volumeParts(s);
+    const lines = dataLines(s);
+    const data = v ? `${v.volume}, ${v.retention.replace(/[()]/g, '').replace(' Retention', '')}` : lines.map((d) => d.volume ?? d.name).join('; ');
+    let ramGb = 0; let diskGb = 0; let objectGb = 0; let license: string; let licenseCost: number | undefined;
+    if (s.kind === 'ech') {
+      for (const o of s.outcomes) {
+        if (!('result' in o)) continue;
+        for (const l of o.result.lines) {
+          if (l.key === 'transfer' || l.key === 'storage') continue;
+          ramGb += l.ramGb ?? 0; diskGb += l.diskGb ?? 0; objectGb += l.blobGb ?? 0;
+        }
+      }
+      const ecu = scenarioEcu(s);
+      license = `${fmtNum(ecu, 0)} ECU`;
+      licenseCost = ecu;
+    } else {
+      const t = s.result.tiers.reduce((sum, x) => sum + x.nodes * (x.diskGb ?? 0), 0) + s.result.overhead.reduce((sum, o) => sum + o.count * (o.diskGb ?? 0), 0);
+      ramGb = s.result.totalRamGb; diskGb = t; objectGb = s.result.objectStorage?.gb ?? 0;
+      license = `${fmtNum(s.result.licenseUnits.value, 0)} ERU`;
+      licenseCost = s.eruPrice !== undefined ? s.result.licenseUnits.value * s.eruPrice : undefined;
+    }
+    const services = scenarioServices(s);
+    // What is priced adds up; anything without a price shows as "+ [PRICE]" so the known part still reads.
+    const known = (licenseCost ?? 0) + services.reduce((sum, p) => sum + (p.total ?? 0), 0);
+    const missing = licenseCost === undefined || services.some((p) => p.total === undefined);
+    const year1 = !missing ? fmtMoney(known) : known > 0 ? `${fmtMoney(known)} + [PRICE]` : '[PRICE]';
+    return {
+      scenario: s.title,
+      deployment: s.kind === 'ech' ? 'Elastic Cloud Hosted' : 'Self-managed',
+      data,
+      cluster: `${gbText(ramGb)} RAM, ${tb(diskGb)} storage${objectGb ? `, ${tb(objectGb)} ${s.kind === 'ech' ? 'blob' : 'object'}` : ''}`,
+      license,
+      year1,
+    };
+  });
+}
+
+export const SUMMARY_NOTES = (input: RomInput) => [
+  `Term: ${usDate(input.termStart)} to ${usDate(termEnd(input.termStart))}.`,
+  'Year 1 is the license plus the services billed in year 1, at the prices in this document. Each scenario is priced on its own.',
+  'These are budgetary figures, not a quote; see Caveats & Considerations.',
+];
+
+function executiveSummary(input: RomInput): string {
+  const opening = (input.summary?.trim() || defaultSummary(input)).split(/\n\s*\n/).map((p) => `<p>${e(p.trim())}</p>`).join('');
+  const rows = summaryRows(input).map((r) => `<tr><th scope="row">${e(r.scenario)}</th><td>${r.deployment}</td><td>${e(r.data)}</td><td>${r.cluster}</td><td>${r.license}</td><td class="accent"><strong>${r.year1}</strong></td></tr>`).join('');
+  return `<section class="page"><h2>EXECUTIVE SUMMARY</h2>${opening}
+<table class="config summary"><thead><tr>${SUMMARY_HEAD.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
+<ul class="svc">${SUMMARY_NOTES(input).map((n) => `<li>${e(n)}</li>`).join('')}</ul></section>`;
 }
 
 export const hasServices = (input: RomInput) => input.scenarios.some((s) => scenarioServices(s).length > 0);
@@ -335,6 +403,8 @@ section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; over
 .toc ul li { font-weight: 400; padding: 2px 0; border-bottom: 1px dotted #c4cad4; }
 h2 { font-size: 22pt; font-weight: 800; color: #3a3f4a; margin: 0 0 0.2in; }
 h2.scenario { font-size: 20pt; }
+table.summary th[scope=row] { text-align: left; }
+table.summary td, table.summary tbody th { vertical-align: top; }
 h2.team-heading { margin-top: 0.45in; }
 h2.services { margin-top: 0.3in; break-after: avoid; }
 h3 { font-size: 11pt; font-weight: 700; color: #4a4f5a; margin: 0.25in 0 0.1in; }
@@ -372,6 +442,7 @@ ${BRAND.fontLink}
 <body>
 ${cover(input)}
 ${contents(input)}
+${executiveSummary(input)}
 ${caveatsAndTeam(input)}
 ${licensing(input)}
 ${input.scenarios.map(scenarioPage).join('\n')}

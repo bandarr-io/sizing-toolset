@@ -3,7 +3,7 @@ import { fmtMoney, fmtNum } from '../format.ts';
 import { BRAND } from './brand.ts';
 import {
   ASSUMPTIONS_INTRO, dataLines, echConfig, hasServices, serviceDescriptionList, RETENTION_INTRO, scenarioEcu, scenarioServices, SCOPE_ECH, SCOPE_SELF_MANAGED,
-  selfManagedConfig, SNAPSHOTS, termEnd, TIER_ROW, totalDays, usDate, volumeParts, type ConfigTable, type RomInput, type RomScenario,
+  selfManagedConfig, SNAPSHOTS, defaultSummary, SUMMARY_HEAD, SUMMARY_NOTES, summaryRows, termEnd, TIER_ROW, totalDays, usDate, volumeParts, type ConfigTable, type RomInput, type RomScenario,
 } from './rom.ts';
 
 /**
@@ -69,7 +69,7 @@ function cover(input: RomInput): Content[] {
 }
 
 function contents(input: RomInput): Content[] {
-  const rows: TableCell[][] = [['CAVEATS & CONSIDERATIONS', true, 0], ...(input.team.length ? [['TEAM INFORMATION', true, 0] as const] : []), ['LICENSING OVERVIEW', true, 0],
+  const rows: TableCell[][] = [['EXECUTIVE SUMMARY', true, 0], ['CAVEATS & CONSIDERATIONS', true, 0], ...(input.team.length ? [['TEAM INFORMATION', true, 0] as const] : []), ['LICENSING OVERVIEW', true, 0],
     ...(hasServices(input) ? [['SERVICES', true, 0] as const] : []),
     ...input.scenarios.flatMap((s) => [[s.title, true, 0] as const, ...['SCOPE', 'ASSUMPTIONS', 'Data Volume and Retention', 'Data Retention Breakdown', `ELASTIC CLUSTER CONFIGURATION - ${s.title}`].map((t) => [t, false, 1] as const)]),
     ...(serviceDescriptionList(input).length ? [['SERVICE DESCRIPTIONS', true, 0] as const] : []),
@@ -85,6 +85,29 @@ function contents(input: RomInput): Content[] {
         hLineStyle: () => ({ dash: { length: 1, space: 2 } }), paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 2, paddingBottom: () => 1,
       },
     },
+  ];
+}
+
+/** D51: the opening, one line per scenario, and the notes that frame the figures. */
+function executiveSummary(input: RomInput): Content[] {
+  const opening = (input.summary?.trim() || defaultSummary(input)).split(/\n\s*\n/).map((x) => p(x.trim()));
+  const cell = { margin: [0, 3, 0, 3] as [number, number, number, number] };
+  return [
+    h2('EXECUTIVE SUMMARY', { pageBreak: 'before' }),
+    ...opening,
+    {
+      table: {
+        widths: ['*', 62, 78, 110, 62, 62], headerRows: 1, dontBreakRows: true,
+        body: [
+          SUMMARY_HEAD.map((h) => ({ text: h, bold: true, color: WHITE, fillColor: BLUE, margin: [0, 5, 0, 5] })),
+          ...summaryRows(input).map((r, i): TableCell[] => [r.scenario, r.deployment, r.data, r.cluster, r.license, { text: r.year1, bold: true, color: BLUE }]
+            .map((c) => ({ ...(typeof c === 'string' ? { text: c } : c), ...cell, fillColor: i % 2 ? '#f5f7fa' : undefined, ...(c === r.scenario ? { bold: true } : {}) }))),
+        ],
+      },
+      layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 5, paddingRight: () => 5 },
+      fontSize: 9.5, margin: [0, 9, 0, 16],
+    },
+    { ul: SUMMARY_NOTES(input), margin: [0, 0, 0, 7] },
   ];
 }
 
@@ -256,6 +279,6 @@ export function romPdfDefinition(input: RomInput): TDocumentDefinitions {
     }),
     // Keep a heading with what follows it.
     pageBreakBefore: (node, following) => node.headlineLevel === 1 && following.getFollowingNodesOnPage().length === 0,
-    content: [...cover(input), ...contents(input), ...caveatsAndTeam(input), ...licensing(input), ...servicesSection(input), ...input.scenarios.flatMap(scenarioPage), ...serviceDescriptions(input)],
+    content: [...cover(input), ...contents(input), ...executiveSummary(input), ...caveatsAndTeam(input), ...licensing(input), ...servicesSection(input), ...input.scenarios.flatMap(scenarioPage), ...serviceDescriptions(input)],
   };
 }

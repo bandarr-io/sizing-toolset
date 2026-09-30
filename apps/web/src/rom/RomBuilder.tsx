@@ -47,6 +47,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
   const [team, setTeamState] = useState<RomTeamMember[]>(() => (readTeam().length ? readTeam() : [{ name: '', role: 'Solution Architect', email: '' }]));
   const setTeam = (t: RomTeamMember[]) => { setTeamState(t); saveTeam(t); };
   const [picked, setPicked] = useState<Record<string, { title: string; notes: string }>>({ current: { title: current.name, notes: '' } });
+  const [summary, setSummary] = useState('');
   const [error, setError] = useState<string | undefined>();
 
   const [busy, setBusy] = useState(false);
@@ -75,7 +76,7 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
     }
     if (scenarios.length === 0) { setError('Pick at least one scenario.'); return undefined; }
     setError(undefined);
-    return { customer: customer.trim(), date, termStart, team: team.filter((m) => m.name.trim()), scenarios };
+    return { customer: customer.trim(), date, termStart, team: team.filter((m) => m.name.trim()), scenarios, ...(summary.trim() ? { summary } : {}) };
   };
   const build = (): string | undefined => { const input = buildInput(); return input && romHtml(input); };
 
@@ -111,6 +112,13 @@ export function RomBuilder({ current, onClose }: { current: AppState; onClose: (
           <EuiFlexItem><EuiFormRow label="Document date"><EuiFieldText type="date" value={date} onChange={(ev) => setDate(ev.target.value)} /></EuiFormRow></EuiFlexItem>
           <EuiFlexItem><EuiFormRow label="Term starts" helpText="Ends one year later."><EuiFieldText type="date" value={termStart} onChange={(ev) => setTermStart(ev.target.value)} /></EuiFormRow></EuiFlexItem>
         </EuiFlexGrid>
+
+        <EuiSpacer size="m" />
+        <EuiFormRow label="Executive summary (optional)" fullWidth
+          helpText="The opening of the Executive Summary page, above the table of scenarios. Leave empty for a standard sentence. A blank line starts a new paragraph.">
+          <EuiTextArea fullWidth rows={3} value={summary} onChange={(ev) => setSummary(ev.target.value)}
+            placeholder="For example: what the customer asked for, and which scenario we recommend and why." />
+        </EuiFormRow>
 
         <EuiSpacer size="l" />
         <EuiTitle size="xs"><h3>Scenarios</h3></EuiTitle>

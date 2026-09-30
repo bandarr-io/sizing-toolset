@@ -2,7 +2,7 @@ import { defaultConstants as c } from '@sizing/constants';
 import { forward, type EchData, type EchSku } from '@sizing/engine';
 import { describe, expect, it } from 'vitest';
 import { defaultEch, newEchItem, runEch } from '../src/ech/state.ts';
-import { romHtml, scenarioEcu, type RomInput } from '../src/rom/rom.ts';
+import { romHtml, scenarioEcu, summaryRows, type RomInput } from '../src/rom/rom.ts';
 import { defaultState } from '../src/state.ts';
 
 // Invented Elastic Cloud data: $0.10 per GB-hour everywhere.
@@ -72,5 +72,39 @@ describe('Budgetary ROM', () => {
     expect(html).toContain('Skyward &lt;Federal&gt;');
     expect(html).not.toContain('Skyward <Federal>');
     expect(html).toContain('NOTE: Pilot first &amp; expand');
+  });
+});
+
+describe('D51 executive summary', () => {
+  it('comes right after the contents, with one row per scenario', () => {
+    const html = romHtml(input());
+    const at = (x: string) => html.indexOf(x);
+    expect(at('<h2>EXECUTIVE SUMMARY</h2>')).toBeGreaterThan(at('Elastic Sizing Estimation'));
+    expect(at('<h2>EXECUTIVE SUMMARY</h2>')).toBeLessThan(at('<h2>CAVEATS &amp; CONSIDERATIONS</h2>'));
+    expect(html).toContain('<li class="main">EXECUTIVE SUMMARY</li><li class="main">CAVEATS');
+    const rows = summaryRows(input());
+    expect(rows.map((r) => r.deployment)).toEqual(['Elastic Cloud Hosted', 'Self-managed']);
+    expect(rows[0]!.data).toBe('106GB / Day, 365 Days');
+    expect(rows[0]!.license).toMatch(/^[\d,]+ ECU$/);
+    expect(rows[0]!.year1).toMatch(/^\$[\d,]+$/);
+    expect(rows[1]!.year1).toBe('[PRICE]'); // no ERU price
+    expect(html).toContain('Term: 08/01/2026 to 07/31/2027.');
+  });
+
+  it('uses the SA\'s opening when given, and a standard sentence otherwise', () => {
+    expect(romHtml(input())).toContain('This document gives a budgetary estimate for Skyward &lt;Federal&gt; across 2 scenarios.');
+    const mine = romHtml({ ...input(), summary: 'We recommend option A.\n\nIt keeps a year of data.' });
+    expect(mine).toContain('<h2>EXECUTIVE SUMMARY</h2><p>We recommend option A.</p><p>It keeps a year of data.</p>');
+    expect(mine).not.toContain('This document gives a budgetary estimate');
+  });
+
+  it('adds services billed in year 1 to the year 1 figure', () => {
+    const base = input();
+    const s = base.scenarios[1]!;
+    const withPrice = { ...base, scenarios: [{ ...s, eruPrice: 1000, services: [{ line: { serviceId: 'x', quantity: 2 }, item: { id: 'x', name: 'X', mpn: '', unit: 'day', billing: 'one_time' as const, description: '', dated: false }, unitPrice: 500, total: 1000 }] } as typeof s] };
+    const eru = s.kind === 'self_managed' ? s.result.licenseUnits.value : 0;
+    expect(summaryRows(withPrice)[0]!.year1).toBe(`$${(eru * 1000 + 1000).toLocaleString('en-US')}`);
+    const unpriced = { ...withPrice, scenarios: [{ ...withPrice.scenarios[0]!, services: [...(withPrice.scenarios[0]!.services ?? []), { line: { serviceId: 'y', quantity: 1 }, item: { id: 'y', name: 'Y', mpn: '', unit: 'day', billing: 'one_time' as const, description: '', dated: false }, unitPrice: undefined, total: undefined }] }] };
+    expect(summaryRows(unpriced)[0]!.year1).toBe(`$${(eru * 1000 + 1000).toLocaleString('en-US')} + [PRICE]`);
   });
 });
