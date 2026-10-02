@@ -389,7 +389,7 @@ body { margin: 0; font-family: ${BRAND.fontStack}; color: #2b2f38; font-size: 10
 .accent { color: ${BRAND.blue}; }
 section.page { break-before: page; }
 section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; overflow: hidden; background: ${BRAND.blue}; color: #ffffff; padding: 1.05in 1in; }
-.cover .logo { height: 0.9in; margin-bottom: 1.05in; }
+.cover .logo { height: 0.66in; margin-bottom: 1.29in; }
 .cover .logo svg, .cover .logo img { height: 100%; width: auto; }
 .cover .placeholder { display: inline-flex; align-items: center; justify-content: center; height: 100%; padding: 0 0.4in; border: 2px dashed rgba(255,255,255,0.8); border-radius: 8px; font-weight: 600; }
 .cover h1 { font-size: 34pt; line-height: 1.1; margin: 0 0 0.2in; font-weight: 800; }

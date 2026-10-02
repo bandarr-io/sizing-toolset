@@ -3,6 +3,7 @@ import { forward, type EchData, type EchSku } from '@sizing/engine';
 import { describe, expect, it } from 'vitest';
 import { defaultEch, newEchItem, runEch } from '../src/ech/state.ts';
 import { romHtml, scenarioEcu, summaryRows, type RomInput } from '../src/rom/rom.ts';
+import { romPdfDefinition } from '../src/rom/romPdf.ts';
 import { defaultState } from '../src/state.ts';
 
 // Invented Elastic Cloud data: $0.10 per GB-hour everywhere.
@@ -116,5 +117,14 @@ describe('D52 recommended scenario', () => {
     expect(html).toContain('<tr class="recommended"><th scope="row">Scenario - Self-managed<div class="tag">RECOMMENDED</div></th>');
     expect(html).toContain('<li>Recommended: Scenario - Self-managed.</li>');
     expect(romHtml(base)).not.toContain('RECOMMENDED');
+  });
+});
+
+describe('ROM branding', () => {
+  it('puts the official logo on the cover in both versions', () => {
+    const html = romHtml(input());
+    expect(html).toMatch(/<div class="logo"><svg[^>]*viewBox="0 0 421 82"/);
+    expect(html).not.toContain('[Elastic logo]');
+    expect(JSON.stringify(romPdfDefinition(input()).content)).toContain('viewBox=\\"0 0 421 82\\"');
   });
 });

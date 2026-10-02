@@ -48,7 +48,7 @@ function cover(input: RomInput): Content[] {
   const article = /^[AEIOU]/i.test(kinds[0] ?? '') ? 'an' : 'a';
   const dashed = { dash: { length: 4, space: 3 } };
   const logo: Content = BRAND.logoSvg
-    ? { svg: BRAND.logoSvg, height: 0.9 * PT }
+    ? { svg: BRAND.logoSvg, width: 3.4 * PT }
     : {
       table: { body: [[{ text: '[Elastic logo]', bold: true, color: WHITE, margin: [22, 20, 22, 20] }]] },
       layout: { hLineColor: () => WHITE, vLineColor: () => WHITE, hLineWidth: () => 1.5, vLineWidth: () => 1.5, hLineStyle: () => dashed, vLineStyle: () => dashed },
