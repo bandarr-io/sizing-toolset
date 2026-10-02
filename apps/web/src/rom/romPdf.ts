@@ -64,7 +64,7 @@ function cover(input: RomInput): Content[] {
       ],
     },
     { text: 'elastic.co', bold: true, color: WHITE, absolutePosition: { x: 1 * PT, y: 7.05 * PT } },
-    ...(BRAND.coverArtSvg ? [{ svg: BRAND.coverArtSvg, width: 6.4 * PT, absolutePosition: { x: 2.2 * PT, y: 5.9 * PT } } as Content] : []),
+    ...(BRAND.coverArtSvg ? [{ svg: BRAND.coverArtSvg, width: 8.25 * PT, absolutePosition: { x: 3.03 * PT, y: 4.58 * PT } } as Content] : []),
   ];
 }
 

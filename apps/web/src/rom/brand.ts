@@ -1,6 +1,6 @@
 // Official Elastic logo with tagline, white, for the blue cover (Dan, 2026-10-02).
 import logoSvg from './assets/elastic-logo-white.svg?raw';
-// Cover artwork drawn for the ROM (scripts/rom-cover-art.cjs), D53.
+// Cover artwork: the Elastic glyph from the logo, drawn as a raised outline (scripts/rom-cover-art.cjs), D53.
 import coverArtSvg from './assets/cover-art.svg?raw';
 
 /**
@@ -15,6 +15,6 @@ export const BRAND = {
   fontStack: 'Inter, "Helvetica Neue", Helvetica, Arial, sans-serif',
   /** Logo with tagline (white on blue) for the cover. */
   logoSvg,
-  /** Cover artwork: the raised, outlined cluster mark, bottom right. */
+  /** Cover artwork: the Elastic glyph as a raised, tilted outline, bottom right. */
   coverArtSvg,
 };

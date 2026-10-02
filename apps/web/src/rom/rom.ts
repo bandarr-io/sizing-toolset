@@ -396,7 +396,7 @@ section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; over
 .cover-kicker { font-size: 15pt; font-weight: 700; margin-bottom: 0.18in; }
 .cover-text { font-size: 12pt; line-height: 1.7; max-width: 6.2in; margin: 0; }
 .cover-site { position: absolute; left: 1in; top: 7.05in; font-weight: 700; }
-.cover-art { position: absolute; left: 2.2in; top: 5.9in; width: 6.4in; }
+.cover-art { position: absolute; left: 3.03in; top: 4.58in; width: 8.25in; }
 .cover-art svg { display: block; width: 100%; height: auto; }
 .customer { color: ${BRAND.blue}; font-size: 17pt; font-weight: 700; margin-top: 0.1in; }
 .doc-title { font-size: 38pt; line-height: 1.1; margin: 0.6in 0 0.6in; font-weight: 800; color: #1d2330; }
