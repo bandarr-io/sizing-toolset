@@ -179,11 +179,14 @@ function configTable(t: ConfigTable): string {
 // ---- Pages ----------------------------------------------------------------------------------------
 
 
+/** A customer name this long would wrap at the cover's 40pt and push the text into the artwork, so it prints smaller. */
+export const longName = (name: string) => name.length > 26;
+
 function cover(input: RomInput): string {
   const kinds = [...new Set(input.scenarios.map((s) => (s.kind === 'ech' ? 'Elastic Cloud Hosted' : 'Self-Managed')))];
   return `<section class="cover">
   <div class="logo">${BRAND.logoSvg || '<div class="placeholder">[Elastic logo]</div>'}</div>
-  <h1>${e(input.customer || '[CUSTOMER NAME]')}</h1>
+  <h1${longName(input.customer) ? ' class="long"' : ''}>${e(input.customer || '[CUSTOMER NAME]')}</h1>
   <div class="cover-kicker">BUDGETARY ROM</div>
   <p class="cover-text">This document provides a budgetary Rough Order of Magnitude (ROM) estimate for ${/^[AEIOU]/i.test(kinds[0] ?? '') ? 'an' : 'a'} ${e(kinds.join(' and '))} deployment. It includes projected pricing, resource sizing, and service descriptions to support early-stage planning and internal discussions.</p>
   <div class="cover-site">elastic.co</div>
@@ -388,14 +391,15 @@ html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; font-family: ${BRAND.fontStack}; color: #2b2f38; font-size: 10.5pt; line-height: 1.55; background: #ffffff; }
 .accent { color: ${BRAND.blue}; }
 section.page { break-before: page; }
-section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; overflow: hidden; background: ${BRAND.blue}; color: #ffffff; padding: 1.05in 1in; }
-.cover .logo { height: 0.66in; margin-bottom: 1.29in; }
+section.cover { position: relative; z-index: 2; width: 8.5in; height: 11in; overflow: hidden; background: ${BRAND.blue}; color: #ffffff; padding: 1.09in 1in; }
+.cover .logo { height: 0.78in; margin-bottom: 1.02in; }
 .cover .logo svg, .cover .logo img { height: 100%; width: auto; }
 .cover .placeholder { display: inline-flex; align-items: center; justify-content: center; height: 100%; padding: 0 0.4in; border: 2px dashed rgba(255,255,255,0.8); border-radius: 8px; font-weight: 600; }
-.cover h1 { font-size: 34pt; line-height: 1.1; margin: 0 0 0.2in; font-weight: 800; }
-.cover-kicker { font-size: 15pt; font-weight: 700; margin-bottom: 0.18in; }
-.cover-text { font-size: 12pt; line-height: 1.7; max-width: 6.2in; margin: 0; }
-.cover-site { position: absolute; left: 1in; top: 7.05in; font-weight: 700; }
+.cover h1 { font-size: 40pt; line-height: 1.1; margin: 0 0 0.12in; font-weight: 800; }
+.cover h1.long { font-size: 30pt; }
+.cover-kicker { font-size: 18pt; font-weight: 700; margin-bottom: 0.12in; }
+.cover-text { font-size: 14pt; line-height: 1.75; max-width: 5.4in; margin: 0; }
+.cover-site { position: absolute; left: 1in; top: 6.99in; font-weight: 700; font-size: 12.5pt; }
 .cover-art { position: absolute; left: 3.03in; top: 4.58in; width: 8.25in; }
 .cover-art svg { display: block; width: 100%; height: auto; }
 .customer { color: ${BRAND.blue}; font-size: 17pt; font-weight: 700; margin-top: 0.1in; }
