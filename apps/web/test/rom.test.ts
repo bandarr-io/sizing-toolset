@@ -127,4 +127,10 @@ describe('ROM branding', () => {
     expect(html).not.toContain('[Elastic logo]');
     expect(JSON.stringify(romPdfDefinition(input()).content)).toContain('viewBox=\\"0 0 421 82\\"');
   });
+
+  it('D53 puts the drawn cover artwork bottom right in both versions', () => {
+    expect(romHtml(input())).toMatch(/<div class="cover-art"><svg[^>]*viewBox="0 0 640 640"/);
+    const art = (romPdfDefinition(input()).content as { svg?: string; absolutePosition?: { x: number; y: number } }[]).find((c) => c.svg?.includes('0 0 640 640'));
+    expect(art?.absolutePosition).toEqual({ x: 2.2 * 72, y: 5.9 * 72 });
+  });
 });

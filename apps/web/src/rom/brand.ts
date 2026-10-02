@@ -1,9 +1,11 @@
 // Official Elastic logo with tagline, white, for the blue cover (Dan, 2026-10-02).
 import logoSvg from './assets/elastic-logo-white.svg?raw';
+// Cover artwork drawn for the ROM (scripts/rom-cover-art.cjs), D53.
+import coverArtSvg from './assets/cover-art.svg?raw';
 
 /**
- * Branding for the Budgetary ROM. The logo is the official file in ./assets. The cover artwork is still to be
- * supplied; the cover leaves it out until then. To add it, put the SVG in ./assets and import it like the logo.
+ * Branding for the Budgetary ROM. The logo is the official file in ./assets; the cover artwork is drawn by
+ * scripts/rom-cover-art.cjs. To use an official artwork file instead, put it in ./assets and import it here.
  */
 export const BRAND = {
   /** Elastic blue from the ROM template. */
@@ -13,6 +15,6 @@ export const BRAND = {
   fontStack: 'Inter, "Helvetica Neue", Helvetica, Arial, sans-serif',
   /** Logo with tagline (white on blue) for the cover. */
   logoSvg,
-  /** Cover artwork (the outlined cluster mark, bottom right). Empty until the official file is supplied. */
-  coverArtSvg: '',
+  /** Cover artwork: the raised, outlined cluster mark, bottom right. */
+  coverArtSvg,
 };
