@@ -3,7 +3,7 @@ import { fmtMoney, fmtNum } from '../format.ts';
 import { BRAND } from './brand.ts';
 import {
   ASSUMPTIONS_INTRO, dataLines, echConfig, hasServices, serviceDescriptionList, RETENTION_INTRO, scenarioEcu, scenarioServices, SCOPE_ECH, SCOPE_SELF_MANAGED,
-  selfManagedConfig, SNAPSHOTS, defaultSummary, SUMMARY_HEAD, SUMMARY_NOTES, summaryRows, termEnd, TIER_ROW, totalDays, usDate, volumeParts, type ConfigTable, type RomInput, type RomScenario,
+  longName, selfManagedConfig, SNAPSHOTS, defaultSummary, SUMMARY_HEAD, SUMMARY_NOTES, summaryRows, termEnd, TIER_ROW, totalDays, usDate, volumeParts, type ConfigTable, type RomInput, type RomScenario,
 } from './rom.ts';
 
 /**
@@ -19,6 +19,8 @@ const HEAD = '#3a3f4a';
 const SUB = '#4a4f5a';
 const WHITE = '#ffffff';
 const PT = 72; // points per inch
+/** Cover logo width in inches (the template's is 4.7; Dan asked for slightly bigger than 3.4, D54). */
+const LOGO_IN = 4.0;
 
 /** Font names the definition uses; the caller maps them to files. */
 export const PDF_FONTS = {
@@ -48,23 +50,24 @@ function cover(input: RomInput): Content[] {
   const article = /^[AEIOU]/i.test(kinds[0] ?? '') ? 'an' : 'a';
   const dashed = { dash: { length: 4, space: 3 } };
   const logo: Content = BRAND.logoSvg
-    ? { svg: BRAND.logoSvg, height: 0.9 * PT }
+    ? { svg: BRAND.logoSvg, width: LOGO_IN * PT }
     : {
       table: { body: [[{ text: '[Elastic logo]', bold: true, color: WHITE, margin: [22, 20, 22, 20] }]] },
       layout: { hLineColor: () => WHITE, vLineColor: () => WHITE, hLineWidth: () => 1.5, vLineWidth: () => 1.5, hLineStyle: () => dashed, vLineStyle: () => dashed },
     };
   return [
-    { stack: [logo], margin: [0.5 * PT, 0.05 * PT, 0, 1.05 * PT] },
+    // Sizes and spacing measured from the template cover (D54): text tops at 3.00, 3.78 and 4.27 in, logo at 1.09 in.
+    { stack: [logo], margin: [0.5 * PT, 0.09 * PT, 0, 1.02 * PT] },
     {
       margin: [0.5 * PT, 0, 0, 0],
       stack: [
-        { text: input.customer || '[CUSTOMER NAME]', font: 'InterHeavy', fontSize: 34, lineHeight: 1.05, color: WHITE, margin: [0, 0, 0, 14] },
-        { text: 'BUDGETARY ROM', bold: true, fontSize: 15, color: WHITE, margin: [0, 0, 0, 13] },
-        { columns: [{ width: 6.2 * PT, text: `This document provides a budgetary Rough Order of Magnitude (ROM) estimate for ${article} ${kinds.join(' and ')} deployment. It includes projected pricing, resource sizing, and service descriptions to support early-stage planning and internal discussions.`, fontSize: 12, lineHeight: 1.45, color: WHITE }, { width: '*', text: '' }] },
+        { text: input.customer || '[CUSTOMER NAME]', font: 'InterHeavy', fontSize: longName(input.customer) ? 30 : 40, lineHeight: 1.05, color: WHITE, margin: [0, 0, 0, 8.6] },
+        { text: 'BUDGETARY ROM', bold: true, fontSize: 18, color: WHITE, margin: [0, 0, 0, 8.9] },
+        { columns: [{ width: 5.4 * PT, text: `This document provides a budgetary Rough Order of Magnitude (ROM) estimate for ${article} ${kinds.join(' and ')} deployment. It includes projected pricing, resource sizing, and service descriptions to support early-stage planning and internal discussions.`, fontSize: 14, lineHeight: 1.45, color: WHITE }, { width: '*', text: '' }] },
       ],
     },
-    { text: 'elastic.co', bold: true, color: WHITE, absolutePosition: { x: 1 * PT, y: 7.05 * PT } },
-    ...(BRAND.coverArtSvg ? [{ svg: BRAND.coverArtSvg, width: 5.6 * PT, absolutePosition: { x: 8.5 * PT - 5.2 * PT, y: 11 * PT - 5.2 * PT } } as Content] : []),
+    { text: 'elastic.co', bold: true, fontSize: 12.5, color: WHITE, absolutePosition: { x: 1 * PT, y: 6.99 * PT } },
+    ...(BRAND.coverArtSvg ? [{ svg: BRAND.coverArtSvg, width: 8.25 * PT, absolutePosition: { x: 3.03 * PT, y: 4.58 * PT } } as Content] : []),
   ];
 }
 
